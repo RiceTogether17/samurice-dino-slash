@@ -90,7 +90,7 @@ class DamagePop {
 // BATTLE ENGINE
 // ─────────────────────────────────────────────────────────────
 class BattleEngine {
-  constructor(canvas, overlay, stageData, collectedPhonemes, sprites, audio, progress) {
+  constructor(canvas, overlay, stageData, collectedPhonemes, sprites, audio, progress, logicalW, logicalH) {
     this.canvas    = canvas;
     this.ctx       = canvas.getContext('2d');
     this.overlay   = overlay;   // DOM element: #battleOverlay
@@ -99,8 +99,9 @@ class BattleEngine {
     this.audio     = audio;
     this.progress  = progress;
 
-    this.W = canvas.width;
-    this.H = canvas.height;
+    // Use logical dimensions passed from SlashGame (avoids DPR physical-pixel bug)
+    this.W = logicalW || canvas.clientWidth  || 480;
+    this.H = logicalH || canvas.clientHeight || 700;
 
     // HP
     this.bossMaxHp = stageData.bossHp;
@@ -517,20 +518,34 @@ class BattleEngine {
   }
 
   _drawBackground(ctx) {
-    const colors = this.stage.skyColor || ['#1565C0', '#42A5F5'];
-    const grad   = ctx.createLinearGradient(0, 0, 0, this.H * 0.75);
-    grad.addColorStop(0, colors[0]);
-    grad.addColorStop(1, colors[1]);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, this.W, this.H * 0.75);
+    const bgKey = this.stage.bg;
+    const bgSp  = bgKey && this.sprites[bgKey];
+    if (bgSp && bgSp.complete && bgSp.naturalWidth > 0) {
+      // Fill entire canvas with background image (cover fit)
+      const imgW = bgSp.naturalWidth;
+      const imgH = bgSp.naturalHeight;
+      const scale = Math.max(this.W / imgW, this.H / imgH);
+      const dw = imgW * scale;
+      const dh = imgH * scale;
+      ctx.drawImage(bgSp, (this.W - dw) / 2, (this.H - dh) / 2, dw, dh);
+      // Dark overlay so characters are readable
+      ctx.fillStyle = 'rgba(0,0,0,0.30)';
+      ctx.fillRect(0, 0, this.W, this.H);
+    } else {
+      // Procedural fallback
+      const colors = this.stage.skyColor || ['#1565C0', '#42A5F5'];
+      const grad   = ctx.createLinearGradient(0, 0, 0, this.H * 0.75);
+      grad.addColorStop(0, colors[0]);
+      grad.addColorStop(1, colors[1]);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, this.W, this.H * 0.75);
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.fillRect(0, this.H * 0.55, this.W, 30);
+    }
 
-    // Atmospheric haze at horizon
-    ctx.fillStyle = 'rgba(255,255,255,0.07)';
-    ctx.fillRect(0, this.H * 0.55, this.W, 30);
-
-    // Stage name watermark
+    // Stage name watermark (always shown)
     ctx.font      = `bold 14px system-ui`;
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.textAlign = 'center';
     ctx.fillText(`${this.stage.name}  ⚔️  Boss Battle`, this.W / 2, 26);
   }
