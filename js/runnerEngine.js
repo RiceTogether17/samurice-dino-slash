@@ -10,15 +10,15 @@
 // ============================================================
 
 // ── Constants ────────────────────────────────────────────────
-const R_GROUND_H   = 80;    // height of ground strip at canvas bottom
-const R_PLAYER_X   = 120;   // fixed screen X of Riku
-const R_GRAVITY    = 0.55;
-const R_JUMP_VEL   = -13.5;
-const R_BASE_SPD   = 3.5;   // camera scroll speed
-const R_FAST_SPD   = 5.5;   // when holding right / long-tap
-const R_BOOST_SPD  = 6.5;   // blend-boost active
+const R_GROUND_H   = 90;    // height of ground strip at canvas bottom
+const R_PLAYER_X   = 100;   // fixed screen X of Riku
+const R_GRAVITY    = 0.6;
+const R_JUMP_VEL   = -16.0; // higher jump to match bigger character
+const R_BASE_SPD   = 2.2;   // comfortable auto-scroll speed
+const R_FAST_SPD   = 3.8;   // when holding right / long-tap
+const R_BOOST_SPD  = 5.2;   // blend-boost active
 const R_BOOST_DUR  = 300;   // frames of boost after collecting full word
-const R_COIN_R     = 22;    // coin collision radius
+const R_COIN_R     = 28;    // coin collision radius
 const R_LEVEL_W    = 7800;  // world width per level (px)
 
 // ─────────────────────────────────────────────────────────────
@@ -28,10 +28,10 @@ class RunnerPlayer {
   constructor(groundY, sprites) {
     this.worldX  = 0;
     this.screenX = R_PLAYER_X;
-    this.y       = groundY - 56;   // standing on ground
+    this.w       = 80;          // wider for visibility
+    this.h       = 96;          // taller — ~13% of 740px canvas
+    this.y       = groundY - this.h;   // standing on ground
     this.vy      = 0;
-    this.w       = 48;
-    this.h       = 56;
     this.onGround = true;
     this.jumpHeld = false;
     this.hp      = 3;           // hearts
@@ -387,9 +387,9 @@ class PhonemeCoin {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Phoneme text
+    // Phoneme text — scaled to coin radius
     const text   = this.phoneme.toUpperCase();
-    const fsize  = text.length > 2 ? 11 : text.length > 1 ? 13 : 15;
+    const fsize  = text.length > 2 ? Math.round(r * 0.5) : text.length > 1 ? Math.round(r * 0.62) : Math.round(r * 0.72);
     ctx.font        = `bold ${fsize}px "Comic Sans MS", system-ui, sans-serif`;
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
@@ -407,9 +407,11 @@ class MinionDino {
   // sprite: the 'minion-dino' Image object (or null → canvas fallback)
   constructor(worldX, groundY, platform = null, sprite = null) {
     this.worldX   = worldX;
-    this.groundY  = platform ? platform.worldY - 36 : groundY - 36;
-    this.w        = 44;
-    this.h        = 44;
+    this.w        = 72;
+    this.h        = 72;
+    // Plant minion so its feet are on the ground (or platform top)
+    const baseY = platform ? platform.worldY : groundY;
+    this.groundY  = baseY - this.h;
     this.vx       = -1.2;   // walks left (toward player)
     this.defeated = false;
     this.deathFrames = 0;
@@ -655,8 +657,8 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
 
   words.forEach((word, wIdx) => {
     const elevated    = wIdx % 2 === 1;  // alternate ground / platform
-    const platformH   = elevated ? groundY - 80 - (difficulty * 12) : groundY;
-    const coinY       = platformH - 55;
+    const platformH   = elevated ? groundY - 100 - (difficulty * 12) : groundY;
+    const coinY       = platformH - 70;   // coins float above ground/platform
     const platW       = word.phonemes.length * 82 + 60;
 
     // Dojo blocks every 3rd platform, rice bundles otherwise
@@ -1015,33 +1017,42 @@ class RunnerEngine {
   // ── HUD ──────────────────────────────────────────────────────
   _drawHUD(ctx) {
     const p = this.player;
+    ctx.save();
+    ctx.textBaseline = 'top';
+
+    // ── Background strip (semi-transparent pill at top) ──────
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.roundRect(6, 6, this.W - 12, 46, 14); ctx.fill();
 
     // ── HP hearts (top-left)
-    ctx.font        = '24px serif';
-    ctx.textBaseline = 'top';
+    ctx.font = '28px serif';
     for (let i = 0; i < 3; i++) {
-      ctx.globalAlpha = i < p.hp ? 1 : 0.25;
-      ctx.fillText('❤️', 14 + i * 32, 12);
+      ctx.globalAlpha = i < p.hp ? 1 : 0.22;
+      ctx.fillText('❤️', 18 + i * 36, 11);
     }
     ctx.globalAlpha = 1;
 
     // ── Timer (top-center)
     const urgent = this.timeLeft < 15;
-    ctx.font      = `bold ${urgent ? '26px' : '22px'} "Comic Sans MS", system-ui`;
-    ctx.fillStyle = urgent ? '#FF1744' : '#fff';
+    ctx.font      = `bold ${urgent ? '28px' : '24px'} "Comic Sans MS", system-ui`;
+    ctx.fillStyle = urgent ? '#FF5252' : '#FFFFFF';
     ctx.textAlign = 'center';
-    ctx.shadowColor  = 'rgba(0,0,0,0.6)';
-    ctx.shadowBlur   = 4;
-    ctx.fillText(`⏱ ${this.timeLeft}s`, this.W / 2, 14);
-    ctx.shadowBlur   = 0;
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur  = 5;
+    if (urgent) { ctx.fillStyle = '#FF5252'; ctx.shadowColor = '#FF000088'; }
+    ctx.fillText(`⏱ ${this.timeLeft}s`, this.W / 2, 12);
+    ctx.shadowBlur = 0;
 
-    // ── Phoneme coins collected (top-right)
-    const total   = this.coins.length;
+    // ── Coins collected (top-right)
+    const total     = this.coins.length;
     const collected = this.coins.filter(c => c.collected).length;
-    ctx.font      = 'bold 15px "Comic Sans MS", system-ui';
+    ctx.font      = 'bold 18px "Comic Sans MS", system-ui';
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'right';
-    ctx.fillText(`🪙 ${collected}/${total}`, this.W - 14, 16);
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 3;
+    ctx.fillText(`🪙 ${collected}/${total}`, this.W - 16, 13);
+    ctx.shadowBlur = 0;
+    ctx.restore();
 
     // ── Boost bar (center-bottom when active)
     if (p.boostFrames > 0) {
