@@ -450,6 +450,288 @@ body {
 @media (max-width: 480px) {
     .mc-card { padding: 28px 20px; }
     .mc-icon { font-size: 2rem; }
-    #arena { border-width: 8px; border-radius: 16px; }
-    .sprite { width: min(130px, 18vw); }
+}
+
+
+/* ============================================================
+   SAMURICE DINO SLASH — New Mario-hybrid platformer
+============================================================ */
+
+/* ── Slash screen wrapper ────────────────────────────────── */
+#slashScreen {
+    background: #000;
+    padding: 0;
+}
+
+#slashWrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+#slashCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;   /* prevent browser scroll/zoom during play */
+    cursor: pointer;
+}
+
+/* ── Exit button ─────────────────────────────────────────── */
+.slash-exit-btn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 30;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    transition: background 0.15s;
+}
+.slash-exit-btn:hover { background: rgba(200, 30, 30, 0.7); }
+
+/* ── Battle overlay — sits over lower ~35% of canvas ─────── */
+.battle-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    background: rgba(10, 8, 22, 0.93);
+    border-top: 2px solid rgba(255, 215, 0, 0.4);
+    padding: 8px 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    backdrop-filter: blur(6px);
+    max-height: 42vh;
+    overflow: hidden;
+}
+
+.battle-overlay.hidden { display: none; }
+
+/* ── Hint words ──────────────────────────────────────────── */
+.be-hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    min-height: 22px;
+}
+
+.be-hint-word {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 2px 8px;
+    font-family: 'Comic Sans MS', system-ui, sans-serif;
+}
+.be-hint-word em { color: rgba(255, 215, 0, 0.75); font-style: normal; font-weight: bold; }
+
+/* ── Word being built ────────────────────────────────────── */
+.be-build {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.be-build-placeholder {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.85rem;
+    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-style: italic;
+}
+
+.be-build-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #FFD700, #F57F17);
+    color: #3E2723;
+    font-weight: bold;
+    font-size: 1rem;
+    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    border-radius: 10px;
+    padding: 4px 10px;
+    min-width: 32px;
+    box-shadow: 0 3px 0 #8B4513;
+    animation: tilePop 0.15s ease-out;
+}
+
+@keyframes tilePop {
+    0%   { transform: scale(0.6); }
+    70%  { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+/* ── Timer bar ───────────────────────────────────────────── */
+.be-timer-wrap {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.be-timer-fill {
+    height: 100%;
+    background: #4CAF50;
+    border-radius: 4px;
+    transition: width 0.1s linear, background 0.3s;
+}
+
+/* ── Phoneme tile pool ───────────────────────────────────── */
+.be-pool {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    justify-content: center;
+    padding: 2px 0;
+}
+
+/* Individual phoneme tile */
+.be-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    height: 48px;
+    padding: 0 8px;
+    background: linear-gradient(160deg, #FFF176, #FFD700);
+    color: #4E342E;
+    font-weight: bold;
+    font-size: clamp(0.85rem, 3.5vw, 1.1rem);
+    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    border: none;
+    border-radius: 14px;
+    box-shadow: 0 5px 0 #B8860B, 0 2px 6px rgba(0,0,0,0.4);
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    transition: transform 0.08s, box-shadow 0.08s, background 0.1s;
+}
+
+.be-tile:hover:not(.be-tile-used) {
+    background: linear-gradient(160deg, #fff9a0, #FFD700);
+    transform: translateY(-2px);
+    box-shadow: 0 7px 0 #B8860B, 0 3px 10px rgba(0,0,0,0.5);
+}
+
+.be-tile:active:not(.be-tile-used) {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #B8860B;
+}
+
+.be-tile-used {
+    background: linear-gradient(160deg, #aaa, #888);
+    color: rgba(255,255,255,0.4);
+    box-shadow: 0 2px 0 #555;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* ── Controls row ────────────────────────────────────────── */
+.be-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.be-type-input {
+    flex: 1 1 120px;
+    max-width: 200px;
+    height: 38px;
+    padding: 0 10px;
+    font-size: 0.95rem;
+    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    border-radius: 10px;
+    border: 1.5px solid rgba(255, 215, 0, 0.4);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.be-type-input::placeholder { color: rgba(255, 255, 255, 0.3); }
+.be-type-input:focus { border-color: #FFD700; }
+
+.be-btn {
+    height: 38px;
+    padding: 0 14px;
+    font-size: 0.9rem;
+    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-weight: bold;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: transform 0.08s, box-shadow 0.08s;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.4);
+}
+.be-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+
+.be-btn-slash {
+    background: linear-gradient(135deg, #FF6F00, #E65100);
+    color: #fff;
+    min-width: 100px;
+}
+.be-btn-slash:hover { background: linear-gradient(135deg, #FF8F00, #FF6F00); }
+
+.be-btn-clear {
+    background: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.18);
+}
+.be-btn-clear:hover { background: rgba(255,80,80,0.25); }
+
+.be-btn-hear {
+    background: rgba(33,150,243,0.3);
+    color: #90CAF9;
+    border: 1px solid rgba(33,150,243,0.3);
+    font-size: 1.1rem;
+    padding: 0 10px;
+}
+.be-btn-hear:hover { background: rgba(33,150,243,0.5); }
+
+/* ── Feedback line ───────────────────────────────────────── */
+.be-feedback {
+    min-height: 20px;
+    font-size: clamp(0.75rem, 3vw, 0.9rem);
+    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-weight: bold;
+    color: #FFD700;
+    text-align: center;
+    padding: 0 8px;
+    line-height: 1.3;
+}
+
+/* ── Responsive tweaks ───────────────────────────────────── */
+@media (max-width: 400px) {
+    .be-tile { min-width: 40px; height: 42px; font-size: 0.82rem; border-radius: 10px; }
+    .be-btn  { height: 34px; padding: 0 10px; font-size: 0.82rem; }
+    .battle-overlay { padding: 6px 8px 8px; gap: 4px; }
+}
+
+@media (max-height: 620px) {
+    .battle-overlay { max-height: 48vh; }
+    .be-hints { display: none; }
+}
+
+/* Constrain on wide desktop screens */
+@media (min-aspect-ratio: 9/16) {
+    #slashWrapper { max-width: calc(100vh * 9 / 16); margin: 0 auto; }
 }

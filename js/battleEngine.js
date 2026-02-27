@@ -1,0 +1,760 @@
+'use strict';
+// ============================================================
+// BATTLE ENGINE — js/battleEngine.js
+// Phonics combat: player blends collected phonemes into words
+// to deal damage to the boss. This is the educational heart.
+//
+// Canvas draws: background, boss, Riku, HP bars, slash effects.
+// DOM overlay draws: interactive phoneme tiles, word builder,
+//   type-input, submit button, timer bar. (Better for touch/mobile)
+// ============================================================
+
+const BOSS_ATTACK_INTERVAL = 5500;  // ms between boss attacks when idle
+const BLEND_TIME           = 14;    // seconds per blend attempt
+const MIN_TILE_POOL        = 6;     // minimum tiles given (supplement if few collected)
+
+// ─────────────────────────────────────────────────────────────
+// SLASH PARTICLE
+// ─────────────────────────────────────────────────────────────
+class SlashParticle {
+  constructor(x, y) {
+    this.x     = x; this.y = y;
+    this.lines = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const l = 30 + Math.random() * 40;
+      this.lines.push({ a, l, life: 1 });
+    }
+    this.life = 1;
+  }
+  update() {
+    this.life -= 0.04;
+    this.lines.forEach(ln => { ln.l += 3; ln.life -= 0.05; });
+  }
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.life);
+    this.lines.forEach(ln => {
+      const grd = ctx.createLinearGradient(
+        this.x, this.y,
+        this.x + Math.cos(ln.a) * ln.l, this.y + Math.sin(ln.a) * ln.l,
+      );
+      grd.addColorStop(0, '#fff');
+      grd.addColorStop(1, 'rgba(255,215,0,0)');
+      ctx.strokeStyle = grd;
+      ctx.lineWidth   = 3 * ln.life;
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      ctx.lineTo(this.x + Math.cos(ln.a) * ln.l, this.y + Math.sin(ln.a) * ln.l);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+  isDead() { return this.life <= 0; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// DAMAGE POP
+// ─────────────────────────────────────────────────────────────
+class DamagePop {
+  constructor(x, y, text, color = '#FFD700') {
+    this.x = x; this.y = y; this.text = text; this.color = color;
+    this.vy = -3; this.life = 1; this.scale = 0.3;
+  }
+  update() {
+    this.y    += this.vy;
+    this.vy   *= 0.96;
+    this.life -= 0.022;
+    this.scale = Math.min(1.6, this.scale + 0.12);
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.life);
+    ctx.translate(this.x, this.y);
+    ctx.scale(this.scale, this.scale);
+    ctx.font        = 'bold 28px "Comic Sans MS", system-ui';
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth   = 4;
+    ctx.strokeText(this.text, 0, 0);
+    ctx.fillStyle   = this.color;
+    ctx.fillText(this.text, 0, 0);
+    ctx.restore();
+  }
+  isDead() { return this.life <= 0; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// BATTLE ENGINE
+// ─────────────────────────────────────────────────────────────
+class BattleEngine {
+  constructor(canvas, overlay, stageData, collectedPhonemes, sprites, audio, progress) {
+    this.canvas    = canvas;
+    this.ctx       = canvas.getContext('2d');
+    this.overlay   = overlay;   // DOM element: #battleOverlay
+    this.stage     = stageData;
+    this.sprites   = sprites || {};
+    this.audio     = audio;
+    this.progress  = progress;
+
+    this.W = canvas.width;
+    this.H = canvas.height;
+
+    // HP
+    this.bossMaxHp = stageData.bossHp;
+    this.bossHp    = stageData.bossHp;
+    this.rikuMaxHp = 100;
+    this.rikuHp    = 100;
+
+    // Build the tile pool from collected phonemes
+    // If not enough, supplement from the first stage word's phonemes
+    this.tilePool  = this._buildTilePool(collectedPhonemes, stageData);
+    this.availableWords = stageData.words;
+
+    // Battle state
+    this.state    = 'idle';    // idle | blending | boss-attack | riku-attack | won | lost
+    this._age     = 0;
+    this._bossAttackTimer = BOSS_ATTACK_INTERVAL;
+    this._combo   = 0;
+    this.score    = 0;
+
+    // Animations
+    this.slashParticles = [];
+    this.damagePops     = [];
+    this._bossShake     = 0;
+    this._rikuShake     = 0;
+    this._bossBobOffset = 0;
+
+    // Blend session
+    this._blendTimeLeft  = BLEND_TIME;
+    this._blendTick      = 0;
+    this._blendTimer     = null;
+    this._currentBuilt   = [];   // array of phonemes selected so far
+    this._typingMode     = false;
+
+    // DOM refs (created by setupDOM)
+    this._tileEls   = [];
+    this._setupDOM();
+
+    this.done    = false;
+    this.outcome = null;  // 'victory' | 'defeat'
+  }
+
+  // ── Tile pool construction ───────────────────────────────────
+  _buildTilePool(collectedPhonemes, stage) {
+    let pool = collectedPhonemes.map(c => c.phoneme);
+    // Ensure at minimum 2 complete words can be formed
+    if (pool.length < MIN_TILE_POOL) {
+      const supplement = stage.words.slice(0, 2).flatMap(w => w.phonemes);
+      pool = [...new Set([...pool, ...supplement])];
+    }
+    // Deduplicate while keeping educational variety (keep max 2 of each)
+    const counts = {};
+    return pool.filter(ph => {
+      counts[ph] = (counts[ph] || 0) + 1;
+      return counts[ph] <= 2;
+    });
+  }
+
+  // ── Available words given current tile pool ──────────────────
+  _wordsFromPool() {
+    const poolCounts = {};
+    this.tilePool.forEach(ph => { poolCounts[ph] = (poolCounts[ph] || 0) + 1; });
+    return this.availableWords.filter(w => {
+      const needed = {};
+      w.phonemes.forEach(ph => { needed[ph] = (needed[ph] || 0) + 1; });
+      return Object.entries(needed).every(([ph, cnt]) => (poolCounts[ph] || 0) >= cnt);
+    });
+  }
+
+  // ── DOM setup: phoneme tiles + controls ─────────────────────
+  _setupDOM() {
+    // Clear any stale content
+    this.overlay.innerHTML = '';
+
+    // Hint words (bottom of canvas area) — shown above tiles
+    this._hintEl = document.createElement('div');
+    this._hintEl.className = 'be-hints';
+    this._hintEl.title = 'Hint: words you can make!';
+    this.overlay.appendChild(this._hintEl);
+
+    // Word being built (shows tiles in order)
+    this._buildEl = document.createElement('div');
+    this._buildEl.className = 'be-build';
+    this.overlay.appendChild(this._buildEl);
+
+    // Timer bar
+    this._timerBarWrap = document.createElement('div');
+    this._timerBarWrap.className = 'be-timer-wrap';
+    this._timerBar = document.createElement('div');
+    this._timerBar.className = 'be-timer-fill';
+    this._timerBarWrap.appendChild(this._timerBar);
+    this.overlay.appendChild(this._timerBarWrap);
+
+    // Tile pool
+    this._poolEl = document.createElement('div');
+    this._poolEl.className = 'be-pool';
+    this.overlay.appendChild(this._poolEl);
+
+    // Controls row
+    const controls = document.createElement('div');
+    controls.className = 'be-controls';
+
+    this._typeInput = document.createElement('input');
+    this._typeInput.className   = 'be-type-input';
+    this._typeInput.placeholder = 'or type the word…';
+    this._typeInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') this._submitTyped();
+    });
+
+    this._submitBtn = document.createElement('button');
+    this._submitBtn.className   = 'be-btn be-btn-slash';
+    this._submitBtn.textContent = '⚔️ SLASH!';
+    this._submitBtn.addEventListener('click', () => this._submitBuild());
+
+    this._clearBtn = document.createElement('button');
+    this._clearBtn.className   = 'be-btn be-btn-clear';
+    this._clearBtn.textContent = '✕ Clear';
+    this._clearBtn.addEventListener('click', () => this._clearBuild());
+
+    this._hearBtn = document.createElement('button');
+    this._hearBtn.className   = 'be-btn be-btn-hear';
+    this._hearBtn.textContent = '🔊';
+    this._hearBtn.title = 'Hear sounds';
+    this._hearBtn.addEventListener('click', () => {
+      if (this._currentBuilt.length > 0) {
+        const word = this.availableWords.find(w => w.phonemes.join('') === this._currentBuilt.join(''));
+        if (word) this.audio?.playBlendSequence(word.phonemes, word.word);
+        else this._currentBuilt.forEach(ph => this.audio?.playPhoneme(ph));
+      }
+    });
+
+    controls.append(this._typeInput, this._submitBtn, this._clearBtn, this._hearBtn);
+    this.overlay.appendChild(controls);
+
+    // Feedback line
+    this._feedbackEl = document.createElement('div');
+    this._feedbackEl.className = 'be-feedback';
+    this.overlay.appendChild(this._feedbackEl);
+
+    this._renderTiles();
+    this._renderHints();
+    this._startBlendTimer();
+  }
+
+  _renderTiles() {
+    this._poolEl.innerHTML = '';
+    this._tileEls = [];
+    const usedInBuild = {};
+    this._currentBuilt.forEach(ph => { usedInBuild[ph] = (usedInBuild[ph] || 0) + 1; });
+
+    this.tilePool.forEach((ph, idx) => {
+      const used = (usedInBuild[ph] || 0);
+      const tile = document.createElement('button');
+      tile.className = 'be-tile';
+      tile.textContent = ph.toUpperCase();
+      tile.dataset.phoneme = ph;
+      tile.dataset.idx = idx;
+      // Mark as used if already placed
+      if (used > 0) {
+        tile.classList.add('be-tile-used');
+        used > 0 && (usedInBuild[ph]--);
+      }
+      tile.addEventListener('click', () => this._onTileClick(ph, tile));
+      tile.addEventListener('mouseenter', () => this.audio?.playPhoneme(ph));
+      tile.addEventListener('touchstart', (e) => { e.preventDefault(); this.audio?.playPhoneme(ph); }, { passive: false });
+      this._tileEls.push(tile);
+      this._poolEl.appendChild(tile);
+    });
+  }
+
+  _renderHints() {
+    const possible = this._wordsFromPool().slice(0, 4);
+    this._hintEl.innerHTML = possible.map(w =>
+      `<span class="be-hint-word">${w.hint} <em>${w.word}</em></span>`
+    ).join('');
+  }
+
+  _renderBuild() {
+    this._buildEl.innerHTML = this._currentBuilt.length === 0
+      ? '<span class="be-build-placeholder">Click tiles to build a word…</span>'
+      : this._currentBuilt.map(ph => `<span class="be-build-tile">${ph.toUpperCase()}</span>`).join('');
+  }
+
+  // ── Tile click ───────────────────────────────────────────────
+  _onTileClick(phoneme, tileEl) {
+    if (this.state !== 'idle' && this.state !== 'blending') return;
+    if (tileEl.classList.contains('be-tile-used')) return;
+
+    this.state = 'blending';
+    this._currentBuilt.push(phoneme);
+    tileEl.classList.add('be-tile-used');
+
+    if (this.audio) this.audio.playPhoneme(phoneme);
+
+    this._renderBuild();
+    this._setFeedback('');
+  }
+
+  // ── Submit ───────────────────────────────────────────────────
+  _submitBuild() {
+    const word = this._currentBuilt.join('');
+    this._checkWord(word, false);
+  }
+
+  _submitTyped() {
+    const word = this._typeInput.value.trim().toLowerCase();
+    if (!word) return;
+    this._typeInput.value = '';
+    this._checkWord(word, true);
+  }
+
+  _checkWord(attempt, typed) {
+    const match = this.availableWords.find(w => w.word === attempt || w.word === attempt.toLowerCase());
+
+    if (!match) {
+      this._wrongBlend(`"${attempt.toUpperCase()}" isn't in the word list — try again!`);
+      return;
+    }
+
+    // Check that phonemes can be formed from tile pool
+    const poolCounts = {};
+    this.tilePool.forEach(ph => { poolCounts[ph] = (poolCounts[ph] || 0) + 1; });
+    const needed = {};
+    match.phonemes.forEach(ph => { needed[ph] = (needed[ph] || 0) + 1; });
+    const canForm = Object.entries(needed).every(([ph, cnt]) => (poolCounts[ph] || 0) >= cnt);
+
+    if (!canForm) {
+      this._wrongBlend(`You haven't collected all the tiles for "${match.word}" yet!`);
+      return;
+    }
+
+    this._successBlend(match, typed);
+  }
+
+  _successBlend(wordObj, typed) {
+    this._stopBlendTimer();
+    this.state = 'riku-attack';
+
+    const timeBonus  = this._blendTimeLeft / BLEND_TIME;
+    const comboMult  = 1 + Math.min(this._combo, 4) * 0.25;
+    const speedBonus = typed ? 1.3 : 1.0;
+    const damage     = Math.floor(wordObj.damage * comboMult * (0.7 + timeBonus * 0.3) * speedBonus);
+
+    this._combo++;
+    this.bossHp  = Math.max(0, this.bossHp - damage);
+    this.score  += damage * 2;
+    this._bossShake = 22;
+
+    if (this.progress) this.progress.recordBlend(this.stage.id, wordObj.word, true);
+    if (this.audio)    this.audio.sfxSlash();
+    if (this.audio)    this.audio.sfxBossHit();
+    setTimeout(() => {
+      if (this.audio) this.audio.playBlendSequence(wordObj.phonemes, wordObj.word);
+    }, 200);
+
+    // Slash particles at boss center
+    const bossX = Math.floor(this.W * 0.72);
+    const bossY = Math.floor(this.H * 0.38);
+    for (let i = 0; i < 3; i++) {
+      this.slashParticles.push(new SlashParticle(bossX + (Math.random()-0.5)*40, bossY + (Math.random()-0.5)*40));
+    }
+
+    const gradeText = this._combo >= 3 ? `COMBO ×${this._combo}! ⚡` :
+                      timeBonus > 0.7  ? 'PERFECT! 💥' : 'GREAT! ⚔️';
+    this.damagePops.push(new DamagePop(bossX, bossY - 40, `-${damage}`, '#FFD700'));
+    this.damagePops.push(new DamagePop(bossX, bossY - 80, gradeText, '#fff'));
+
+    this._setFeedback(`⚔️ "${wordObj.word.toUpperCase()}" — ${gradeText} (${damage} dmg)`, '#FFD700');
+
+    setTimeout(() => {
+      if (this.bossHp <= 0) {
+        this._win();
+      } else {
+        this._clearBuild();
+        this.state = 'idle';
+        this._startBlendTimer();
+        this._renderHints();
+      }
+    }, 1400);
+  }
+
+  _wrongBlend(msg) {
+    this._combo   = 0;
+    this.state    = 'boss-attack';
+    this._rikuShake = 14;
+    const dmg     = Math.floor(this.stage.bossAttack * 0.5);
+    this.rikuHp   = Math.max(0, this.rikuHp - dmg);
+
+    if (this.progress) this.progress.recordBlend(this.stage.id, '', false);
+    if (this.audio) this.audio.sfxWrongBlend();
+    if (this.audio) this.audio.sfxHurt();
+
+    this.damagePops.push(new DamagePop(Math.floor(this.W * 0.25), Math.floor(this.H * 0.35), `-${dmg}`, '#FF5252'));
+    this._setFeedback('❌ ' + msg, '#FF5252');
+
+    setTimeout(() => {
+      this._clearBuild();
+      if (this.rikuHp <= 0) { this._lose(); return; }
+      this.state = 'idle';
+      this._startBlendTimer();
+    }, 1000);
+  }
+
+  // ── Timer ────────────────────────────────────────────────────
+  _startBlendTimer() {
+    this._stopBlendTimer();
+    this._blendTimeLeft = BLEND_TIME;
+    this._timerBar.style.width = '100%';
+    this._timerBar.style.background = '#4CAF50';
+    this._blendTimer = setInterval(() => {
+      this._blendTimeLeft -= 0.1;
+      const pct = Math.max(0, this._blendTimeLeft / BLEND_TIME);
+      this._timerBar.style.width  = (pct * 100) + '%';
+      this._timerBar.style.background = pct < 0.25 ? '#F44336' : pct < 0.5 ? '#FF9800' : '#4CAF50';
+      if (this._blendTimeLeft <= 0) {
+        this._stopBlendTimer();
+        this._bossAutoAttack();
+      }
+    }, 100);
+  }
+
+  _stopBlendTimer() {
+    if (this._blendTimer) { clearInterval(this._blendTimer); this._blendTimer = null; }
+  }
+
+  _bossAutoAttack() {
+    if (this.done) return;
+    this.state = 'boss-attack';
+    this._bossShake = 8;
+    const dmg = this.stage.bossAttack;
+    this.rikuHp = Math.max(0, this.rikuHp - dmg);
+    if (this.audio) this.audio.sfxBossHit();
+    if (this.audio) this.audio.sfxHurt();
+    this.damagePops.push(new DamagePop(Math.floor(this.W * 0.25), Math.floor(this.H * 0.35), `🦖 -${dmg}`, '#FF5252'));
+    this._setFeedback(`⚡ Boss attacks! -${dmg} HP — blend faster!`, '#FF9800');
+    this._combo = 0;
+    setTimeout(() => {
+      this._clearBuild();
+      if (this.rikuHp <= 0) { this._lose(); return; }
+      this.state = 'idle';
+      this._startBlendTimer();
+    }, 1200);
+  }
+
+  // ── Clear build ──────────────────────────────────────────────
+  _clearBuild() {
+    this._currentBuilt = [];
+    this._typeInput.value = '';
+    this._renderBuild();
+    this._renderTiles();
+  }
+
+  // ── Feedback text ────────────────────────────────────────────
+  _setFeedback(msg, color = '#fff') {
+    this._feedbackEl.textContent  = msg;
+    this._feedbackEl.style.color  = color;
+  }
+
+  // ── Win / Lose ───────────────────────────────────────────────
+  _win() {
+    this._stopBlendTimer();
+    this.done    = true;
+    this.outcome = 'victory';
+    if (this.audio) this.audio.sfxVictory();
+  }
+
+  _lose() {
+    this._stopBlendTimer();
+    this.done    = true;
+    this.outcome = 'defeat';
+    if (this.audio) this.audio.sfxHurt();
+  }
+
+  // ── Update ───────────────────────────────────────────────────
+  update() {
+    if (this.done) return;
+    this._age++;
+    if (this._bossShake > 0) this._bossShake--;
+    if (this._rikuShake > 0) this._rikuShake--;
+    this._bossBobOffset = Math.sin(this._age * 0.04) * 5;
+
+    this.slashParticles.forEach(p => p.update());
+    this.slashParticles = this.slashParticles.filter(p => !p.isDead());
+    this.damagePops.forEach(p => p.update());
+    this.damagePops = this.damagePops.filter(p => !p.isDead());
+  }
+
+  // ── Draw ─────────────────────────────────────────────────────
+  draw() {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.W, this.H);
+
+    this._drawBackground(ctx);
+    this._drawFloor(ctx);
+    this._drawBoss(ctx);
+    this._drawRiku(ctx);
+    this._drawHPBars(ctx);
+
+    this.slashParticles.forEach(p => p.draw(ctx));
+    this.damagePops.forEach(p => p.draw(ctx));
+
+    // Combo badge
+    if (this._combo >= 2 && this.state === 'idle') {
+      const pulse = 0.8 + 0.2 * Math.sin(this._age * 0.2);
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.font        = `bold ${16 + this._combo * 2}px "Comic Sans MS", system-ui`;
+      ctx.fillStyle   = '#FFD700';
+      ctx.textAlign   = 'right';
+      ctx.shadowColor = '#FF6F00';
+      ctx.shadowBlur  = 8;
+      ctx.fillText(`🔥 COMBO ×${this._combo}`, this.W - 12, 96);
+      ctx.restore();
+    }
+  }
+
+  _drawBackground(ctx) {
+    const colors = this.stage.skyColor || ['#1565C0', '#42A5F5'];
+    const grad   = ctx.createLinearGradient(0, 0, 0, this.H * 0.75);
+    grad.addColorStop(0, colors[0]);
+    grad.addColorStop(1, colors[1]);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, this.W, this.H * 0.75);
+
+    // Atmospheric haze at horizon
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.fillRect(0, this.H * 0.55, this.W, 30);
+
+    // Stage name watermark
+    ctx.font      = `bold 14px system-ui`;
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${this.stage.name}  ⚔️  Boss Battle`, this.W / 2, 26);
+  }
+
+  _drawFloor(ctx) {
+    const floorY = this.H * 0.72;
+    ctx.fillStyle = this.stage.groundColor || '#2E7D32';
+    ctx.fillRect(0, floorY, this.W, this.H - floorY);
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(0, floorY, this.W, 8);
+  }
+
+  _drawBoss(ctx) {
+    const bossX  = Math.floor(this.W * 0.72);
+    const bossY  = Math.floor(this.H * 0.30) + this._bossBobOffset;
+    const shakeX = this._bossShake > 0 ? (Math.random() - 0.5) * 10 : 0;
+    const shakeY = this._bossShake > 0 ? (Math.random() - 0.5) * 6  : 0;
+    const scale  = 1 + Math.min(0.3, this._bossShake * 0.015);
+    const bossW  = 110;
+    const bossH  = 110;
+
+    ctx.save();
+    ctx.translate(bossX + shakeX, bossY + shakeY);
+    ctx.scale(scale, scale);
+
+    // Boss HP tint (turns redder as HP drops)
+    const hpPct = this.bossHp / this.bossMaxHp;
+    const sp    = this.sprites[this.stage.bossFile];
+
+    if (sp && sp.complete && sp.naturalWidth > 0) {
+      // If HP < 30%, add red tint
+      ctx.drawImage(sp, -bossW / 2, -bossH / 2, bossW, bossH);
+      if (hpPct < 0.3) {
+        ctx.globalAlpha = 0.3 * Math.sin(this._age * 0.2);
+        ctx.fillStyle   = '#F44336';
+        ctx.beginPath(); ctx.ellipse(0, 0, bossW / 2, bossH / 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    } else {
+      this._drawFallbackBoss(ctx, hpPct);
+    }
+    ctx.restore();
+
+    // Boss name + HP text above
+    ctx.font      = 'bold 14px "Comic Sans MS", system-ui';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+    ctx.fillText(this.stage.bossName, bossX, bossY - bossH / 2 - 10);
+    ctx.shadowBlur = 0;
+  }
+
+  _drawFallbackBoss(ctx, hpPct) {
+    // T-Rex silhouette in stage accent color, darkened at low HP
+    const c   = this.stage.accentColor || '#FF6F00';
+    const hue = hpPct < 0.3 ? '#B71C1C' : c;
+
+    // Body
+    ctx.fillStyle = hue;
+    ctx.beginPath(); ctx.ellipse(0, 20, 44, 36, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Head
+    ctx.beginPath(); ctx.ellipse(-36, -18, 34, 24, -0.3, 0, Math.PI * 2); ctx.fill();
+
+    // Jaw
+    ctx.fillStyle = '#4E342E';
+    ctx.beginPath();
+    ctx.moveTo(-64, -10);
+    ctx.quadraticCurveTo(-52, 2, -22, -4);
+    ctx.closePath();
+    ctx.fill();
+
+    // Teeth
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-58 + i * 10, -10);
+      ctx.lineTo(-54 + i * 10, -2);
+      ctx.lineTo(-50 + i * 10, -10);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Eye
+    ctx.fillStyle = '#FFF176';
+    ctx.beginPath(); ctx.ellipse(-30, -24, 10, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#212121';
+    ctx.beginPath(); ctx.ellipse(-28, -24, 5, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Tiny arms
+    ctx.fillStyle = hue;
+    ctx.fillRect(10, -2, 16, 10); ctx.fillRect(10, 10, 12, 10);
+
+    // Tail
+    ctx.beginPath();
+    ctx.moveTo(44, 20);
+    ctx.quadraticCurveTo(80, 40, 90, 10);
+    ctx.lineWidth = 18; ctx.strokeStyle = hue; ctx.stroke();
+
+    // Legs
+    ctx.fillStyle = hue;
+    ctx.fillRect(-20, 52, 20, 28);
+    ctx.fillRect(8,   52, 20, 28);
+    ctx.fillStyle = '#3E2723';
+    ctx.fillRect(-24, 76, 26, 8);  // feet
+    ctx.fillRect(6,   76, 26, 8);
+
+    // Crack overlay at low HP
+    if (hpPct < 0.5) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth   = 2;
+      ctx.beginPath(); ctx.moveTo(-10, -30); ctx.lineTo(10, 10); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(20, -10);  ctx.lineTo(5, 30);  ctx.stroke();
+    }
+  }
+
+  _drawRiku(ctx) {
+    const rx      = Math.floor(this.W * 0.22);
+    const ry      = Math.floor(this.H * 0.38);
+    const shakeX  = this._rikuShake > 0 ? (Math.random() - 0.5) * 8 : 0;
+    const shakeY  = this._rikuShake > 0 ? (Math.random() - 0.5) * 4 : 0;
+    const rW      = 80;
+    const rH      = 90;
+
+    ctx.save();
+    ctx.translate(rx + shakeX, ry + shakeY);
+
+    const sp = this.sprites['riku-idle'] || this.sprites['riku-run'];
+    if (sp && sp.complete && sp.naturalWidth > 0) {
+      ctx.drawImage(sp, -rW / 2, -rH / 2, rW, rH);
+    } else {
+      this._drawFallbackRiku(ctx, rW, rH);
+    }
+    ctx.restore();
+  }
+
+  _drawFallbackRiku(ctx, w, h) {
+    const cx = 0;
+    const ty = -h / 2;
+
+    // Body
+    ctx.fillStyle = '#F5F5F0';
+    ctx.beginPath(); ctx.ellipse(cx, ty + h * 0.55, w * 0.38, h * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Nori
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(cx - w * 0.38, ty + h * 0.38, w * 0.76, h * 0.16);
+
+    // Face
+    ctx.fillStyle = '#fff9e0';
+    ctx.beginPath(); ctx.ellipse(cx, ty + h * 0.24, w * 0.3, h * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.ellipse(cx - 10, ty + h * 0.22, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 10, ty + h * 0.22, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Hachimaki
+    ctx.fillStyle = '#ff3322';
+    ctx.fillRect(cx - w * 0.3, ty + h * 0.08, w * 0.6, 7);
+
+    // Battle pose sword (thrust toward right = toward boss)
+    const swingAng = this.state === 'riku-attack' ? -0.4 : 0.1;
+    ctx.save();
+    ctx.translate(cx + 20, ty + h * 0.5);
+    ctx.rotate(swingAng);
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(0, -3, 45, 6);
+    ctx.fillStyle = '#aaa';
+    ctx.fillRect(40, -2, 8, 4);
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(-4, -8, 6, 16);
+    ctx.restore();
+  }
+
+  _drawHPBars(ctx) {
+    const barW   = Math.min(220, this.W * 0.38);
+    const barH   = 18;
+    const margin = 12;
+
+    // ── Riku HP (left side) ──────────────────────────────────
+    const rikuPct = Math.max(0, this.rikuHp / this.rikuMaxHp);
+    const rx = margin;
+    const ry = this.H * 0.72 - 70;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(rx - 2, ry - 2, barW + 4, barH + 4, 6); ctx.fill();
+
+    const rGrad = ctx.createLinearGradient(rx, 0, rx + barW * rikuPct, 0);
+    rGrad.addColorStop(0, rikuPct > 0.5 ? '#4CAF50' : rikuPct > 0.25 ? '#FF9800' : '#F44336');
+    rGrad.addColorStop(1, rikuPct > 0.5 ? '#8BC34A' : rikuPct > 0.25 ? '#FFC107' : '#FF5252');
+    ctx.fillStyle = rGrad;
+    ctx.beginPath(); ctx.roundRect(rx, ry, barW * rikuPct, barH, 4); ctx.fill();
+
+    ctx.font = 'bold 12px system-ui';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText(`🍚 RIKU  ${Math.ceil(this.rikuHp)}/${this.rikuMaxHp}`, rx, ry - 5);
+
+    // ── Boss HP (right side) ─────────────────────────────────
+    const bossPct = Math.max(0, this.bossHp / this.bossMaxHp);
+    const bx = this.W - margin - barW;
+    const by = this.H * 0.72 - 70;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(bx - 2, by - 2, barW + 4, barH + 4, 6); ctx.fill();
+
+    const bGrad = ctx.createLinearGradient(bx, 0, bx + barW, 0);
+    bGrad.addColorStop(0, '#F44336');
+    bGrad.addColorStop(1, '#B71C1C');
+    ctx.fillStyle = bGrad;
+    ctx.beginPath(); ctx.roundRect(bx, by, barW * bossPct, barH, 4); ctx.fill();
+
+    ctx.font = 'bold 12px system-ui';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'right';
+    ctx.fillText(`🦖 ${this.stage.bossName}  ${Math.ceil(this.bossHp)}/${this.bossMaxHp}`, bx + barW, by - 5);
+
+    ctx.textAlign = 'left';
+  }
+
+  // ── Cleanup ──────────────────────────────────────────────────
+  destroy() {
+    this._stopBlendTimer();
+    this.overlay.innerHTML = '';
+  }
+}
