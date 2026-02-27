@@ -544,27 +544,32 @@ class BattleEngine {
   }
 
   _drawBoss(ctx) {
-    const bossX  = Math.floor(this.W * 0.72);
-    const bossY  = Math.floor(this.H * 0.30) + this._bossBobOffset;
-    const shakeX = this._bossShake > 0 ? (Math.random() - 0.5) * 10 : 0;
-    const shakeY = this._bossShake > 0 ? (Math.random() - 0.5) * 6  : 0;
-    const scale  = 1 + Math.min(0.3, this._bossShake * 0.015);
-    const bossW  = 110;
-    const bossH  = 110;
+    const bossX  = Math.floor(this.W * 0.70);
+    const bossY  = Math.floor(this.H * 0.32) + this._bossBobOffset;
+    const shakeX = this._bossShake > 0 ? (Math.random() - 0.5) * 12 : 0;
+    const shakeY = this._bossShake > 0 ? (Math.random() - 0.5) * 7  : 0;
+    const scale  = 1 + Math.min(0.35, this._bossShake * 0.016);
+    // Boss drawn larger so it feels threatening
+    const bossW  = Math.min(160, Math.floor(this.W * 0.32));
+    const bossH  = bossW;
 
     ctx.save();
     ctx.translate(bossX + shakeX, bossY + shakeY);
     ctx.scale(scale, scale);
 
-    // Boss HP tint (turns redder as HP drops)
     const hpPct = this.bossHp / this.bossMaxHp;
     const sp    = this.sprites[this.stage.bossFile];
 
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      // If HP < 30%, add red tint
+      // Draw with the sprite facing left (flip horizontally — boss faces Riku on the left)
+      ctx.save();
+      ctx.scale(-1, 1);   // mirror so boss faces left
       ctx.drawImage(sp, -bossW / 2, -bossH / 2, bossW, bossH);
+      ctx.restore();
+
+      // Red flash at low HP
       if (hpPct < 0.3) {
-        ctx.globalAlpha = 0.3 * Math.sin(this._age * 0.2);
+        ctx.globalAlpha = 0.28 * (0.6 + 0.4 * Math.sin(this._age * 0.25));
         ctx.fillStyle   = '#F44336';
         ctx.beginPath(); ctx.ellipse(0, 0, bossW / 2, bossH / 2, 0, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1;
@@ -574,12 +579,19 @@ class BattleEngine {
     }
     ctx.restore();
 
-    // Boss name + HP text above
-    ctx.font      = 'bold 14px "Comic Sans MS", system-ui';
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
-    ctx.fillText(this.stage.bossName, bossX, bossY - bossH / 2 - 10);
+    // Boss name tag above sprite
+    ctx.font        = `bold ${Math.max(12, Math.floor(this.W * 0.028))}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle   = '#fff';
+    ctx.textAlign   = 'center';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur  = 5;
+    ctx.fillText(this.stage.bossName, bossX, bossY - bossH / 2 - 12);
+
+    // Angry emoji at very low HP
+    if (hpPct < 0.25) {
+      ctx.font      = '18px serif';
+      ctx.fillText('😤', bossX, bossY - bossH / 2 - 32);
+    }
     ctx.shadowBlur = 0;
   }
 
@@ -648,23 +660,55 @@ class BattleEngine {
   }
 
   _drawRiku(ctx) {
-    const rx      = Math.floor(this.W * 0.22);
-    const ry      = Math.floor(this.H * 0.38);
-    const shakeX  = this._rikuShake > 0 ? (Math.random() - 0.5) * 8 : 0;
-    const shakeY  = this._rikuShake > 0 ? (Math.random() - 0.5) * 4 : 0;
-    const rW      = 80;
-    const rH      = 90;
+    const rx     = Math.floor(this.W * 0.22);
+    const ry     = Math.floor(this.H * 0.38);
+    const shakeX = this._rikuShake > 0 ? (Math.random() - 0.5) * 8 : 0;
+    const shakeY = this._rikuShake > 0 ? (Math.random() - 0.5) * 4 : 0;
+    const rW     = 90;
+    const rH     = 105;
+
+    // Pick sprite based on current battle state
+    let spKey = 'riku-idle';
+    if (this.state === 'riku-attack')                                    spKey = 'riku-run';
+    if (this.state === 'boss-attack' || this._rikuShake > 0)            spKey = 'riku-hurt';
+    if (this.state === 'won' || this.done && this.outcome === 'victory') spKey = 'riku-victory';
+
+    // Gentle idle bob
+    const bob = this.state === 'idle'
+      ? Math.sin(this._age * 0.05) * 3
+      : 0;
 
     ctx.save();
-    ctx.translate(rx + shakeX, ry + shakeY);
+    ctx.translate(rx + shakeX, ry + shakeY + bob);
 
-    const sp = this.sprites['riku-idle'] || this.sprites['riku-run'];
+    const sp = this.sprites[spKey]
+            || this.sprites['riku-idle']
+            || this.sprites['riku-run'];
+
     if (sp && sp.complete && sp.naturalWidth > 0) {
+      // Attack state: lean forward (slight rightward tilt)
+      if (this.state === 'riku-attack') {
+        ctx.rotate(0.18);
+        ctx.translate(10, 0);
+      }
       ctx.drawImage(sp, -rW / 2, -rH / 2, rW, rH);
     } else {
       this._drawFallbackRiku(ctx, rW, rH);
     }
     ctx.restore();
+
+    // Victory sparkles when won
+    if (this.done && this.outcome === 'victory') {
+      for (let i = 0; i < 3; i++) {
+        const a   = (i / 3) * Math.PI * 2 + this._age * 0.05;
+        const r   = 55;
+        const spx = rx + Math.cos(a) * r;
+        const spy = ry + Math.sin(a) * r;
+        ctx.font      = '16px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('✨', spx, spy);
+      }
+    }
   }
 
   _drawFallbackRiku(ctx, w, h) {

@@ -10,11 +10,18 @@
 // ============================================================
 
 // ── Sprite manifest ──────────────────────────────────────────
+// All slash-game sprites live in assets/sprites/ and assets/dinosaurs/.
+// Dino Dash originals remain at assets/*.png (game.js untouched).
 const SLASH_SPRITES = {
-  'riku-run':    'assets/sprites/riku-run.png',
-  'riku-jump':   'assets/sprites/riku-jump.png',
-  'riku-idle':   'assets/sprites/riku-idle.png',
-  // Bosses
+  // Riku states
+  'riku-idle':    'assets/sprites/riku-idle.png',
+  'riku-run':     'assets/sprites/riku-run.png',
+  'riku-jump':    'assets/sprites/riku-run.png',   // reuse run pose for jump
+  'riku-hurt':    'assets/sprites/riku-hurt.png',
+  'riku-victory': 'assets/sprites/riku-victory.png',
+  // Generic minion dino (raptor shape)
+  'minion-dino':  'assets/sprites/minion-dino.png',
+  // Bosses — stages 1 & 2 have real images; 3-6 use canvas fallback
   'stage-1-rex':    'assets/dinosaurs/stage-1-rex.png',
   'stage-1-tri':    'assets/dinosaurs/stage-1-tri.png',
   'stage-2-rapi':   'assets/dinosaurs/stage-2-rapi.png',
