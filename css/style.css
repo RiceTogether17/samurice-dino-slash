@@ -617,8 +617,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 50dvh;
-    overflow: hidden;
+    max-height: 62dvh;
+    overflow-y: auto;
 }
 .battle-overlay.hidden { display: none; }
 
@@ -774,6 +774,12 @@ body {
     gap: 8px;
     align-items: stretch;
     justify-content: center;
+    position: sticky;
+    bottom: 0;
+    background: rgba(6,4,18,0.98);
+    padding-top: 4px;
+    padding-bottom: 2px;
+    margin-top: auto;
 }
 .be-btn {
     height: 48px;
@@ -874,15 +880,17 @@ body {
 /* ── Landscape: battle overlay compact ──────────────────── */
 @media (orientation: landscape) {
     .battle-overlay {
-        max-height: 44dvh;   /* leave top 56% for the battle scene */
-        padding: 6px 12px 8px;
-        gap: 5px;
+        max-height: 52dvh;   /* leave top 48% for the battle scene */
+        padding: 5px 10px 6px;
+        gap: 4px;
     }
-    .be-tile        { min-width: 48px; height: 50px; font-size: 0.95rem; }
-    .be-btn         { height: 44px; }
-    .be-build       { min-height: 36px; padding: 3px 6px; }
+    .be-tile        { min-width: 44px; height: 44px; font-size: 0.9rem; }
+    .be-btn         { height: 40px; padding: 0 14px; }
+    .be-btn-slash   { min-width: 90px; font-size: 1rem; }
+    .be-build       { min-height: 32px; padding: 2px 6px; }
     .be-hints       { display: none; }   /* no room in landscape */
-    .be-feedback    { min-height: 18px; font-size: 0.82rem; }
+    .be-feedback    { min-height: 16px; font-size: 0.8rem; }
+    .be-timer-wrap  { height: 7px; }
 }
 
 /* ── Small portrait screens ──────────────────────────────── */
