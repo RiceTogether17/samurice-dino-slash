@@ -190,6 +190,16 @@ class SlashGame {
     this._startRunner();
   }
 
+  // ── D-pad helpers ─────────────────────────────────────────────
+  _showDpad() {
+    const el = document.getElementById('runnerControls');
+    if (el) el.classList.remove('hidden');
+  }
+  _hideDpad() {
+    const el = document.getElementById('runnerControls');
+    if (el) el.classList.add('hidden');
+  }
+
   // ── RUNNER PHASE ─────────────────────────────────────────────
   _startRunner() {
     if (this.runner) { this.runner.destroy(); this.runner = null; }
@@ -200,6 +210,14 @@ class SlashGame {
 
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
     this.runner = new RunnerEngine(this.canvas, stage, this.sprites, this.audio, this.W, this.H);
+
+    // Wire D-pad buttons
+    const dL = document.getElementById('dpadLeft');
+    const dR = document.getElementById('dpadRight');
+    const dJ = document.getElementById('dpadJump');
+    if (dL && dR && dJ) this.runner.bindDpad(dL, dR, dJ);
+    this._showDpad();
+
     this.state  = 'runner';
   }
 
@@ -252,6 +270,7 @@ class SlashGame {
   exit() {
     if (this.runner)  { this.runner.destroy();  this.runner  = null; }
     if (this.battle)  { this.battle.destroy();  this.battle  = null; }
+    this._hideDpad();
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
     document.removeEventListener('keydown', this._menuKd);
@@ -521,6 +540,7 @@ class SlashGame {
       );
     }
     if (this.runner) { this.runner.destroy(); this.runner = null; }
+    this._hideDpad();
   }
 
   // ── TRANSITION UPDATE ────────────────────────────────────────
@@ -727,6 +747,9 @@ function launchSlashGame() {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('slashScreen').classList.add('active');
 
+  // Request landscape lock (mobile) — ignore if unsupported
+  try { screen.orientation?.lock('landscape').catch(() => {}); } catch (_) {}
+
   if (!_slashGameInstance) {
     _slashGameInstance = new SlashGame('slashCanvas', 'battleOverlay');
   } else {
@@ -741,6 +764,8 @@ function exitSlash() {
     _slashGameInstance.exit();
     _slashGameInstance = null;
   }
+  // Release orientation lock
+  try { screen.orientation?.unlock?.(); } catch (_) {}
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('modeChooser').classList.add('active');
 }

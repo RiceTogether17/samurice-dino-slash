@@ -46,11 +46,26 @@
         <!-- Main game canvas: runner + battle worlds rendered here -->
         <canvas id="slashCanvas"></canvas>
 
+        <!-- Rotate-device prompt — shown only in portrait mode -->
+        <div id="rotatePrompt" class="rotate-prompt">
+            <div class="rotate-icon">📱➡️🔄</div>
+            <div class="rotate-text">Rotate your device for the best experience!</div>
+        </div>
+
         <!-- Exit button (always visible over canvas) -->
         <button id="slashExitBtn"
                 class="slash-exit-btn"
                 onclick="exitSlash()"
                 title="Back to menu">✕</button>
+
+        <!-- Runner D-pad controls (touch only, shown during runner phase) -->
+        <div id="runnerControls" class="runner-controls hidden">
+            <div class="dpad-move">
+                <button class="dpad-btn" id="dpadLeft">◀</button>
+                <button class="dpad-btn" id="dpadRight">▶</button>
+            </div>
+            <button class="dpad-btn dpad-jump" id="dpadJump">▲<br><span>JUMP</span></button>
+        </div>
 
         <!-- Battle overlay: phoneme tiles + word builder + controls.
              Shown only during boss battle; populated by BattleEngine. -->

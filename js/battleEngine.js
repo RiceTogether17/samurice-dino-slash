@@ -371,8 +371,9 @@ class BattleEngine {
     }, 200);
 
     // Slash particles at boss center
-    const bossX = Math.floor(this.W * 0.72);
-    const bossY = Math.floor(this.H * 0.38);
+    const floorY = Math.round(this.H * 0.58);
+    const bossX  = Math.round(this.W * 0.72);
+    const bossY  = Math.round(floorY * 0.50);   // vertical center of boss
     for (let i = 0; i < 3; i++) {
       this.slashParticles.push(new SlashParticle(bossX + (Math.random()-0.5)*40, bossY + (Math.random()-0.5)*40));
     }
@@ -407,7 +408,8 @@ class BattleEngine {
     if (this.audio) this.audio.sfxWrongBlend();
     if (this.audio) this.audio.sfxHurt();
 
-    this.damagePops.push(new DamagePop(Math.floor(this.W * 0.25), Math.floor(this.H * 0.35), `-${dmg}`, '#FF5252'));
+    const _fy1 = Math.round(this.H * 0.58);
+    this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy1 * 0.50), `-${dmg}`, '#FF5252'));
     this._setFeedback('❌ ' + msg, '#FF5252');
 
     setTimeout(() => {
@@ -450,7 +452,8 @@ class BattleEngine {
     this.rikuHp = Math.max(0, this.rikuHp - dmg);
     if (this.audio) this.audio.sfxBossHit();
     if (this.audio) this.audio.sfxHurt();
-    this.damagePops.push(new DamagePop(Math.floor(this.W * 0.25), Math.floor(this.H * 0.35), `🦖 -${dmg}`, '#FF5252'));
+    const _fy2 = Math.round(this.H * 0.58);
+    this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy2 * 0.50), `🦖 -${dmg}`, '#FF5252'));
     this._setFeedback(`⚡ Boss attacks! -${dmg} HP — blend faster!`, '#FF9800');
     this._combo = 0;
     setTimeout(() => {
@@ -528,7 +531,7 @@ class BattleEngine {
       ctx.textAlign   = 'right';
       ctx.shadowColor = '#FF6F00';
       ctx.shadowBlur  = 8;
-      ctx.fillText(`🔥 COMBO ×${this._combo}`, this.W - 12, 96);
+      ctx.fillText(`🔥 COMBO ×${this._combo}`, this.W - 12, 90);
       ctx.restore();
     }
   }
@@ -566,178 +569,178 @@ class BattleEngine {
     ctx.fillText(`${this.stage.name}  ⚔️  Boss Battle`, this.W / 2, 26);
   }
 
+  // The floor line sits just above the tile overlay (top ~58% is arena)
+  _floorY() { return Math.round(this.H * 0.58); }
+
   _drawFloor(ctx) {
-    const floorY = this.H * 0.72;
+    const fy = this._floorY();
+    // Drop shadow for depth
+    const shadow = ctx.createLinearGradient(0, fy - 14, 0, fy + 22);
+    shadow.addColorStop(0, 'rgba(0,0,0,0.42)');
+    shadow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = shadow;
+    ctx.fillRect(0, fy - 14, this.W, 36);
+    // Floor fill
     ctx.fillStyle = this.stage.groundColor || '#2E7D32';
-    ctx.fillRect(0, floorY, this.W, this.H - floorY);
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillRect(0, floorY, this.W, 8);
+    ctx.fillRect(0, fy, this.W, this.H - fy);
+    // Top highlight line
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(0, fy, this.W, 4);
+    // Dark second edge (AQ floor depth)
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(0, fy + 4, this.W, 10);
   }
 
   _drawBoss(ctx) {
-    const bossX  = Math.floor(this.W * 0.70);
-    const bossY  = Math.floor(this.H * 0.32) + this._bossBobOffset;
-    const shakeX = this._bossShake > 0 ? (Math.random() - 0.5) * 12 : 0;
-    const shakeY = this._bossShake > 0 ? (Math.random() - 0.5) * 7  : 0;
-    const scale  = 1 + Math.min(0.35, this._bossShake * 0.016);
-    // Boss drawn larger so it feels threatening
-    const bossW  = Math.min(160, Math.floor(this.W * 0.32));
-    const bossH  = bossW;
+    const fy     = this._floorY();
+    // Boss: feet at floor, height fills ~90% of the arena (AQ style — imposing!)
+    const bH     = Math.round(fy * 0.90);
+    const bW     = Math.round(bH * 0.85);
+    const bCX    = Math.round(this.W * 0.72);   // center X (right side)
+    const bFeetY = fy;
+    const bCY    = bFeetY - bH / 2;             // center Y
 
+    const shakeX = this._bossShake > 0 ? (Math.random() - 0.5) * 14 : 0;
+    const shakeY = this._bossShake > 0 ? (Math.random() - 0.5) * 8  : 0;
+    const bob    = this._bossBobOffset;
+    const scale  = 1 + Math.min(0.25, this._bossShake * 0.012);
+    const hpPct  = this.bossHp / this.bossMaxHp;
+    const sp     = this.sprites[this.stage.bossFile];
+
+    // Ground shadow ellipse
     ctx.save();
-    ctx.translate(bossX + shakeX, bossY + shakeY);
+    ctx.fillStyle = 'rgba(0,0,0,0.20)';
+    ctx.beginPath();
+    ctx.ellipse(bCX, bFeetY + 6, bW * 0.38, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Boss sprite / fallback — centered, feet at floor
+    ctx.translate(bCX + shakeX, bCY + shakeY + bob);
     ctx.scale(scale, scale);
 
-    const hpPct = this.bossHp / this.bossMaxHp;
-    const sp    = this.sprites[this.stage.bossFile];
-
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      // Draw with the sprite facing left (flip horizontally — boss faces Riku on the left)
       ctx.save();
-      ctx.scale(-1, 1);   // mirror so boss faces left
-      ctx.drawImage(sp, -bossW / 2, -bossH / 2, bossW, bossH);
+      ctx.scale(-1, 1);   // mirror — boss faces left toward Riku
+      ctx.drawImage(sp, -bW / 2, -bH / 2, bW, bH);
       ctx.restore();
-
-      // Red flash at low HP
       if (hpPct < 0.3) {
         ctx.globalAlpha = 0.28 * (0.6 + 0.4 * Math.sin(this._age * 0.25));
         ctx.fillStyle   = '#F44336';
-        ctx.beginPath(); ctx.ellipse(0, 0, bossW / 2, bossH / 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0, 0, bW / 2, bH / 2, 0, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1;
       }
     } else {
-      this._drawFallbackBoss(ctx, hpPct);
+      this._drawFallbackBoss(ctx, hpPct, bW, bH);
     }
     ctx.restore();
 
-    // Boss name tag above sprite
-    ctx.font        = `bold ${Math.max(12, Math.floor(this.W * 0.028))}px "Comic Sans MS", system-ui`;
+    // Boss name tag above head
+    const nameY = bFeetY - bH + bob - 12;
+    ctx.font        = `bold ${Math.max(13, Math.floor(this.W * 0.027))}px "Comic Sans MS", system-ui`;
     ctx.fillStyle   = '#fff';
     ctx.textAlign   = 'center';
     ctx.shadowColor = '#000';
     ctx.shadowBlur  = 5;
-    ctx.fillText(this.stage.bossName, bossX, bossY - bossH / 2 - 12);
-
-    // Angry emoji at very low HP
+    ctx.fillText(this.stage.bossName, bCX + shakeX, nameY);
     if (hpPct < 0.25) {
-      ctx.font      = '18px serif';
-      ctx.fillText('😤', bossX, bossY - bossH / 2 - 32);
+      ctx.font = '20px serif';
+      ctx.fillText('😤', bCX + shakeX, nameY - 22);
     }
     ctx.shadowBlur = 0;
   }
 
-  _drawFallbackBoss(ctx, hpPct) {
-    // T-Rex silhouette in stage accent color, darkened at low HP
+  _drawFallbackBoss(ctx, hpPct, bossW, bossH) {
+    // Scale all coordinates relative to original 160px design
+    const s   = (bossH || 160) / 160;
     const c   = this.stage.accentColor || '#FF6F00';
     const hue = hpPct < 0.3 ? '#B71C1C' : c;
 
     // Body
     ctx.fillStyle = hue;
-    ctx.beginPath(); ctx.ellipse(0, 20, 44, 36, 0, 0, Math.PI * 2); ctx.fill();
-
+    ctx.beginPath(); ctx.ellipse(0, 20*s, 44*s, 36*s, 0, 0, Math.PI * 2); ctx.fill();
     // Head
-    ctx.beginPath(); ctx.ellipse(-36, -18, 34, 24, -0.3, 0, Math.PI * 2); ctx.fill();
-
+    ctx.beginPath(); ctx.ellipse(-36*s, -18*s, 34*s, 24*s, -0.3, 0, Math.PI * 2); ctx.fill();
     // Jaw
     ctx.fillStyle = '#4E342E';
     ctx.beginPath();
-    ctx.moveTo(-64, -10);
-    ctx.quadraticCurveTo(-52, 2, -22, -4);
-    ctx.closePath();
-    ctx.fill();
-
+    ctx.moveTo(-64*s, -10*s); ctx.quadraticCurveTo(-52*s, 2*s, -22*s, -4*s);
+    ctx.closePath(); ctx.fill();
     // Teeth
     ctx.fillStyle = '#fff';
     for (let i = 0; i < 4; i++) {
       ctx.beginPath();
-      ctx.moveTo(-58 + i * 10, -10);
-      ctx.lineTo(-54 + i * 10, -2);
-      ctx.lineTo(-50 + i * 10, -10);
-      ctx.closePath();
-      ctx.fill();
+      ctx.moveTo((-58 + i*10)*s, -10*s);
+      ctx.lineTo((-54 + i*10)*s, -2*s);
+      ctx.lineTo((-50 + i*10)*s, -10*s);
+      ctx.closePath(); ctx.fill();
     }
-
     // Eye
     ctx.fillStyle = '#FFF176';
-    ctx.beginPath(); ctx.ellipse(-30, -24, 10, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-30*s, -24*s, 10*s, 10*s, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#212121';
-    ctx.beginPath(); ctx.ellipse(-28, -24, 5, 6, 0, 0, Math.PI * 2); ctx.fill();
-
+    ctx.beginPath(); ctx.ellipse(-28*s, -24*s, 5*s, 6*s, 0, 0, Math.PI * 2); ctx.fill();
     // Tiny arms
     ctx.fillStyle = hue;
-    ctx.fillRect(10, -2, 16, 10); ctx.fillRect(10, 10, 12, 10);
-
+    ctx.fillRect(10*s, -2*s, 16*s, 10*s); ctx.fillRect(10*s, 10*s, 12*s, 10*s);
     // Tail
     ctx.beginPath();
-    ctx.moveTo(44, 20);
-    ctx.quadraticCurveTo(80, 40, 90, 10);
-    ctx.lineWidth = 18; ctx.strokeStyle = hue; ctx.stroke();
-
+    ctx.moveTo(44*s, 20*s); ctx.quadraticCurveTo(80*s, 40*s, 90*s, 10*s);
+    ctx.lineWidth = 18*s; ctx.strokeStyle = hue; ctx.stroke();
     // Legs
     ctx.fillStyle = hue;
-    ctx.fillRect(-20, 52, 20, 28);
-    ctx.fillRect(8,   52, 20, 28);
+    ctx.fillRect(-20*s, 52*s, 20*s, 28*s); ctx.fillRect(8*s, 52*s, 20*s, 28*s);
     ctx.fillStyle = '#3E2723';
-    ctx.fillRect(-24, 76, 26, 8);  // feet
-    ctx.fillRect(6,   76, 26, 8);
-
-    // Crack overlay at low HP
+    ctx.fillRect(-24*s, 76*s, 26*s, 8*s); ctx.fillRect(6*s, 76*s, 26*s, 8*s);
+    // Crack at low HP
     if (hpPct < 0.5) {
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-      ctx.lineWidth   = 2;
-      ctx.beginPath(); ctx.moveTo(-10, -30); ctx.lineTo(10, 10); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(20, -10);  ctx.lineTo(5, 30);  ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-10*s, -30*s); ctx.lineTo(10*s, 10*s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(20*s, -10*s);  ctx.lineTo(5*s, 30*s);  ctx.stroke();
     }
   }
 
   _drawRiku(ctx) {
-    const rx     = Math.floor(this.W * 0.22);
-    const ry     = Math.floor(this.H * 0.38);
-    const shakeX = this._rikuShake > 0 ? (Math.random() - 0.5) * 8 : 0;
-    const shakeY = this._rikuShake > 0 ? (Math.random() - 0.5) * 4 : 0;
-    const rW     = 90;
-    const rH     = 105;
+    const fy     = this._floorY();
+    // Riku: feet at floor, height ~78% of arena (slightly smaller than boss)
+    const rH     = Math.round(fy * 0.78);
+    const rW     = Math.round(rH * 0.65);
+    const rCX    = Math.round(this.W * 0.22);   // center X (left side)
+    const rFeetY = fy;
+    const rCY    = rFeetY - rH / 2;             // center Y
 
-    // Pick sprite based on current battle state
+    const shakeX = this._rikuShake > 0 ? (Math.random() - 0.5) * 10 : 0;
+    const shakeY = this._rikuShake > 0 ? (Math.random() - 0.5) * 5  : 0;
+    const bob    = this.state === 'idle' ? Math.sin(this._age * 0.05) * 3 : 0;
+
+    // Pick sprite
     let spKey = 'riku-idle';
-    if (this.state === 'riku-attack')                                    spKey = 'riku-run';
-    if (this.state === 'boss-attack' || this._rikuShake > 0)            spKey = 'riku-hurt';
-    if (this.state === 'won' || this.done && this.outcome === 'victory') spKey = 'riku-victory';
+    if (this.state === 'riku-attack')                         spKey = 'riku-run';
+    if (this.state === 'boss-attack' || this._rikuShake > 0) spKey = 'riku-hurt';
+    if (this.done && this.outcome === 'victory')              spKey = 'riku-victory';
+    const sp = this.sprites[spKey] || this.sprites['riku-idle'] || this.sprites['riku-run'];
 
-    // Gentle idle bob
-    const bob = this.state === 'idle'
-      ? Math.sin(this._age * 0.05) * 3
-      : 0;
-
+    // Ground shadow ellipse
     ctx.save();
-    ctx.translate(rx + shakeX, ry + shakeY + bob);
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';
+    ctx.beginPath();
+    ctx.ellipse(rCX, rFeetY + 6, rW * 0.36, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
 
-    const sp = this.sprites[spKey]
-            || this.sprites['riku-idle']
-            || this.sprites['riku-run'];
-
+    ctx.translate(rCX + shakeX, rCY + shakeY + bob);
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      // Attack state: lean forward (slight rightward tilt)
-      if (this.state === 'riku-attack') {
-        ctx.rotate(0.18);
-        ctx.translate(10, 0);
-      }
+      if (this.state === 'riku-attack') { ctx.rotate(0.18); ctx.translate(12, 0); }
       ctx.drawImage(sp, -rW / 2, -rH / 2, rW, rH);
     } else {
       this._drawFallbackRiku(ctx, rW, rH);
     }
     ctx.restore();
 
-    // Victory sparkles when won
+    // Victory sparkles
     if (this.done && this.outcome === 'victory') {
       for (let i = 0; i < 3; i++) {
-        const a   = (i / 3) * Math.PI * 2 + this._age * 0.05;
-        const r   = 55;
-        const spx = rx + Math.cos(a) * r;
-        const spy = ry + Math.sin(a) * r;
-        ctx.font      = '16px serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('✨', spx, spy);
+        const a = (i / 3) * Math.PI * 2 + this._age * 0.05;
+        ctx.font = '18px serif'; ctx.textAlign = 'center';
+        ctx.fillText('✨', rCX + Math.cos(a) * 60, rCY + Math.sin(a) * 60);
       }
     }
   }
