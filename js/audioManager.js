@@ -28,9 +28,19 @@ class AudioManager {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     } catch { /* audio not supported */ }
 
-    // Preload SFX immediately (small files)
-    this._sfxKeys = ['coin','boost','slash','boss-hit','victory','riku-hurt','jump','stomp'];
-    this._sfxKeys.forEach(k => this._preload(`sfx/${k}`, `assets/audio/sfx/${k}.mp3`));
+    // Preload SFX immediately (correct extensions per actual files)
+    const sfxFiles = {
+      'coin':      'assets/audio/sfx/coin.wav',
+      'boost':     'assets/audio/sfx/boost.wav',
+      'slash':     'assets/audio/sfx/slash.mp3',
+      'boss-hit':  'assets/audio/sfx/boss-hit.wav',
+      'victory':   'assets/audio/sfx/victory.wav',
+      'riku-hurt': 'assets/audio/sfx/riku-hurt.wav',
+      'jump':      'assets/audio/sfx/jump.wav',
+      'stomp':     'assets/audio/sfx/stomp.wav',
+    };
+    this._sfxKeys = Object.keys(sfxFiles);
+    this._sfxKeys.forEach(k => this._preload(`sfx/${k}`, sfxFiles[k]));
   }
 
   // ── Mute toggle ─────────────────────────────────────────────

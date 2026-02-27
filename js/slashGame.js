@@ -13,33 +13,38 @@
 // All slash-game sprites live in assets/sprites/ and assets/dinosaurs/.
 // Dino Dash originals remain at assets/*.png (game.js untouched).
 const SLASH_SPRITES = {
-  // Riku states
-  'riku-idle':    'assets/sprites/riku-idle.png',
-  'riku-run':     'assets/sprites/riku-run.png',
-  'riku-jump':    'assets/sprites/riku-run.png',   // reuse run pose for jump
-  'riku-hurt':    'assets/sprites/riku-hurt.png',
-  'riku-victory': 'assets/sprites/riku-victory.png',
-  // Generic minion dino (raptor shape)
-  'minion-dino':  'assets/sprites/minion-dino.png',
-  // Bosses — stages 1 & 2 have real images; 3-6 use canvas fallback
+  // ── Riku animation frames ─────────────────────────────────
+  'riku-idle':     'assets/sprites/riku-idle.png',
+  'riku-walk-1':   'assets/sprites/riku-walk-1.png',
+  'riku-walk-2':   'assets/sprites/riku-walk-2.png',
+  'riku-walk-3':   'assets/sprites/riku-walk-3.png',
+  'riku-walk-4':   'assets/sprites/riku-walk-4.png',
+  'riku-run':      'assets/sprites/riku-run.png',       // attack/run pose
+  'riku-jump':     'assets/sprites/riku-jump-1.png',    // alias
+  'riku-jump-1':   'assets/sprites/riku-jump-1.png',
+  'riku-hurt':     'assets/sprites/riku-hurt.png',
+  'riku-victory':  'assets/sprites/riku-victory.png',
+  // ── Minion dino ───────────────────────────────────────────
+  'minion-dino':   'assets/sprites/dino-minion.png',
+  // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex':    'assets/dinosaurs/stage-1-rex.png',
   'stage-1-tri':    'assets/dinosaurs/stage-1-tri.png',
   'stage-2-rapi':   'assets/dinosaurs/stage-2-rapi.png',
   'stage-2-stego':  'assets/dinosaurs/stage-2-stego.png',
-  'stage-3-brachio':'assets/dinosaurs/stage-3-brachio.png',
-  'stage-3-ptera':  'assets/dinosaurs/stage-3-ptera.png',
-  'stage-4-anky':   'assets/dinosaurs/stage-4-anky.png',
-  'stage-5-spino':  'assets/dinosaurs/stage-5-spino.png',
-  'stage-5-pachy':  'assets/dinosaurs/stage-5-pachy.png',
-  'stage-6-dilo':   'assets/dinosaurs/stage-6-dilo.png',
-  // Backgrounds
-  'stage-1-rice-paddy':       'assets/backgrounds/stage-1-rice-paddy.png',
-  'stage-2-bamboo':           'assets/backgrounds/stage-2-bamboo.png',
-  'stage-3-cherry-temple':    'assets/backgrounds/stage-3-cherry-temple.png',
-  'stage-4-ruins':            'assets/backgrounds/stage-4-ruins.png',
-  'stage-5-mountain-terraces':'assets/backgrounds/stage-5-mountain-terraces.png',
-  'stage-6-volcanic':         'assets/backgrounds/stage-6-volcanic.png',
-  'victory-golden-harvest':   'assets/backgrounds/victory-golden-harvest.png',
+  'stage-3-brachio':'assets/dinosaurs/brachiosaurus.png',
+  'stage-3-ptera':  'assets/dinosaurs/pteranodon.png',
+  'stage-4-anky':   'assets/dinosaurs/ankylosaurus.png',
+  'stage-5-spino':  'assets/dinosaurs/spinosaurus.png',
+  'stage-5-pachy':  'assets/dinosaurs/pachycephalosaurus.png',
+  'stage-6-dilo':   'assets/dinosaurs/dilophosaurus.png',
+  // ── Stage backgrounds (.jpg) ──────────────────────────────
+  'stage-1-rice-paddy':       'assets/backgrounds/stage-1.jpg',
+  'stage-2-bamboo':           'assets/backgrounds/stage-2.jpg',
+  'stage-3-cherry-temple':    'assets/backgrounds/stage-3.jpg',
+  'stage-4-ruins':            'assets/backgrounds/stage-4.jpg',
+  'stage-5-mountain-terraces':'assets/backgrounds/stage-5.jpg',
+  'stage-6-volcanic':         'assets/backgrounds/stage-6.jpg',
+  'victory-golden-harvest':   'assets/backgrounds/victory.jpg',
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -194,7 +199,7 @@ class SlashGame {
     this.overlay.innerHTML = '';
 
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
-    this.runner = new RunnerEngine(this.canvas, stage, this.sprites, this.audio);
+    this.runner = new RunnerEngine(this.canvas, stage, this.sprites, this.audio, this.W, this.H);
     this.state  = 'runner';
   }
 
@@ -216,7 +221,7 @@ class SlashGame {
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
     this.battle = new BattleEngine(
       this.canvas, this.overlay, stage, collectedPhonemes,
-      this.sprites, this.audio, this.progress,
+      this.sprites, this.audio, this.progress, this.W, this.H,
     );
     this.state = 'battle';
   }

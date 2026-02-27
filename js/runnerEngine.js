@@ -141,13 +141,22 @@ class RunnerPlayer {
     };
   }
 
-  // Draw Riku — picks the best sprite for current state, falls back to canvas art
+  // Draw Riku — cycles walk frames on ground, jump frame in air
   draw(ctx, sprites) {
     const x = this.screenX;
     const y = this.y;
-    // Running sprite while on ground, jump sprite in air
-    const key = this.onGround ? 'riku-run' : 'riku-jump';
-    const sp  = sprites && (sprites[key] || sprites['riku-run'] || sprites['riku-idle']);
+
+    // Pick the correct sprite:
+    //   In air            → riku-jump-1
+    //   On ground, hurt   → riku-hurt (flash handled by flicker below)
+    //   On ground, normal → cycle riku-walk-1 … riku-walk-4
+    let sp;
+    if (!this.onGround) {
+      sp = sprites && (sprites['riku-jump-1'] || sprites['riku-jump'] || sprites['riku-run']);
+    } else {
+      const frame = (this._runCycle % 4) + 1;   // 1–4
+      sp = sprites && (sprites[`riku-walk-${frame}`] || sprites['riku-run'] || sprites['riku-idle']);
+    }
 
     // Flicker when invincible
     if (this.invincible > 0 && Math.floor(this.invincible / 5) % 2 === 0) return;
@@ -155,7 +164,7 @@ class RunnerPlayer {
     ctx.save();
 
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      // Scale sprite to fit player bounding box with mild squash on land / stretch in air
+      // Mild squash-stretch: wider/shorter on ground, taller/narrower in air
       const scaleX = this.onGround ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 0.92;
       const scaleY = this.onGround ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.08;
       const dw = this.w * scaleX;
@@ -695,15 +704,16 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
 // RUNNER ENGINE — main class
 // ─────────────────────────────────────────────────────────────
 class RunnerEngine {
-  constructor(canvas, stageData, sprites, audio) {
+  constructor(canvas, stageData, sprites, audio, logicalW, logicalH) {
     this.canvas     = canvas;
     this.ctx        = canvas.getContext('2d');
     this.stage      = stageData;
     this.sprites    = sprites || {};
     this.audio      = audio;
 
-    const W = canvas.width;
-    const H = canvas.height;
+    // Use logical dimensions passed from SlashGame (avoids DPR physical-pixel bug)
+    const W = logicalW || canvas.clientWidth  || 480;
+    const H = logicalH || canvas.clientHeight || 700;
     this.W  = W;
     this.H  = H;
 
@@ -930,9 +940,24 @@ class RunnerEngine {
 
   // ── Background ───────────────────────────────────────────────
   _drawBackground(ctx) {
-    const colors = this.stage.skyColor || ['#87CEEB', '#c5e8f8'];
+    const bgKey = this.stage.bg;
+    const bgSp  = bgKey && this.sprites[bgKey];
+    if (bgSp && bgSp.complete && bgSp.naturalWidth > 0) {
+      // Draw real background image, scrolling slowly (two copies tiled)
+      const imgW = bgSp.naturalWidth;
+      const imgH = bgSp.naturalHeight;
+      const drawH = this.H;
+      const drawW = drawH * (imgW / imgH);   // maintain aspect ratio
+      // Parallax offset (slow scroll tied to cam)
+      const off = (this._bgOffset1 * 0.4) % drawW;
+      for (let x = -off; x < this.W + drawW; x += drawW) {
+        ctx.drawImage(bgSp, x, 0, drawW, drawH);
+      }
+      return;
+    }
 
-    // Sky gradient
+    // ── Procedural fallback ───────────────────────────────────
+    const colors = this.stage.skyColor || ['#87CEEB', '#c5e8f8'];
     const sky = ctx.createLinearGradient(0, 0, 0, this.H);
     sky.addColorStop(0, colors[0]);
     sky.addColorStop(0.7, colors[1]);
@@ -940,7 +965,7 @@ class RunnerEngine {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.W, this.H);
 
-    // Far hills (parallax layer 1)
+    // Far hills
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     for (let i = 0; i < 5; i++) {
       const hx = ((i * 220 - this._bgOffset1 * 0.3) % (this.W + 220)) - 110;
@@ -949,8 +974,7 @@ class RunnerEngine {
       ctx.arc(hx, this.groundY - 5, hr, 0, Math.PI * 2);
       ctx.fill();
     }
-
-    // Mid trees/bamboo (parallax layer 2)
+    // Mid trees
     ctx.fillStyle = 'rgba(0,80,0,0.18)';
     for (let i = 0; i < 8; i++) {
       const tx = ((i * 130 - this._bgOffset2 * 0.5) % (this.W + 60)) - 30;
