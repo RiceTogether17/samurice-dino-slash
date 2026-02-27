@@ -21,7 +21,7 @@
             <span class="mc-icon">⚔️</span>
             <div class="mc-text">
                 <span class="mc-name">Samurice Dino Slash</span>
-                <span class="mc-desc">Phonics battle RPG</span>
+                <span class="mc-desc">Phonics platformer · Run · Collect · Blend · Defeat!</span>
             </div>
         </button>
 
@@ -36,104 +36,40 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     ORIGINAL GAME: MENU
+     SAMURICE DINO SLASH — Mario-hybrid phonics platformer
+     Canvas = game world (runner phase + battle visuals)
+     #battleOverlay = interactive phoneme tiles (HTML, for touch)
 ═══════════════════════════════════════════════════════════════ -->
-<div id="menu" class="screen">
-    <h1>🍣 Samurice Dino Slash 🍣</h1>
-    <img id="rikuMenu" src="assets/idle.png" alt="Riku" onerror="this.style.display='none'">
-    <p>Riku the Samurice fights dinosaurs with phonics power!</p>
-    <button onclick="startGame()">PLAY GAME</button>
-    <button onclick="showTutorial()">How to Play</button>
-    <button class="back-to-menu-btn" onclick="goToModeChooser()">← Back</button>
-</div>
+<div id="slashScreen" class="screen">
+    <div id="slashWrapper">
 
-<!-- ══════════════════════════════════════════════════════════
-     ORIGINAL GAME: GAME SCREEN
-═══════════════════════════════════════════════════════════════ -->
-<div id="gameScreen" class="screen">
-    <div class="top-bar">
-        <div>Level <span id="levelNum">1</span> — <span id="dinoName">Baby Raptor</span></div>
-        <div>Score <span id="score">0</span></div>
-    </div>
+        <!-- Main game canvas: runner + battle worlds rendered here -->
+        <canvas id="slashCanvas"></canvas>
 
-    <div id="arena">
-        <!-- Background colour via CSS; image optional -->
-        <img id="bg" src="assets/backgrounds/arena.png" alt="" onerror="this.style.display='none'">
+        <!-- Exit button (always visible over canvas) -->
+        <button id="slashExitBtn"
+                class="slash-exit-btn"
+                onclick="exitSlash()"
+                title="Back to menu">✕</button>
 
-        <!-- Riku -->
-        <img id="rikuSprite" class="sprite riku" src="assets/idle.png" alt="Riku"
-             onerror="this.src=''">
+        <!-- Battle overlay: phoneme tiles + word builder + controls.
+             Shown only during boss battle; populated by BattleEngine. -->
+        <div id="battleOverlay" class="battle-overlay hidden"></div>
 
-        <!-- Dino -->
-        <img id="dinoSprite" class="sprite dino" src="assets/raptor1.png" alt="Dino"
-             onerror="this.src=''">
-
-        <!-- HP bars -->
-        <div class="hp-container riku-hp">
-            <div class="hp-label">RIKU</div>
-            <div class="hp-bar"><div id="rikuHpFill" class="hp-fill"></div></div>
-            <span id="rikuHpText">100</span>
-        </div>
-        <div class="hp-container dino-hp">
-            <div class="hp-label">DINO</div>
-            <div class="hp-bar"><div id="dinoHpFill" class="hp-fill"></div></div>
-            <span id="dinoHpText">100</span>
-        </div>
-    </div>
-
-    <button id="blendBtn" onclick="startBlend()">⚔️ BLEND ATTACK!</button>
-    <div id="status"></div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════
-     ORIGINAL GAME: WIN / LOSE
-═══════════════════════════════════════════════════════════════ -->
-<div id="winScreen" class="screen">
-    <h1>🎉 VICTORY! Riku sliced them! 🎉</h1>
-    <img id="victoryRiku" src="assets/victory.png" onerror="this.style.display='none'">
-    <button onclick="nextLevel()">Next Dinosaur</button>
-    <button onclick="goToMenu()">Main Menu</button>
-</div>
-
-<div id="loseScreen" class="screen">
-    <h1>💦 Rice spilled... Game Over</h1>
-    <img src="assets/hurt.png" onerror="this.style.display='none'">
-    <button onclick="restartGame()">Try Again</button>
-    <button onclick="goToMenu()">Main Menu</button>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════
-     ORIGINAL GAME: BLEND MODAL
-═══════════════════════════════════════════════════════════════ -->
-<div id="blendModal">
-    <div class="modal-content">
-        <h2 id="blendTitle">Blend to SLASH!</h2>
-        <div id="phonemeArea"></div>
-        <input id="typeInput" placeholder="or type the full word"
-               onkeypress="if(event.key==='Enter') checkTypedWord()">
-        <div class="modal-buttons">
-            <button onclick="checkTypedWord()">Submit</button>
-            <button onclick="speakAll()">🔊 Hear Sounds</button>
-            <button onclick="closeModal()">Cancel</button>
-        </div>
-        <div id="timerBar"></div>
     </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     DINO DASH — FLAPPY BIRD SCREEN
+     DINO DASH — Flappy Bird Screen  (UNTOUCHED)
 ═══════════════════════════════════════════════════════════════ -->
 <div id="flappyScreen" class="screen">
     <div id="flappyWrapper">
 
-        <!-- Main game canvas -->
         <canvas id="flappyCanvas"></canvas>
 
-        <!-- ── Persistent overlay controls ── -->
         <button id="muteBtn"        class="fd-btn fd-mute flappy-overlay-btn">🔊</button>
         <button id="flappyBackBtn"  class="fd-btn fd-back flappy-overlay-btn" onclick="exitFlappy()">✕</button>
 
-        <!-- ── Start screen extras (skin picker + mode toggle) ── -->
         <div id="skinPicker" class="fd-skin-picker">
             <button id="prevSkin" class="fd-skin-arrow flappy-overlay-btn">◀</button>
             <span   id="skinName" class="fd-skin-name">Raptor</span>
@@ -145,7 +81,6 @@
             <button id="modeBtnDaily"   class="fd-mode-btn flappy-overlay-btn">📅 Daily</button>
         </div>
 
-        <!-- ── Share button (shown only on Game Over) ── -->
         <button id="shareBtn" class="fd-share-btn flappy-overlay-btn" style="display:none">
             📤 Share Score
         </button>
@@ -155,24 +90,22 @@
 
 <!-- ══════════════════════════════════════════════════════════
      SCRIPTS
+     Load order (each builds on the previous):
+       1. phonicsData    – pure data, no dependencies
+       2. progressTracker – localStorage wrapper
+       3. audioManager   – Web Audio + TTS fallback
+       4. runnerEngine   – side-scrolling platformer
+       5. battleEngine   – phonics boss combat
+       6. slashGame      – orchestrator; overrides launchSlashGame()
+       7. game.js        – Dino Dash (completely untouched)
 ═══════════════════════════════════════════════════════════════ -->
-<script src="js/blending.js"></script>
-<script src="js/main.js"></script>
+<script src="js/phonicsData.js"></script>
+<script src="js/progressTracker.js"></script>
+<script src="js/audioManager.js"></script>
+<script src="js/runnerEngine.js"></script>
+<script src="js/battleEngine.js"></script>
+<script src="js/slashGame.js"></script>
 <script src="js/game.js"></script>
 
-<script>
-    // ── Additional navigation helpers ──────────────────────
-    function goToModeChooser() {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-        document.getElementById('modeChooser').classList.add('active');
-    }
-
-    // Override goToMenu so it goes back to mode chooser
-    const _origGoToMenu = window.goToMenu;
-    window.goToMenu = function () {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-        document.getElementById('modeChooser').classList.add('active');
-    };
-</script>
 </body>
 </html>
