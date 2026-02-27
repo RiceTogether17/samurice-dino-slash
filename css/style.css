@@ -1,0 +1,9 @@
+body { background:#4a7c3d; font-family: system-ui; }
+#arena { position:relative; width:800px; height:400px; margin:auto; overflow:hidden; border:12px solid #3d2b1f; border-radius:20px; }
+.sprite { position:absolute; bottom:20px; transition:transform 0.2s, filter 0.3s; width:180px; }
+#riku { left:80px; }
+#dino { right:80px; transform:scaleX(-1); }
+.attack { transform:rotate(-35deg) scale(1.1) !important; }
+.hurt { animation: shake 0.4s; filter:brightness(0.6); }
+.floating-dmg { position:absolute; color:#ff0; font-weight:bold; font-size:2rem; animation:floatUp 1.2s forwards; text-shadow:0 0 10px #000; }
+@keyframes floatUp { 0%{opacity:1; transform:translateY(0)} 100%{opacity:0; transform:translateY(-120px)} }
