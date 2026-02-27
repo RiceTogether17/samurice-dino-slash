@@ -203,27 +203,24 @@ class BattleEngine {
     const controls = document.createElement('div');
     controls.className = 'be-controls';
 
-    this._typeInput = document.createElement('input');
-    this._typeInput.className   = 'be-type-input';
-    this._typeInput.placeholder = 'or type the word…';
-    this._typeInput.addEventListener('keypress', e => {
-      if (e.key === 'Enter') this._submitTyped();
-    });
-
+    // ── Primary action buttons (big, thumb-friendly) ────────────
     this._submitBtn = document.createElement('button');
     this._submitBtn.className   = 'be-btn be-btn-slash';
-    this._submitBtn.textContent = '⚔️ SLASH!';
+    this._submitBtn.innerHTML   = '⚔️ SLASH!';
     this._submitBtn.addEventListener('click', () => this._submitBuild());
+    this._submitBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._submitBuild(); });
 
     this._clearBtn = document.createElement('button');
     this._clearBtn.className   = 'be-btn be-btn-clear';
-    this._clearBtn.textContent = '✕ Clear';
+    this._clearBtn.textContent = '✕';
+    this._clearBtn.title       = 'Clear';
     this._clearBtn.addEventListener('click', () => this._clearBuild());
+    this._clearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._clearBuild(); });
 
     this._hearBtn = document.createElement('button');
     this._hearBtn.className   = 'be-btn be-btn-hear';
     this._hearBtn.textContent = '🔊';
-    this._hearBtn.title = 'Hear sounds';
+    this._hearBtn.title = 'Hear the word';
     this._hearBtn.addEventListener('click', () => {
       if (this._currentBuilt.length > 0) {
         const word = this.availableWords.find(w => w.phonemes.join('') === this._currentBuilt.join(''));
@@ -231,8 +228,17 @@ class BattleEngine {
         else this._currentBuilt.forEach(ph => this.audio?.playPhoneme(ph));
       }
     });
+    this._hearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._hearBtn.click(); });
 
-    controls.append(this._typeInput, this._submitBtn, this._clearBtn, this._hearBtn);
+    // Hidden text input kept for keyboard users
+    this._typeInput = document.createElement('input');
+    this._typeInput.className   = 'be-type-input';
+    this._typeInput.placeholder = 'Type & Enter…';
+    this._typeInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') this._submitTyped();
+    });
+
+    controls.append(this._submitBtn, this._clearBtn, this._hearBtn, this._typeInput);
     this.overlay.appendChild(controls);
 
     // Feedback line
@@ -265,7 +271,15 @@ class BattleEngine {
       }
       tile.addEventListener('click', () => this._onTileClick(ph, tile));
       tile.addEventListener('mouseenter', () => this.audio?.playPhoneme(ph));
-      tile.addEventListener('touchstart', (e) => { e.preventDefault(); this.audio?.playPhoneme(ph); }, { passive: false });
+      // Touch: play sound on start (must be in user-gesture handler for audio context),
+      // then handle selection on touchend — preventing the ghost click that would double-fire.
+      tile.addEventListener('touchstart', () => {
+        this.audio?.playPhoneme(ph);
+      }, { passive: true });
+      tile.addEventListener('touchend', (e) => {
+        e.preventDefault();   // stop ghost click
+        this._onTileClick(ph, tile);
+      });
       this._tileEls.push(tile);
       this._poolEl.appendChild(tile);
     });
@@ -409,12 +423,14 @@ class BattleEngine {
     this._stopBlendTimer();
     this._blendTimeLeft = BLEND_TIME;
     this._timerBar.style.width = '100%';
-    this._timerBar.style.background = '#4CAF50';
+    this._timerBar.className = 'be-timer-fill';
     this._blendTimer = setInterval(() => {
       this._blendTimeLeft -= 0.1;
       const pct = Math.max(0, this._blendTimeLeft / BLEND_TIME);
       this._timerBar.style.width  = (pct * 100) + '%';
-      this._timerBar.style.background = pct < 0.25 ? '#F44336' : pct < 0.5 ? '#FF9800' : '#4CAF50';
+      this._timerBar.style.background = '';  // let CSS classes handle colour
+      this._timerBar.className = 'be-timer-fill' +
+        (pct < 0.25 ? ' be-timer-urgent' : pct < 0.5 ? ' be-timer-warn' : '');
       if (this._blendTimeLeft <= 0) {
         this._stopBlendTimer();
         this._bossAutoAttack();
@@ -766,49 +782,56 @@ class BattleEngine {
   }
 
   _drawHPBars(ctx) {
-    const barW   = Math.min(220, this.W * 0.38);
-    const barH   = 18;
-    const margin = 12;
+    const margin = 14;
+    const barW   = Math.min(this.W * 0.42, 200);
+    const barH   = 22;
+    const barY   = 42;
 
-    // ── Riku HP (left side) ──────────────────────────────────
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.textBaseline = 'middle';
+
+    // ── Helper: draw one HP bar ──────────────────────────────
+    const drawBar = (x, pct, col1, col2, label, textRight) => {
+      // Track (dark inset)
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.beginPath(); ctx.roundRect(x - 2, barY - 2, barW + 4, barH + 4, barH / 2 + 2); ctx.fill();
+      // Track inner
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath(); ctx.roundRect(x, barY, barW, barH, barH / 2); ctx.fill();
+      // Fill
+      if (pct > 0) {
+        const g = ctx.createLinearGradient(x, barY, x, barY + barH);
+        g.addColorStop(0, col1);
+        g.addColorStop(1, col2);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.roundRect(x, barY, barW * pct, barH, barH / 2); ctx.fill();
+        // Shine
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.beginPath(); ctx.roundRect(x + 2, barY + 2, barW * pct - 4, barH * 0.4, (barH * 0.4) / 2); ctx.fill();
+      }
+      // Label above bar
+      ctx.font = 'bold 11px "Comic Sans MS", system-ui';
+      ctx.fillStyle = '#fff';
+      ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
+      ctx.textAlign = textRight ? 'right' : 'left';
+      ctx.fillText(label, textRight ? x + barW : x, barY - 8);
+      ctx.shadowBlur = 0;
+    };
+
+    // ── Riku HP (top-left) ───────────────────────────────────
     const rikuPct = Math.max(0, this.rikuHp / this.rikuMaxHp);
-    const rx = margin;
-    const ry = this.H * 0.72 - 70;
+    const rikuC1 = rikuPct > 0.5 ? '#6DD56B' : rikuPct > 0.25 ? '#FFCA28' : '#FF5252';
+    const rikuC2 = rikuPct > 0.5 ? '#2E7D32' : rikuPct > 0.25 ? '#F57F17' : '#B71C1C';
+    drawBar(margin, rikuPct, rikuC1, rikuC2,
+      `🍚 RIKU  ${Math.ceil(this.rikuHp)}/${this.rikuMaxHp}`, false);
 
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.beginPath(); ctx.roundRect(rx - 2, ry - 2, barW + 4, barH + 4, 6); ctx.fill();
-
-    const rGrad = ctx.createLinearGradient(rx, 0, rx + barW * rikuPct, 0);
-    rGrad.addColorStop(0, rikuPct > 0.5 ? '#4CAF50' : rikuPct > 0.25 ? '#FF9800' : '#F44336');
-    rGrad.addColorStop(1, rikuPct > 0.5 ? '#8BC34A' : rikuPct > 0.25 ? '#FFC107' : '#FF5252');
-    ctx.fillStyle = rGrad;
-    ctx.beginPath(); ctx.roundRect(rx, ry, barW * rikuPct, barH, 4); ctx.fill();
-
-    ctx.font = 'bold 12px system-ui';
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'left';
-    ctx.fillText(`🍚 RIKU  ${Math.ceil(this.rikuHp)}/${this.rikuMaxHp}`, rx, ry - 5);
-
-    // ── Boss HP (right side) ─────────────────────────────────
+    // ── Boss HP (top-right) ──────────────────────────────────
     const bossPct = Math.max(0, this.bossHp / this.bossMaxHp);
-    const bx = this.W - margin - barW;
-    const by = this.H * 0.72 - 70;
+    drawBar(this.W - margin - barW, bossPct, '#FF7043', '#B71C1C',
+      `${this.stage.bossName}  ${Math.ceil(this.bossHp)}/${this.bossMaxHp}  🦖`, true);
 
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.beginPath(); ctx.roundRect(bx - 2, by - 2, barW + 4, barH + 4, 6); ctx.fill();
-
-    const bGrad = ctx.createLinearGradient(bx, 0, bx + barW, 0);
-    bGrad.addColorStop(0, '#F44336');
-    bGrad.addColorStop(1, '#B71C1C');
-    ctx.fillStyle = bGrad;
-    ctx.beginPath(); ctx.roundRect(bx, by, barW * bossPct, barH, 4); ctx.fill();
-
-    ctx.font = 'bold 12px system-ui';
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'right';
-    ctx.fillText(`🦖 ${this.stage.bossName}  ${Math.ceil(this.bossHp)}/${this.bossMaxHp}`, bx + barW, by - 5);
-
-    ctx.textAlign = 'left';
+    ctx.restore();
   }
 
   // ── Cleanup ──────────────────────────────────────────────────

@@ -457,6 +457,11 @@ body {
    SAMURICE DINO SLASH — New Mario-hybrid platformer
 ============================================================ */
 
+/* ═══════════════════════════════════════════════════════════
+   SAMURICE DINO SLASH — full game UI
+   Mario-quality: big chunky tiles, bold HP bars, crisp HUD
+═══════════════════════════════════════════════════════════ */
+
 /* ── Slash screen wrapper ────────────────────────────────── */
 #slashScreen {
     background: #000;
@@ -468,270 +473,330 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
+    /* Constrain to portrait 9:16 on wide screens */
+    max-width: min(100vw, calc(100dvh * 9 / 16));
+    margin: 0 auto;
 }
 
 #slashCanvas {
     display: block;
     width: 100%;
     height: 100%;
-    touch-action: none;   /* prevent browser scroll/zoom during play */
+    touch-action: none;
     cursor: pointer;
 }
 
 /* ── Exit button ─────────────────────────────────────────── */
 .slash-exit-btn {
     position: absolute;
-    top: 10px;
-    left: 10px;
+    top: 12px;
+    right: 12px;           /* top-right — away from HUD hearts */
     z-index: 30;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0,0,0,0.55);
     color: #fff;
     border: none;
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    font-size: 1rem;
+    width: 44px;
+    height: 44px;
+    font-size: 1.1rem;
     font-weight: bold;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(4px);
-    transition: background 0.15s;
+    transition: background 0.15s, transform 0.1s;
+    touch-action: manipulation;
 }
-.slash-exit-btn:hover { background: rgba(200, 30, 30, 0.7); }
+.slash-exit-btn:hover  { background: rgba(200,30,30,0.75); }
+.slash-exit-btn:active { transform: scale(0.9); }
 
-/* ── Battle overlay — sits over lower ~35% of canvas ─────── */
+
+/* ═══════════════════════════════════════════════════════════
+   BATTLE OVERLAY  — bottom panel, always on top of canvas
+═══════════════════════════════════════════════════════════ */
 .battle-overlay {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
     z-index: 20;
-    background: rgba(10, 8, 22, 0.93);
-    border-top: 2px solid rgba(255, 215, 0, 0.4);
-    padding: 8px 12px 10px;
+    /* Rich dark gradient so canvas art shows nicely above */
+    background: linear-gradient(180deg,
+        rgba(6,4,18,0.82) 0%,
+        rgba(6,4,18,0.97) 18%,
+        rgba(6,4,18,1.00) 100%);
+    border-top: 3px solid #FFD700;
+    box-shadow: 0 -4px 24px rgba(255,215,0,0.18);
+    padding: 10px 12px 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    backdrop-filter: blur(6px);
-    max-height: 42vh;
+    gap: 8px;
+    max-height: 50dvh;
     overflow: hidden;
 }
-
 .battle-overlay.hidden { display: none; }
+
 
 /* ── Hint words ──────────────────────────────────────────── */
 .be-hints {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 5px;
     justify-content: center;
-    min-height: 22px;
+}
+.be-hint-word {
+    font-size: 0.76rem;
+    color: rgba(255,255,255,0.55);
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    letter-spacing: 0.02em;
+}
+.be-hint-word em {
+    color: #FFD700;
+    font-style: normal;
+    font-weight: bold;
 }
 
-.be-hint-word {
-    font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
-    padding: 2px 8px;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
-}
-.be-hint-word em { color: rgba(255, 215, 0, 0.75); font-style: normal; font-weight: bold; }
 
 /* ── Word being built ────────────────────────────────────── */
 .be-build {
-    min-height: 34px;
+    min-height: 42px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 5px;
+    background: rgba(255,255,255,0.04);
+    border: 1.5px dashed rgba(255,215,0,0.25);
+    border-radius: 14px;
+    padding: 4px 8px;
 }
-
 .be-build-placeholder {
-    color: rgba(255, 255, 255, 0.3);
-    font-size: 0.85rem;
+    color: rgba(255,255,255,0.28);
+    font-size: 0.88rem;
     font-family: 'Comic Sans MS', system-ui, sans-serif;
     font-style: italic;
+    pointer-events: none;
 }
-
 .be-build-tile {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #FFD700, #F57F17);
+    background: linear-gradient(160deg, #FFE082, #FFB300);
     color: #3E2723;
     font-weight: bold;
-    font-size: 1rem;
+    font-size: 1.05rem;
     font-family: 'Comic Sans MS', system-ui, sans-serif;
     border-radius: 10px;
-    padding: 4px 10px;
-    min-width: 32px;
-    box-shadow: 0 3px 0 #8B4513;
-    animation: tilePop 0.15s ease-out;
+    padding: 5px 12px;
+    min-width: 36px;
+    box-shadow: 0 4px 0 #7f5700, 0 1px 4px rgba(0,0,0,0.5);
+    animation: tilePop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-
 @keyframes tilePop {
-    0%   { transform: scale(0.6); }
-    70%  { transform: scale(1.15); }
-    100% { transform: scale(1); }
+    0%   { transform: scale(0.5) translateY(8px); opacity: 0.4; }
+    100% { transform: scale(1)   translateY(0);   opacity: 1; }
 }
 
-/* ── Timer bar ───────────────────────────────────────────── */
+
+/* ── Blend timer bar ─────────────────────────────────────── */
 .be-timer-wrap {
-    height: 8px;
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 4px;
+    height: 10px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 5px;
     overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
 }
 .be-timer-fill {
     height: 100%;
-    background: #4CAF50;
-    border-radius: 4px;
-    transition: width 0.1s linear, background 0.3s;
+    background: linear-gradient(90deg, #00E676, #69F0AE);
+    border-radius: 5px;
+    transition: width 0.12s linear, background 0.4s;
 }
+.be-timer-fill.be-timer-warn  { background: linear-gradient(90deg, #FF9800, #FFB74D); }
+.be-timer-fill.be-timer-urgent { background: linear-gradient(90deg, #F44336, #FF5252); }
+
 
 /* ── Phoneme tile pool ───────────────────────────────────── */
 .be-pool {
     display: flex;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: 8px;
     justify-content: center;
+    align-items: center;
     padding: 2px 0;
 }
 
-/* Individual phoneme tile */
+/* Individual tile — Mario question-block style */
 .be-tile {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 48px;
-    height: 48px;
-    padding: 0 8px;
-    background: linear-gradient(160deg, #FFF176, #FFD700);
-    color: #4E342E;
-    font-weight: bold;
-    font-size: clamp(0.85rem, 3.5vw, 1.1rem);
+    min-width: 56px;
+    height: 56px;
+    padding: 0 10px;
+    background: linear-gradient(160deg, #FFF9C4, #FFD600);
+    color: #3E2000;
+    font-weight: 900;
+    font-size: clamp(1rem, 4.5vw, 1.25rem);
     font-family: 'Comic Sans MS', system-ui, sans-serif;
-    border: none;
-    border-radius: 14px;
-    box-shadow: 0 5px 0 #B8860B, 0 2px 6px rgba(0,0,0,0.4);
+    border: 2px solid #C89000;
+    border-bottom-color: #7f5700;
+    border-right-color: #a07000;
+    border-radius: 12px;
+    box-shadow:
+        0 6px 0 #7f5700,
+        0 7px 2px rgba(0,0,0,0.45),
+        inset 0 1px 0 rgba(255,255,255,0.7);
     cursor: pointer;
     user-select: none;
     touch-action: manipulation;
-    transition: transform 0.08s, box-shadow 0.08s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.07s, box-shadow 0.07s;
+    letter-spacing: 0.03em;
 }
-
 .be-tile:hover:not(.be-tile-used) {
-    background: linear-gradient(160deg, #fff9a0, #FFD700);
-    transform: translateY(-2px);
-    box-shadow: 0 7px 0 #B8860B, 0 3px 10px rgba(0,0,0,0.5);
+    background: linear-gradient(160deg, #FFFF8D, #FFD600);
+    transform: translateY(-3px);
+    box-shadow:
+        0 9px 0 #7f5700,
+        0 10px 4px rgba(0,0,0,0.4),
+        inset 0 1px 0 rgba(255,255,255,0.8);
 }
-
 .be-tile:active:not(.be-tile-used) {
-    transform: translateY(4px);
-    box-shadow: 0 2px 0 #B8860B;
+    transform: translateY(5px);
+    box-shadow: 0 1px 0 #7f5700, inset 0 2px 4px rgba(0,0,0,0.25);
+    background: linear-gradient(160deg, #FFD600, #FFA000);
 }
-
 .be-tile-used {
-    background: linear-gradient(160deg, #aaa, #888);
-    color: rgba(255,255,255,0.4);
-    box-shadow: 0 2px 0 #555;
-    cursor: not-allowed;
+    background: linear-gradient(160deg, #78909C, #546E7A);
+    color: rgba(255,255,255,0.3);
+    border-color: #37474F;
+    box-shadow: 0 3px 0 #263238;
+    cursor: default;
     transform: none !important;
+    opacity: 0.6;
 }
 
-/* ── Controls row ────────────────────────────────────────── */
+
+/* ── Controls ────────────────────────────────────────────── */
 .be-controls {
     display: flex;
-    gap: 6px;
-    align-items: center;
+    gap: 8px;
+    align-items: stretch;
     justify-content: center;
-    flex-wrap: wrap;
 }
-
-.be-type-input {
-    flex: 1 1 120px;
-    max-width: 200px;
-    height: 38px;
-    padding: 0 10px;
-    font-size: 0.95rem;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
-    border-radius: 10px;
-    border: 1.5px solid rgba(255, 215, 0, 0.4);
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
-    outline: none;
-    transition: border-color 0.15s;
-}
-.be-type-input::placeholder { color: rgba(255, 255, 255, 0.3); }
-.be-type-input:focus { border-color: #FFD700; }
-
 .be-btn {
-    height: 38px;
-    padding: 0 14px;
-    font-size: 0.9rem;
+    height: 48px;
+    padding: 0 18px;
+    font-size: 1rem;
     font-family: 'Comic Sans MS', system-ui, sans-serif;
     font-weight: bold;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     cursor: pointer;
     touch-action: manipulation;
-    transition: transform 0.08s, box-shadow 0.08s;
-    box-shadow: 0 4px 0 rgba(0,0,0,0.4);
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.07s, box-shadow 0.07s;
+    box-shadow: 0 5px 0 rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
-.be-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+.be-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
 
 .be-btn-slash {
-    background: linear-gradient(135deg, #FF6F00, #E65100);
+    background: linear-gradient(160deg, #FF6D00, #E65100);
     color: #fff;
-    min-width: 100px;
+    flex: 1 1 0;
+    min-width: 110px;
+    font-size: 1.1rem;
+    border-radius: 14px;
+    box-shadow: 0 6px 0 #8B2500, 0 2px 8px rgba(255,80,0,0.35);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
 }
-.be-btn-slash:hover { background: linear-gradient(135deg, #FF8F00, #FF6F00); }
+.be-btn-slash:hover { background: linear-gradient(160deg, #FF8F00, #FF6D00); }
 
 .be-btn-clear {
-    background: rgba(255,255,255,0.12);
-    color: rgba(255,255,255,0.7);
-    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: 1.5px solid rgba(255,255,255,0.2);
+    min-width: 48px;
+    font-size: 1.2rem;
+    padding: 0 14px;
 }
-.be-btn-clear:hover { background: rgba(255,80,80,0.25); }
+.be-btn-clear:hover { background: rgba(244,67,54,0.35); border-color: #F44336; }
 
 .be-btn-hear {
-    background: rgba(33,150,243,0.3);
-    color: #90CAF9;
-    border: 1px solid rgba(33,150,243,0.3);
-    font-size: 1.1rem;
-    padding: 0 10px;
+    background: rgba(33,150,243,0.2);
+    color: #82CFFF;
+    border: 1.5px solid rgba(33,150,243,0.35);
+    min-width: 48px;
+    font-size: 1.2rem;
+    padding: 0 12px;
 }
-.be-btn-hear:hover { background: rgba(33,150,243,0.5); }
+.be-btn-hear:hover { background: rgba(33,150,243,0.4); }
 
-/* ── Feedback line ───────────────────────────────────────── */
+/* Keyboard-only type input — hidden on mobile, available for focus */
+.be-type-input {
+    flex: 0 1 0px;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+    padding: 0;
+    border: none;
+    position: absolute;
+}
+/* Show it when focused (keyboard shortcut or tab) */
+.be-type-input:focus {
+    position: static;
+    flex: 1 1 120px;
+    width: auto;
+    height: 48px;
+    opacity: 1;
+    pointer-events: auto;
+    padding: 0 12px;
+    border: 1.5px solid #FFD700;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 1rem;
+    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    outline: none;
+}
+
+
+/* ── Feedback flash ──────────────────────────────────────── */
 .be-feedback {
-    min-height: 20px;
-    font-size: clamp(0.75rem, 3vw, 0.9rem);
+    min-height: 22px;
+    font-size: clamp(0.82rem, 3.5vw, 1rem);
     font-family: 'Comic Sans MS', system-ui, sans-serif;
     font-weight: bold;
     color: #FFD700;
     text-align: center;
-    padding: 0 8px;
+    padding: 0;
+    text-shadow: 0 0 8px rgba(255,215,0,0.5);
     line-height: 1.3;
 }
 
-/* ── Responsive tweaks ───────────────────────────────────── */
-@media (max-width: 400px) {
-    .be-tile { min-width: 40px; height: 42px; font-size: 0.82rem; border-radius: 10px; }
-    .be-btn  { height: 34px; padding: 0 10px; font-size: 0.82rem; }
-    .battle-overlay { padding: 6px 8px 8px; gap: 4px; }
-}
 
-@media (max-height: 620px) {
-    .battle-overlay { max-height: 48vh; }
-    .be-hints { display: none; }
+/* ── Responsive fine-tuning ──────────────────────────────── */
+@media (max-width: 380px) {
+    .be-tile        { min-width: 48px; height: 50px; font-size: 0.95rem; border-radius: 10px; }
+    .be-btn         { height: 44px; padding: 0 12px; font-size: 0.92rem; }
+    .battle-overlay { padding: 8px 10px 10px; gap: 6px; }
+    .be-btn-slash   { min-width: 90px; font-size: 0.95rem; }
 }
-
-/* Constrain on wide desktop screens */
-@media (min-aspect-ratio: 9/16) {
-    #slashWrapper { max-width: calc(100vh * 9 / 16); margin: 0 auto; }
+@media (max-height: 640px) {
+    .battle-overlay { max-height: 52dvh; }
+    .be-hints       { display: none; }
+    .be-build       { min-height: 36px; }
+    .be-tile        { height: 46px; }
+    .be-btn         { height: 42px; }
 }
