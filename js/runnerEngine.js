@@ -141,11 +141,13 @@ class RunnerPlayer {
     };
   }
 
-  // Draw Riku (rice-ball samurai) — uses sprite if loaded, else canvas art
+  // Draw Riku — picks the best sprite for current state, falls back to canvas art
   draw(ctx, sprites) {
-    const x  = this.screenX;
-    const y  = this.y;
-    const sp = sprites && (sprites['riku-run'] || sprites['riku-idle']);
+    const x = this.screenX;
+    const y = this.y;
+    // Running sprite while on ground, jump sprite in air
+    const key = this.onGround ? 'riku-run' : 'riku-jump';
+    const sp  = sprites && (sprites[key] || sprites['riku-run'] || sprites['riku-idle']);
 
     // Flicker when invincible
     if (this.invincible > 0 && Math.floor(this.invincible / 5) % 2 === 0) return;
@@ -153,7 +155,12 @@ class RunnerPlayer {
     ctx.save();
 
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      ctx.drawImage(sp, x, y, this.w, this.h);
+      // Scale sprite to fit player bounding box with mild squash on land / stretch in air
+      const scaleX = this.onGround ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 0.92;
+      const scaleY = this.onGround ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.08;
+      const dw = this.w * scaleX;
+      const dh = this.h * scaleY;
+      ctx.drawImage(sp, x + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
     } else {
       this._drawFallback(ctx, x, y);
     }
@@ -388,11 +395,12 @@ class PhonemeCoin {
 // MINION DINO
 // ─────────────────────────────────────────────────────────────
 class MinionDino {
-  constructor(worldX, groundY, platform = null) {
+  // sprite: the 'minion-dino' Image object (or null → canvas fallback)
+  constructor(worldX, groundY, platform = null, sprite = null) {
     this.worldX   = worldX;
     this.groundY  = platform ? platform.worldY - 36 : groundY - 36;
-    this.w        = 36;
-    this.h        = 36;
+    this.w        = 44;
+    this.h        = 44;
     this.vx       = -1.2;   // walks left (toward player)
     this.defeated = false;
     this.deathFrames = 0;
@@ -400,6 +408,7 @@ class MinionDino {
     this._age     = 0;
     this._patrolMin = worldX - 120;
     this._patrolMax = worldX + 120;
+    this._sprite  = sprite;   // Image | null
   }
 
   updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
@@ -442,8 +451,32 @@ class MinionDino {
       ctx.globalAlpha = Math.max(0, 1 - this.deathFrames / 45);
       ctx.translate(x + this.w / 2, y + this.h / 2);
       ctx.rotate(this.deathFrames * 0.15);
+
+      // Sprite path on defeat
+      if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
+        ctx.scale(this.vx < 0 ? 1 : -1, 1);
+        ctx.drawImage(this._sprite, -this.w / 2, -this.h / 2, this.w, this.h);
+        this._drawDeathStars(ctx);
+        ctx.restore();
+        return;
+      }
     }
 
+    // Sprite path — flip horizontally to face walking direction
+    if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
+      if (!this.defeated) ctx.translate(x + this.w / 2, y + this.h / 2);
+      // Walk wobble
+      const wobble = Math.sin(this._age * 0.25) * 0.08;
+      ctx.rotate(wobble);
+      ctx.scale(this.vx < 0 ? 1 : -1, 1);
+      ctx.drawImage(this._sprite, -this.w / 2, -this.h / 2, this.w, this.h);
+      if (this.defeated) this._drawDeathStars(ctx);
+      ctx.restore();
+      return;
+    }
+
+    // Canvas fallback — original drawn relative to origin (translate below)
+    if (!this.defeated) ctx.translate(x + this.w / 2, y + this.h / 2);
     const faceDir = this.vx < 0 ? 1 : -1;
     ctx.scale(faceDir, 1);
 
@@ -478,19 +511,20 @@ class MinionDino {
     ctx.strokeStyle = '#558B2F';
     ctx.stroke();
 
-    if (this.defeated) {
-      // Stars on defeat
-      ctx.fillStyle = '#FFD700';
-      for (let i = 0; i < 3; i++) {
-        const a = (i / 3) * Math.PI * 2 + this.deathFrames * 0.2;
-        const r = 20 + this.deathFrames * 0.4;
-        ctx.font = '12px serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('⭐', Math.cos(a) * r, Math.sin(a) * r - 10);
-      }
-    }
+    if (this.defeated) { this._drawDeathStars(ctx); }
 
     ctx.restore();
+  }
+
+  _drawDeathStars(ctx) {
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + this.deathFrames * 0.2;
+      const r = 20 + this.deathFrames * 0.4;
+      ctx.font = '12px serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText('⭐', Math.cos(a) * r, Math.sin(a) * r - 10);
+    }
   }
 }
 
@@ -600,10 +634,12 @@ class RunnerParticle {
 // LEVEL GENERATOR
 // Produces platform, coin, minion, and flag positions for a stage.
 // ─────────────────────────────────────────────────────────────
-function generateRunnerLevel(stageData, canvasH) {
+// sprites is passed through so MinionDino can use the 'minion-dino' image
+function generateRunnerLevel(stageData, canvasH, sprites) {
   const groundY    = canvasH - R_GROUND_H;
   const words      = stageData.words.slice(0, 5);  // 5 words per runner
   const difficulty = stageData.id - 1;             // 0-5
+  const minionSp   = sprites && sprites['minion-dino'];
   const items      = { platforms: [], coins: [], minions: [], flag: null };
 
   let wx = 800; // start X (safe spawn zone)
@@ -636,7 +672,7 @@ function generateRunnerLevel(stageData, canvasH) {
     // Minion on every 2nd word section
     if (wIdx % 2 === 0 && wIdx > 0) {
       const mx = wx + word.phonemes.length * 40;
-      items.minions.push(new MinionDino(mx, groundY, elevated ? items.platforms[items.platforms.length - 1] : null));
+      items.minions.push(new MinionDino(mx, groundY, elevated ? items.platforms[items.platforms.length - 1] : null, minionSp));
     }
 
     // In higher stages, add an extra platform mid-gap for challenge
@@ -674,8 +710,8 @@ class RunnerEngine {
     this.groundY   = H - R_GROUND_H;
     this.camOffset = 0;    // world X that maps to screen X=0
 
-    // Generate level
-    const level    = generateRunnerLevel(stageData, H);
+    // Generate level (pass sprites so MinionDino gets the sprite reference)
+    const level    = generateRunnerLevel(stageData, H, sprites);
     this.platforms = level.platforms;
     this.coins     = level.coins;
     this.minions   = level.minions;
@@ -874,7 +910,7 @@ class RunnerEngine {
     // Coins
     this.coins.filter(c => c.isVisible(this.W) && !c.collected).forEach(c => c.draw(ctx, this.audio));
 
-    // Minions
+    // Minions (sprites passed for fallback-free rendering)
     this.minions.forEach(m => m.draw(ctx));
 
     // Flag
