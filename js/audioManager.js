@@ -1,6 +1,14 @@
 'use strict';
 // ============================================================
 // AUDIO MANAGER — js/audioManager.js
+//
+// Consonant blends whose letters are spoken individually (b…l, s…t, etc.).
+// Digraphs like "sh", "ch", "th" are NOT listed here — they stay as one sound.
+const CONSONANT_BLENDS = new Set([
+  'bl','br','cl','cr','dr','fl','fr','gl','gr','pl','pr',
+  'sc','sk','sl','sm','sn','sp','st','sw','tr','tw',
+  'scr','spl','spr','str','shr','thr',
+]);
 // Priority order:
 //   1. Loaded audio file (assets/audio/phonemes/<ph>.mp3 etc.)
 //   2. Web Speech API (TTS) — always available in modern browsers
@@ -125,15 +133,29 @@ class AudioManager {
     speechSynthesis.speak(u);
   }
 
-  // ── PUBLIC: Play a phoneme (hover / click on tile) ───────────
-  playPhoneme(phoneme) {
-    if (this.muted) return;
+  // ── PRIVATE: Play a single indivisible phoneme (no blend splitting) ─
+  _playSinglePhoneme(phoneme) {
     const safe = phoneme.replace(/[^a-z]/gi, '').toLowerCase();
     const key  = `ph_${safe}`;
     if (!this._playBuffer(key)) {
-      // TTS fallback: speak letter name for single chars, raw for clusters
       this._speak(phoneme, 0.75, 1.2);
     }
+  }
+
+  // ── PUBLIC: Play a phoneme (hover / click on tile) ───────────
+  // Consonant blends (bl, str, etc.) are played as consecutive letter
+  // sounds 320 ms apart so learners hear each phoneme distinctly.
+  playPhoneme(phoneme) {
+    if (this.muted) return;
+    const safe = phoneme.replace(/[^a-z]/gi, '').toLowerCase();
+    if (CONSONANT_BLENDS.has(safe)) {
+      // Split blend into individual letter sounds played in sequence
+      safe.split('').forEach((letter, i) => {
+        setTimeout(() => this._playSinglePhoneme(letter), i * 320);
+      });
+      return;
+    }
+    this._playSinglePhoneme(phoneme);
   }
 
   // ── PUBLIC: Play a full word ─────────────────────────────────

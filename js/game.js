@@ -8,7 +8,7 @@
 // ┌─ TUNING GUIDE ─────────────────────────────────────────────┐
 // │  Constant          Default  Effect                         │
 // │  GRAVITY           0.45     How fast the dino falls        │
-// │  JUMP_FORCE       -9.5      Upward impulse on tap/space    │
+// │  JUMP_FORCE       -7.0      Upward impulse on tap/space    │
 // │  TERMINAL_VEL      11       Max fall speed (cap)           │
 // │  PIPE_SPEED_INIT   2.8      Starting obstacle speed        │
 // │  PIPE_SPEED_MAX    7.0      Cap on obstacle speed          │
@@ -43,7 +43,7 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
 
 // ── CONSTANTS ────────────────────────────────────────────────
 const GRAVITY         = 0.45;
-const JUMP_FORCE      = -9.5;
+const JUMP_FORCE      = -7.0;
 const TERMINAL_VEL    = 11;
 const PIPE_SPEED_INIT = 2.8;
 const PIPE_SPEED_MAX  = 7.0;
