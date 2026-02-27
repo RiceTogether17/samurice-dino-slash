@@ -31,7 +31,7 @@ function loadLevel() {
     const d = dinos[level-1];
     document.getElementById('levelNum').textContent = level;
     document.getElementById('dinoName').textContent = d.name;
-    document.getElementById('dinoSprite').src = `assets/dinos/${d.file}`;
+    document.getElementById('dinoSprite').src = `assets/${d.file}`;
     dinoHp = d.hp;
     currentDinoMaxHp = d.hp;
     updateHP();
@@ -52,7 +52,7 @@ function updateHP() {
 // =============== SPRITE HELPERS ===============
 function setRikuState(state) {
     const img = document.getElementById('rikuSprite');
-    img.src = `assets/riku/${rikuStates[state]}`;
+    img.src = `assets/${rikuStates[state]}`;
     if (state === 'attack') setTimeout(() => setRikuState('idle'), 420);
     if (state === 'hurt') setTimeout(() => setRikuState('idle'), 520);
 }
@@ -100,7 +100,7 @@ function processBlendResult(result) {
         setTimeout(() => {
             document.getElementById('gameScreen').classList.remove('active');
             document.getElementById('winScreen').classList.add('active');
-            document.getElementById('victoryRiku').src = 'assets/riku/victory.png';
+            document.getElementById('victoryRiku').src = 'assets/victory.png';
         }, 600);
     }
 }
@@ -144,7 +144,7 @@ function restartGame() {
 
 function goToMenu() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById('menu').classList.add('active');
+    document.getElementById('modeChooser').classList.add('active');
 }
 
 function showTutorial() {
