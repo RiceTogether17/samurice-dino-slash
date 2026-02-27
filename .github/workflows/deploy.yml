@@ -1,0 +1,54 @@
+# ──────────────────────────────────────────────────────────────
+# GitHub Pages Deployment — Samurice Dino Games
+#
+# Triggers on every push to `main`.
+# No build step needed (pure static HTML/CSS/JS).
+# Live URL: https://ricetogether17.github.io/samurice-dino-slash/
+# ──────────────────────────────────────────────────────────────
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]       # auto-deploy on push to main
+  workflow_dispatch:        # allow manual trigger from GitHub Actions UI
+
+# Grant write permission so the action can publish to gh-pages
+permissions:
+  contents: read
+  pages:    write
+  id-token: write
+
+# Only one deployment at a time; cancel any in-progress run
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # 1. Check out the repository
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Configure GitHub Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # 3. Upload the whole repo as the site artifact
+      #    (all your HTML/CSS/JS/assets are at the root level)
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'          # deploy everything from the repo root
+
+      # 4. Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
