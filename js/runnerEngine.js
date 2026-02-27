@@ -11,130 +11,127 @@
 
 // ── Constants ────────────────────────────────────────────────
 const R_GROUND_H   = 90;    // height of ground strip at canvas bottom
-const R_PLAYER_X   = 100;   // fixed screen X of Riku
-const R_GRAVITY    = 0.6;
-const R_JUMP_VEL   = -16.0; // higher jump to match bigger character
-const R_BASE_SPD   = 2.2;   // comfortable auto-scroll speed
-const R_FAST_SPD   = 3.8;   // when holding right / long-tap
-const R_BOOST_SPD  = 5.2;   // blend-boost active
-const R_BOOST_DUR  = 300;   // frames of boost after collecting full word
+const R_PLAYER_SCR = 0.28;  // fraction of canvas width where player is pinned
+const R_GRAVITY    = 0.65;
+const R_JUMP_VEL   = -17.0;
+const R_ACCEL      = 0.55;  // px/frame² acceleration
+const R_MAX_SPD    = 6.0;   // max run speed
+const R_FRICTION   = 0.78;  // velocity multiplier when no key held
+const R_BOOST_DUR  = 240;   // frames of speed boost after full-word collect
 const R_COIN_R     = 28;    // coin collision radius
 const R_LEVEL_W    = 7800;  // world width per level (px)
+const R_WORDS_PER_STAGE = 8; // words shown in each runner level
 
 // ─────────────────────────────────────────────────────────────
 // RUNNER PLAYER
 // ─────────────────────────────────────────────────────────────
 class RunnerPlayer {
-  constructor(groundY, sprites) {
-    this.worldX  = 0;
-    this.screenX = R_PLAYER_X;
-    this.w       = 80;          // wider for visibility
-    this.h       = 96;          // taller — ~13% of 740px canvas
-    this.y       = groundY - this.h;   // standing on ground
+  constructor(groundY, canvasW, canvasH, sprites) {
+    // Scale to canvas — looks good in both landscape and portrait
+    this.h       = Math.round(canvasH * 0.32);
+    this.w       = Math.round(this.h * 0.80);
+    this.worldX  = Math.round(canvasW * 0.12);  // start near left
+    this.vx      = 0;
+    this.y       = groundY - this.h;
     this.vy      = 0;
     this.onGround = true;
-    this.jumpHeld = false;
-    this.hp      = 3;           // hearts
-    this.invincible = 0;        // invincibility frames after hit
-    this.boostFrames = 0;       // frames of blend boost remaining
-    this.shieldActive = false;  // one-hit shield from boost
+    this.hp      = 3;
+    this.invincible = 0;
+    this.boostFrames = 0;
+    this.shieldActive = false;
     this.sprites = sprites || {};
-    this._frame  = 0;           // animation frame counter
-    this._runCycle = 0;         // 0-3 running leg cycle
+    this._frame  = 0;
+    this._runCycle = 0;
+    this._facing = 1;   // 1=right, -1=left
   }
 
   get alive() { return this.hp > 0; }
 
-  // Called when a complete word is collected during runner
   activateBoost() {
     this.boostFrames  = R_BOOST_DUR;
     this.shieldActive = true;
   }
 
-  // Horizontal speed of world scroll
-  currentSpeed(fastHeld) {
-    if (this.boostFrames > 0) return R_BOOST_SPD;
-    if (fastHeld)             return R_FAST_SPD;
-    return R_BASE_SPD;
-  }
-
   jump(audio) {
     if (!this.onGround) return;
-    this.vy        = R_JUMP_VEL;
-    this.onGround  = false;
-    this.jumpHeld  = true;
+    this.vy       = R_JUMP_VEL;
+    this.onGround = false;
     if (audio) audio.sfxJump();
   }
 
-  // Call each frame with the current ground level and platform list
+  // Move horizontally based on input keys; called before physics
+  applyInput(keys, levelW) {
+    const boost = this.boostFrames > 0 ? 1.5 : 1;
+    if (keys.right) {
+      this.vx = Math.min(this.vx + R_ACCEL * boost, R_MAX_SPD * boost);
+      this._facing = 1;
+    } else if (keys.left) {
+      this.vx = Math.max(this.vx - R_ACCEL * boost, -R_MAX_SPD * boost);
+      this._facing = -1;
+    } else {
+      // Friction
+      this.vx *= R_FRICTION;
+      if (Math.abs(this.vx) < 0.2) this.vx = 0;
+    }
+    this.worldX = Math.max(0, Math.min(this.worldX + this.vx, levelW - this.w));
+  }
+
+  // Vertical physics update
   update(groundY, platforms) {
-    // Boost countdown
     if (this.boostFrames > 0) this.boostFrames--;
     if (this.invincible > 0)  this.invincible--;
 
-    // Gravity
-    this.vy = Math.min(this.vy + R_GRAVITY, 18);
+    this.vy = Math.min(this.vy + R_GRAVITY, 20);
     this.y += this.vy;
 
-    // Ground collision
     const gnd = groundY - this.h;
     if (this.y >= gnd) {
-      this.y        = gnd;
-      this.vy       = 0;
-      this.onGround = true;
+      this.y = gnd; this.vy = 0; this.onGround = true;
     } else {
       this.onGround = false;
     }
 
-    // Platform collision (top-only)
     if (this.vy >= 0) {
       for (const p of platforms) {
         if (this._overlapsPlatform(p)) {
-          this.y        = p.sy - this.h;
-          this.vy       = 0;
-          this.onGround = true;
-          break;
+          this.y = p.sy - this.h; this.vy = 0; this.onGround = true; break;
         }
       }
     }
 
-    // Fell below canvas: die
-    if (this.y > groundY + 100) this.hp = 0;
+    if (this.y > groundY + 200) this.hp = 0;
 
-    // Animation tick
     this._frame++;
-    if (this._frame % 8 === 0) this._runCycle = (this._runCycle + 1) % 4;
+    if (this._frame % 7 === 0) this._runCycle = (this._runCycle + 1) % 4;
   }
 
-  // Screen Y
+  // screenX is set externally by RunnerEngine from camOffset
   get sy() { return this.y; }
 
-  // Check if player's bottom overlaps top of platform (from above)
+  // Platform overlap — uses screenX set by engine
   _overlapsPlatform(p) {
     const prevBottom = this.y - this.vy + this.h;
     const curBottom  = this.y + this.h;
-    const playerL    = this.screenX + 6;
-    const playerR    = this.screenX + this.w - 6;
+    const sx = this.screenX || 0;
     return prevBottom <= p.sy + 4 &&
            curBottom  >= p.sy &&
-           playerR    >  p.sx &&
-           playerL    <  p.sx + p.w;
+           sx + this.w - 6 > p.sx &&
+           sx + 6          < p.sx + p.w;
   }
 
   takeDamage(audio) {
     if (this.invincible > 0) return false;
     if (this.shieldActive) { this.shieldActive = false; return false; }
     this.hp--;
-    this.invincible = 90;  // 1.5 seconds
+    this.invincible = 80;
     if (audio) audio.sfxHurt();
     return true;
   }
 
-  // Bounding box for collision checks
   bounds() {
-    const inset = 8;
+    const inset = 10;
     return {
-      x: this.screenX + inset,
+      x: (this.screenX || 0) + inset,
       y: this.y + inset,
       w: this.w - inset * 2,
       h: this.h - inset * 2,
@@ -143,116 +140,99 @@ class RunnerPlayer {
 
   // Draw Riku — cycles walk frames on ground, jump frame in air
   draw(ctx, sprites) {
-    const x = this.screenX;
+    const x = this.screenX || 0;
     const y = this.y;
 
-    // Pick the correct sprite:
-    //   In air            → riku-jump-1
-    //   On ground, hurt   → riku-hurt (flash handled by flicker below)
-    //   On ground, normal → cycle riku-walk-1 … riku-walk-4
     let sp;
     if (!this.onGround) {
       sp = sprites && (sprites['riku-jump-1'] || sprites['riku-jump'] || sprites['riku-run']);
     } else {
-      const frame = (this._runCycle % 4) + 1;   // 1–4
+      const frame = (this._runCycle % 4) + 1;
       sp = sprites && (sprites[`riku-walk-${frame}`] || sprites['riku-run'] || sprites['riku-idle']);
     }
 
-    // Flicker when invincible
-    if (this.invincible > 0 && Math.floor(this.invincible / 5) % 2 === 0) return;
-
     ctx.save();
 
+    // Invincibility: soft alpha flicker (not invisible — stay readable)
+    if (this.invincible > 0) {
+      ctx.globalAlpha = Math.floor(this.invincible / 5) % 2 === 0 ? 0.35 : 1.0;
+    }
+
+    // Facing direction: flip sprite when moving left
+    if (this._facing === -1) {
+      ctx.translate(x + this.w, 0);
+      ctx.scale(-1, 1);
+    }
+    const dx = this._facing === -1 ? 0 : x;
+
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      // Mild squash-stretch: wider/shorter on ground, taller/narrower in air
       const scaleX = this.onGround ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 0.92;
       const scaleY = this.onGround ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.08;
       const dw = this.w * scaleX;
       const dh = this.h * scaleY;
-      ctx.drawImage(sp, x + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
+      ctx.drawImage(sp, dx + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
     } else {
-      this._drawFallback(ctx, x, y);
+      this._drawFallback(ctx, dx, y);
     }
 
-    // Boost glow
+    ctx.globalAlpha = 1;
+
+    // Boost glow ring
     if (this.boostFrames > 0) {
-      const alpha = 0.4 + 0.2 * Math.sin(this._frame * 0.3);
-      ctx.globalAlpha = alpha;
-      ctx.shadowBlur  = 20;
-      ctx.shadowColor = '#FFD700';
+      const pulse = 0.35 + 0.2 * Math.sin(this._frame * 0.3);
+      ctx.globalAlpha = pulse;
       ctx.strokeStyle = '#FFD700';
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur  = 18;
       ctx.lineWidth   = 3;
       ctx.beginPath();
-      ctx.ellipse(x + this.w / 2, y + this.h / 2, this.w / 2 + 6, this.h / 2 + 6, 0, 0, Math.PI * 2);
+      ctx.ellipse(dx + this.w / 2, y + this.h / 2, this.w / 2 + 8, this.h / 2 + 8, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
-
     ctx.restore();
   }
 
-  // Canvas fallback: cute rice-ball samurai
+  // Canvas fallback — scales proportionally to this.w / this.h
   _drawFallback(ctx, x, y) {
+    const s  = this.h / 96;   // scale factor relative to original 96px design
     const cx = x + this.w / 2;
-    // Bob on ground run cycle
-    const bob = this.onGround ? Math.sin(this._runCycle * Math.PI / 2) * 3 : 0;
+    const bob = this.onGround ? Math.sin(this._runCycle * Math.PI / 2) * 3 * s : 0;
     const ty  = y + bob;
+    const r   = 22 * s;  // body radius
 
-    // Body (white rice ball)
+    ctx.save();
+    // Body
     ctx.fillStyle = '#F5F5F0';
-    ctx.beginPath();
-    ctx.ellipse(cx, ty + 32, 22, 26, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#ddd';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Nori band (black seaweed strip)
+    ctx.beginPath(); ctx.ellipse(cx, ty + 32*s, r, r*1.18, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1.5; ctx.stroke();
+    // Nori
     ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(cx - 20, ty + 24, 40, 12);
-
+    ctx.fillRect(cx - 20*s, ty + 24*s, 40*s, 12*s);
     // Face
     ctx.fillStyle = '#fff9e0';
-    ctx.beginPath();
-    ctx.ellipse(cx, ty + 16, 17, 16, 0, 0, Math.PI * 2);
-    ctx.fill();
-
+    ctx.beginPath(); ctx.ellipse(cx, ty + 16*s, 17*s, 16*s, 0, 0, Math.PI * 2); ctx.fill();
     // Eyes
     ctx.fillStyle = '#222';
-    const eyeY = ty + 13;
-    ctx.beginPath(); ctx.ellipse(cx - 6, eyeY, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(cx + 6, eyeY, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Rosy cheeks
+    ctx.beginPath(); ctx.ellipse(cx - 6*s, ty + 13*s, 3*s, 3.5*s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 6*s, ty + 13*s, 3*s, 3.5*s, 0, 0, Math.PI * 2); ctx.fill();
+    // Cheeks
     ctx.fillStyle = 'rgba(255,150,150,0.5)';
-    ctx.beginPath(); ctx.ellipse(cx - 11, eyeY + 4, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(cx + 11, eyeY + 4, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Headband (samurai hachimaki)
+    ctx.beginPath(); ctx.ellipse(cx - 11*s, ty + 17*s, 4*s, 2.5*s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 11*s, ty + 17*s, 4*s, 2.5*s, 0, 0, Math.PI * 2); ctx.fill();
+    // Headband
     ctx.fillStyle = '#ff3322';
-    ctx.fillRect(cx - 17, ty + 4, 34, 5);
-    ctx.fillStyle = '#ff6655';
-    ctx.fillRect(cx - 17, ty + 4, 34, 2);
-
-    // Sword (katana) — swings during run
-    const swingAngle = this.onGround ? Math.sin(this._runCycle * Math.PI / 2) * 0.3 : -0.5;
-    ctx.save();
-    ctx.translate(cx + 10, ty + 30);
-    ctx.rotate(swingAngle);
-    // Blade
-    ctx.fillStyle = '#ccc';
-    ctx.fillRect(0, -2, 28, 4);
-    ctx.fillStyle = '#aaa';
-    ctx.fillRect(22, -1, 6, 2);
-    // Guard
-    ctx.fillStyle = '#8B4513';
-    ctx.fillRect(-2, -5, 5, 10);
+    ctx.fillRect(cx - 17*s, ty + 4*s, 34*s, 5*s);
+    // Katana
+    const swing = this.onGround ? Math.sin(this._runCycle * Math.PI / 2) * 0.3 : -0.5;
+    ctx.translate(cx + 10*s, ty + 30*s); ctx.rotate(swing);
+    ctx.fillStyle = '#ccc'; ctx.fillRect(0, -2*s, 28*s, 4*s);
+    ctx.fillStyle = '#8B4513'; ctx.fillRect(-2*s, -5*s, 5*s, 10*s);
     ctx.restore();
-
-    // Legs / feet (running animation)
-    const legOffset = this.onGround ? Math.sin(this._runCycle * Math.PI / 2) * 8 : 0;
+    // Legs
+    const leg = this.onGround ? Math.sin(this._runCycle * Math.PI / 2) * 8 * s : 0;
     ctx.fillStyle = '#1a1a1a';
-    ctx.beginPath(); ctx.ellipse(cx - 8, ty + 56 + legOffset,  7, 5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(cx + 8, ty + 56 - legOffset,  7, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx - 8*s, ty + 56*s + leg,  7*s, 5*s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 8*s, ty + 56*s - leg,  7*s, 5*s, 0, 0, Math.PI * 2); ctx.fill();
   }
 }
 
@@ -648,7 +628,7 @@ class RunnerParticle {
 // sprites is passed through so MinionDino can use the 'minion-dino' image
 function generateRunnerLevel(stageData, canvasH, sprites) {
   const groundY    = canvasH - R_GROUND_H;
-  const words      = stageData.words.slice(0, 5);  // 5 words per runner
+  const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
   const difficulty = stageData.id - 1;             // 0-5
   const minionSp   = sprites && sprites['minion-dino'];
   const items      = { platforms: [], coins: [], minions: [], flag: null };
@@ -731,60 +711,70 @@ class RunnerEngine {
     this.levelW    = level.totalWidth;
 
     // Player
-    this.player    = new RunnerPlayer(this.groundY, sprites);
+    this.player    = new RunnerPlayer(this.groundY, W, H, sprites);
 
     // Input state
-    this.keys      = { right: false, jump: false };
-    this.touchHeld = false;
+    this.keys = { right: false, left: false, jump: false };
     this._bindInput();
 
     // State tracking
-    this.collectedPhonemes = [];  // array of {phoneme, wordId, phIdx}
+    this.collectedPhonemes = [];
     this.collectedCoinIds  = new Set();
-    this.wordProgress      = {};  // wordId → count of consecutive phonemes
     this.completedWords    = [];
     this.particles         = [];
-    this.timeLeft          = 90; // seconds
+    this.timeLeft          = 120; // two minutes — manual control needs more time
     this._timeTick         = 0;
 
-    // Parallax background layers
-    this._bgOffset1 = 0;  // far hills
-    this._bgOffset2 = 0;  // mid trees
+    // Parallax offsets for background
+    this._bgOffset1 = 0;
+    this._bgOffset2 = 0;
     this._age       = 0;
 
     this.done    = false;
-    this.outcome = null;   // 'flag' | 'death' | 'timeout'
+    this.outcome = null;
   }
 
-  // ── Input ────────────────────────────────────────────────────
+  // ── Bind D-pad button elements (called by SlashGame after creating runner) ──
+  bindDpad(leftBtn, rightBtn, jumpBtn) {
+    const hold = (btn, key) => {
+      const start = () => { this.keys[key] = true;  btn.classList.add('held'); };
+      const end   = () => { this.keys[key] = false; btn.classList.remove('held'); };
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); start(); }, { passive: false });
+      btn.addEventListener('touchend',   (e) => { e.preventDefault(); end(); });
+      btn.addEventListener('touchcancel',end);
+      btn.addEventListener('mousedown',  start);
+      btn.addEventListener('mouseup',    end);
+      btn.addEventListener('mouseleave', end);
+    };
+    hold(leftBtn,  'left');
+    hold(rightBtn, 'right');
+    // Jump: trigger on press, not hold
+    const doJump = (e) => { e.preventDefault(); this.player.jump(this.audio); jumpBtn.classList.add('held'); };
+    const endJump = () => jumpBtn.classList.remove('held');
+    jumpBtn.addEventListener('touchstart', doJump, { passive: false });
+    jumpBtn.addEventListener('touchend',   endJump);
+    jumpBtn.addEventListener('mousedown',  doJump);
+    jumpBtn.addEventListener('mouseup',    endJump);
+  }
+
+  // ── Keyboard input ────────────────────────────────────────────
   _bindInput() {
     this._kd = (e) => {
-      if (e.code === 'Space' || e.code === 'ArrowUp')    { e.preventDefault(); this.keys.jump  = true; }
-      if (e.code === 'ArrowRight' || e.code === 'KeyD')  { this.keys.right = true; }
+      if (e.code === 'Space' || e.code === 'ArrowUp'    || e.code === 'KeyW') { e.preventDefault(); this.player.jump(this.audio); }
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.keys.right = true; }
+      if (e.code === 'ArrowLeft'  || e.code === 'KeyA') { this.keys.left  = true; }
     };
     this._ku = (e) => {
-      if (e.code === 'Space' || e.code === 'ArrowUp')    this.keys.jump  = false;
-      if (e.code === 'ArrowRight' || e.code === 'KeyD')  this.keys.right = false;
-    };
-    this._ts = (e) => { e.preventDefault(); this.touchHeld = true; this._lastTapTime = performance.now(); };
-    this._te = (e) => {
-      if (performance.now() - (this._lastTapTime || 0) < 200) {
-        // Short tap = jump
-        this.player.jump(this.audio);
-      }
-      this.touchHeld = false;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = false;
+      if (e.code === 'ArrowLeft'  || e.code === 'KeyA') this.keys.left  = false;
     };
     document.addEventListener('keydown', this._kd);
     document.addEventListener('keyup',   this._ku);
-    this.canvas.addEventListener('touchstart', this._ts, { passive: false });
-    this.canvas.addEventListener('touchend',   this._te, { passive: false });
   }
 
   destroy() {
     document.removeEventListener('keydown', this._kd);
     document.removeEventListener('keyup',   this._ku);
-    this.canvas.removeEventListener('touchstart', this._ts);
-    this.canvas.removeEventListener('touchend',   this._te);
   }
 
   // ── Update ───────────────────────────────────────────────────
@@ -792,18 +782,18 @@ class RunnerEngine {
     if (this.done) return;
     this._age++;
 
-    // Jump on fresh keypress
-    if (this.keys.jump) { this.player.jump(this.audio); this.keys.jump = false; }
+    // Manual player movement — apply keyboard/D-pad input
+    this.player.applyInput(this.keys, this.levelW);
 
-    // Scroll speed
-    const fastHeld = this.keys.right || (this.touchHeld);
-    const speed    = this.player.currentSpeed(fastHeld);
-    this.camOffset += speed;
-    this.player.worldX = this.camOffset;
+    // Camera follow: keep player pinned at R_PLAYER_SCR fraction of screen
+    const pinX = Math.round(this.W * R_PLAYER_SCR);
+    this.camOffset = Math.max(0, Math.min(this.player.worldX - pinX, this.levelW - this.W));
+    this.player.screenX = this.player.worldX - this.camOffset;
 
-    // Background parallax offsets
-    this._bgOffset1 = (this._bgOffset1 + speed * 0.2) % this.W;
-    this._bgOffset2 = (this._bgOffset2 + speed * 0.5) % this.W;
+    // Background parallax driven by player speed
+    const spd = Math.abs(this.player.vx);
+    this._bgOffset1 = (this._bgOffset1 + spd * 0.15) % this.W;
+    this._bgOffset2 = (this._bgOffset2 + spd * 0.40) % this.W;
 
     // Timer
     this._timeTick++;
@@ -811,7 +801,7 @@ class RunnerEngine {
     if (this.timeLeft <= 0) { this._end('timeout'); return; }
 
     // Update platform screen positions
-    this.platforms.forEach(p => p.updateScreen(this.camOffset - R_PLAYER_X));
+    this.platforms.forEach(p => p.updateScreen(this.camOffset));
 
     // Player physics (pass visible platforms only)
     const visPlat = this.platforms.filter(p => p.isVisible(this.W));
@@ -821,7 +811,7 @@ class RunnerEngine {
 
     // Coins
     this.coins.forEach(c => {
-      c.updateScreen(this.camOffset - R_PLAYER_X);
+      c.updateScreen(this.camOffset);
       c.update();
       if (!c.collected && c.checkCollect(this.player)) {
         c.collected = true;
@@ -831,7 +821,7 @@ class RunnerEngine {
 
     // Minions
     this.minions.forEach(m => {
-      m.updateScreen(this.camOffset - R_PLAYER_X);
+      m.updateScreen(this.camOffset);
       m.update();
       if (!m.defeated) {
         const res = m.checkCollision(this.player);
@@ -851,7 +841,7 @@ class RunnerEngine {
     this.minions = this.minions.filter(m => !m.isGone());
 
     // Flag
-    this.flag.updateScreen(this.camOffset - R_PLAYER_X);
+    this.flag.updateScreen(this.camOffset);
     if (this.flag.check(this.player)) { this._end('flag'); return; }
 
     // Particles
