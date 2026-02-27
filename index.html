@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Samurice Dino Slash - Riku's Phonic Fury</title>
+<style>
+  body { margin:0; font-family: 'Comic Sans MS', cursive; background:#5cb85c; color:#333; text-align:center; }
+  #menu, #game, #win, #lose { max-width:800px; margin:20px auto; background:#fff; border-radius:20px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,0.3); }
+  img#riku { width:180px; transition: transform 0.2s; }
+  .arena { display:flex; justify-content:space-between; align-items:center; height:300px; background:linear-gradient(#87ceeb, #228b22); border:8px solid #8b4513; border-radius:15px; position:relative; overflow:hidden; }
+  .char { font-size:120px; transition:all 0.3s; }
+  .hp-bar { height:20px; background:#ddd; border-radius:10px; overflow:hidden; margin:10px 0; }
+  .hp-fill { height:100%; background:#dc3545; transition:width 0.4s; }
+  button { font-size:1.5rem; padding:15px 30px; margin:10px; border:none; border-radius:15px; cursor:pointer; }
+  #attackBtn { background:#ff4500; color:white; font-weight:bold; }
+  #blendModal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:none; align-items:center; justify-content:center; z-index:100; }
+  .modal-content { background:white; padding:30px; border-radius:25px; max-width:500px; width:90%; }
+  .phoneme { display:inline-block; width:70px; height:70px; margin:8px; background:#ffd700; font-size:2rem; line-height:70px; border-radius:15px; cursor:pointer; box-shadow:0 5px #b8860b; }
+  .phoneme:active { transform:translateY(5px); box-shadow:0 2px #b8860b; }
+  .slash { position:absolute; font-size:60px; color:#fff; text-shadow:0 0 20px red; animation:slashAnim 0.6s forwards; pointer-events:none; }
+  @keyframes slashAnim { 0%{transform:rotate(-30deg) scale(0.5); opacity:0;} 30%{opacity:1;} 100%{transform:rotate(30deg) scale(1.8); opacity:0;} }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>🍣 Samurice Dino Slash 🍣</h1>
+  <img id="riku" src="riku.png" alt="Riku the Samurice">
+  <p><strong>Riku is ready to slash dinos with phonics power!</strong></p>
+  <button onclick="startGame()">PLAY</button>
+  <button onclick="showTutorial()">Tutorial</button>
+</div>
+
+<div id="game" class="hidden">
+  <h1>Level <span id="level">1</span> — <span id="dinoName">Baby Raptor</span></h1>
+  <div class="arena" id="arena">
+    <div>
+      <div id="rikuContainer"><img id="rikuInGame" src="riku.png" style="width:160px;"></div>
+      <div class="hp-bar"><div id="rikuHpFill" class="hp-fill" style="width:100%"></div></div>
+      <div>RIKU HP <span id="rikuHp">100</span></div>
+    </div>
+    <div style="font-size:140px" id="dino">🦕</div>
+    <div>
+      <div class="hp-bar"><div id="dinoHpFill" class="hp-fill" style="width:100%"></div></div>
+      <div>DINO HP <span id="dinoHp">100</span></div>
+    </div>
+  </div>
+  <button id="attackBtn" onclick="startBlend()">Blend Attack! ⚔️</button>
+  <p id="status" style="font-size:1.3rem; min-height:30px;"></p>
+</div>
+
+<div id="win" class="hidden">
+  <h1>🎉 Riku sliced them all! 🎉</h1>
+  <button onclick="nextLevel()">Next Dinosaur</button>
+  <button onclick="restartGame()">Play Again</button>
+</div>
+
+<div id="lose" class="hidden">
+  <h1>💦 Rice spilled... Game Over</h1>
+  <button onclick="restartGame()">Try Again</button>
+</div>
+
+<div id="blendModal">
+  <div class="modal-content">
+    <h2 id="blendTitle">Blend to SLASH!</h2>
+    <div id="phonemeArea" style="margin:20px 0;"></div>
+    <input id="typeInput" placeholder="or type the word" style="font-size:1.5rem; padding:10px; width:80%;">
+    <br><br>
+    <button onclick="checkTypedWord()">Submit Word</button>
+    <button onclick="speakAll()">🔊 Hear All Sounds</button>
+    <button onclick="closeModal()">Cancel</button>
+    <div style="margin-top:15px; height:8px; background:#ddd;" id="timerBar"></div>
+  </div>
+</div>
+
+<script>
+// =============== GAME DATA ===============
+let level = 1;
+let rikuHp = 100;
+let dinoHp = 100;
+let currentDinoHpMax = 100;
+let dinoAttackTimer = null;
+
+const dinos = [
+  {name:"Baby Raptor", emoji:"🦕", hp:100},
+  {name:"Velociraptor", emoji:"🦖", hp:130},
+  {name:"Stegosaurus", emoji:"🦕", hp:160},
+  {name:"Triceratops", emoji:"🦖", hp:200},
+  {name:"T-Rex Boss", emoji:"🦖", hp:250}
+];
+
+const moves = [
+  {word:"CUT",   phonemes:["C","U","T"],   damage:25},
+  {word:"HIT",   phonemes:["H","I","T"],   damage:25},
+  {word:"SLASH", phonemes:["SL","A","SH"], damage:45},
+  {word:"CHOP",  phonemes:["CH","O","P"],  damage:40},
+  {word:"STRIKE",phonemes:["ST","RI","KE"],damage:50},
+  {word:"BLOCK", phonemes:["BL","O","CK"], damage:20}, // defensive
+  {word:"RICE",  phonemes:["R","I","CE"],  damage:35},
+  {word:"KATANA",phonemes:["KA","TA","NA"],damage:60}
+];
+
+let currentMove = null;
+let playerSequence = [];
+let timerInterval = null;
+
+// =============== START GAME ===============
+function startGame() {
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('game').classList.remove('hidden');
+  level = 1;
+  rikuHp = 100;
+  loadLevel();
+}
+
+function loadLevel() {
+  const d = dinos[level-1];
+  document.getElementById('level').textContent = level;
+  document.getElementById('dinoName').textContent = d.name;
+  document.getElementById('dino').textContent = d.emoji;
+  dinoHp = d.hp;
+  currentDinoHpMax = d.hp;
+  updateHP();
+  
+  if (dinoAttackTimer) clearInterval(dinoAttackTimer);
+  dinoAttackTimer = setInterval(dinoAutoAttack, 9000 - level*800); // faster on higher levels
+}
+
+function updateHP() {
+  document.getElementById('rikuHp').textContent = Math.max(0, rikuHp);
+  document.getElementById('rikuHpFill').style.width = rikuHp + '%';
+  document.getElementById('dinoHp').textContent = Math.max(0, dinoHp);
+  document.getElementById('dinoHpFill').style.width = (dinoHp / currentDinoHpMax * 100) + '%';
+}
+
+// =============== BLENDING MINI-GAME ===============
+function startBlend() {
+  currentMove = moves[Math.floor(Math.random()*moves.length)];
+  playerSequence = [];
+  
+  const modal = document.getElementById('blendModal');
+  modal.style.display = 'flex';
+  document.getElementById('blendTitle').textContent = `Blend to ${currentMove.word}! ⚔️`;
+  
+  const area = document.getElementById('phonemeArea');
+  area.innerHTML = '';
+  currentMove.phonemes.forEach((ph, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'phoneme';
+    btn.textContent = ph;
+    btn.onclick = () => {
+      playerSequence.push(ph);
+      btn.style.background = '#32cd32';
+      if (playerSequence.length === currentMove.phonemes.length) {
+        setTimeout(checkBlendSequence, 300);
+      }
+    };
+    area.appendChild(btn);
+  });
+  
+  // timer
+  let timeLeft = 12;
+  const bar = document.getElementById('timerBar');
+  bar.style.background = '#4caf50';
+  bar.style.width = '100%';
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    bar.style.width = (timeLeft/12*100) + '%';
+    if (timeLeft <= 4) bar.style.background = '#f00';
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      failBlend();
+    }
+  }, 1000);
+}
+
+function checkBlendSequence() {
+  clearInterval(timerInterval);
+  const modal = document.getElementById('blendModal');
+  const correct = playerSequence.join('') === currentMove.phonemes.join('');
+  if (correct) {
+    modal.style.display = 'none';
+    successAttack(currentMove.damage);
+  } else {
+    failBlend();
+  }
+}
+
+function checkTypedWord() {
+  const input = document.getElementById('typeInput').value.trim().toUpperCase();
+  if (input === currentMove.word) {
+    document.getElementById('blendModal').style.display = 'none';
+    successAttack(currentMove.damage * 1.2); // bonus for typing
+  } else {
+    failBlend();
+  }
+}
+
+function speakAll() {
+  if ('speechSynthesis' in window) {
+    currentMove.phonemes.forEach(p => {
+      const u = new SpeechSynthesisUtterance(p);
+      speechSynthesis.speak(u);
+    });
+    setTimeout(() => {
+      const u2 = new SpeechSynthesisUtterance(currentMove.word);
+      speechSynthesis.speak(u2);
+    }, 800);
+  }
+}
+
+function failBlend() {
+  clearInterval(timerInterval);
+  document.getElementById('blendModal').style.display = 'none';
+  document.getElementById('status').textContent = '❌ Blend failed!';
+  rikuHp -= 12;
+  updateHP();
+  if (rikuHp <= 0) endGame(false);
+}
+
+function successAttack(dmg) {
+  document.getElementById('status').innerHTML = `⚔️ <strong>${currentMove.word}!</strong> Critical hit!`;
+  
+  // visual slash
+  const slash = document.createElement('div');
+  slash.className = 'slash';
+  slash.textContent = '✂️';
+  slash.style.left = '40%';
+  slash.style.top = '40%';
+  document.getElementById('arena').appendChild(slash);
+  setTimeout(() => slash.remove(), 800);
+  
+  // Riku swing animation
+  const rikuImg = document.getElementById('rikuInGame');
+  rikuImg.style.transform = 'rotate(-35deg)';
+  setTimeout(() => rikuImg.style.transform = 'rotate(0deg)', 400);
+  
+  dinoHp -= Math.floor(dmg);
+  updateHP();
+  
+  if (dinoHp <= 0) {
+    clearInterval(dinoAttackTimer);
+    setTimeout(() => {
+      if (level === 5) {
+        document.getElementById('game').classList.add('hidden');
+        document.getElementById('win').classList.remove('hidden');
+      } else {
+        document.getElementById('win').classList.remove('hidden');
+      }
+    }, 800);
+  }
+}
+
+function closeModal() {
+  document.getElementById('blendModal').style.display = 'none';
+  clearInterval(timerInterval);
+}
+
+// =============== DINO AUTO ATTACK ===============
+function dinoAutoAttack() {
+  document.getElementById('status').textContent = '🦖 Dino charges!';
+  const dinoEl = document.getElementById('dino');
+  dinoEl.style.transform = 'scale(1.3)';
+  setTimeout(() => dinoEl.style.transform = 'scale(1)', 200);
+  
+  rikuHp -= 10 + level*3;
+  updateHP();
+  if (rikuHp <= 0) endGame(false);
+}
+
+// =============== GAME FLOW ===============
+function nextLevel() {
+  document.getElementById('win').classList.add('hidden');
+  level++;
+  document.getElementById('game').classList.remove('hidden');
+  loadLevel();
+}
+
+function endGame(won) {
+  clearInterval(dinoAttackTimer);
+  document.getElementById('game').classList.add('hidden');
+  if (won) {
+    document.getElementById('win').classList.remove('hidden');
+  } else {
+    document.getElementById('lose').classList.remove('hidden');
+  }
+}
+
+function restartGame() {
+  document.getElementById('win').classList.add('hidden');
+  document.getElementById('lose').classList.add('hidden');
+  document.getElementById('menu').classList.remove('hidden');
+}
+
+// =============== TUTORIAL ===============
+function showTutorial() {
+  alert(`How to play:\n\n1. Click "Blend Attack!"\n2. Click the phoneme tiles IN ORDER to form the word (e.g. SL → A → SH = SLASH)\n3. Or just type the word!\n\nCorrect blend = big damage!\nWrong or slow = Riku loses HP.\n\nDefeat all 5 dinosaurs! Good luck, Riku! 🍣`);
+}
+
+// Keyboard shortcut for fun
+document.addEventListener('keydown', e => {
+  if (e.key === 'b' || e.key === 'B') {
+    if (!document.getElementById('game').classList.contains('hidden')) startBlend();
+  }
+});
+</script>
+</body>
+</html>
