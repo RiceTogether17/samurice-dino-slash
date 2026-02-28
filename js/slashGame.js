@@ -28,9 +28,9 @@ const SLASH_SPRITES = {
   'minion-dino':   'assets/sprites/dino-minion.png',
   // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex':    'assets/dinosaurs/trex.png',
-  'stage-1-tri':    'assets/dinosaurs/stage-1-tri.png',
+  'stage-1-tri':    'assets/dinosaurs/triceratops.png',
   'stage-2-rapi':   'assets/dinosaurs/velociraptor.png',
-  'stage-2-stego':  'assets/dinosaurs/stage-2-stego.png',
+  'stage-2-stego':  'assets/dinosaurs/stegosaurus.png',
   'stage-3-brachio':'assets/dinosaurs/brachiosaurus.png',
   'stage-3-ptera':  'assets/dinosaurs/pteranodon.png',
   'stage-4-anky':   'assets/dinosaurs/ankylosaurus.png',
