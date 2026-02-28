@@ -183,11 +183,15 @@ class RunnerPlayer {
       const walking = this.onGround && Math.abs(this.vx) >= 0.5;
       const scaleX = walking ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
       const scaleY = walking ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
-      // Use sprite's natural aspect ratio so Riku is never stretched
+      // Walk sprites are 1024×1536 (char fills ~89% of height).
+      // Jump sprite is 1024×1024 (char fills ~82% of height).
+      // Boost jump draw size so the character appears the same visual height as walk.
+      const jumpBoost = this.onGround ? 1.0 : 1.085;
       const ratio  = sp.naturalWidth / sp.naturalHeight;
-      const dh     = this.h * scaleY;
-      const dw     = this.h * ratio * scaleX;
-      const natW   = this.h * ratio;
+      const dh     = this.h * scaleY * jumpBoost;
+      const dw     = this.h * ratio  * scaleX * jumpBoost;
+      const natW   = this.h * ratio  * jumpBoost;
+      // Anchor at feet (sprite bottom = y + this.h regardless of jumpBoost)
       ctx.drawImage(sp, dx + (this.w - natW) / 2, y + (this.h - dh), dw, dh);
     } else {
       this._drawFallback(ctx, dx, y);
