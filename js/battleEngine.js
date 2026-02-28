@@ -1,17 +1,22 @@
 'use strict';
 // ============================================================
 // BATTLE ENGINE — js/battleEngine.js
-// Phonics combat: player blends collected phonemes into words
-// to deal damage to the boss. This is the educational heart.
+// One-word-at-a-time phonics combat.
 //
-// Canvas draws: background, boss, Riku, HP bars, slash effects.
-// DOM overlay draws: interactive phoneme tiles, word builder,
-//   type-input, submit button, timer bar. (Better for touch/mobile)
+// Each round shows ONE target word with:
+//   • A big picture emoji hint
+//   • Blank slots showing how many phonemes are needed
+//   • Only the tiles for that word (shuffled)
+//
+// Player clicks tiles in order → auto-submits when all placed.
+// 3 wrong orderings → skip word (with HP penalty).
+// Timer running out → boss attacks, skip to next word.
+//
+// Runner phonemes collected = bonus Riku HP (+2 per phoneme, max +40).
 // ============================================================
 
-const BOSS_ATTACK_INTERVAL = 5500;  // ms between boss attacks when idle
-const BLEND_TIME           = 14;    // seconds per blend attempt
-const MIN_TILE_POOL        = 6;     // minimum tiles given (supplement if few collected)
+const BLEND_TIME  = 20;   // seconds per word attempt
+const MAX_WRONGS  = 3;    // wrong-order attempts before skipping
 
 // ─────────────────────────────────────────────────────────────
 // SLASH PARTICLE
@@ -103,21 +108,23 @@ class BattleEngine {
     this.W = logicalW || canvas.clientWidth  || 480;
     this.H = logicalH || canvas.clientHeight || 700;
 
-    // HP
-    this.bossMaxHp = stageData.bossHp;
-    this.bossHp    = stageData.bossHp;
-    this.rikuMaxHp = 100;
-    this.rikuHp    = 100;
+    // HP — runner phonemes give Riku a bonus (reward for good runner play)
+    const bonusHp      = Math.min(40, collectedPhonemes.length * 2);
+    this.rikuMaxHp     = 100 + bonusHp;
+    this.rikuHp        = 100 + bonusHp;
+    this.bossMaxHp     = stageData.bossHp;
+    this.bossHp        = stageData.bossHp;
 
-    // Build the tile pool from collected phonemes
-    // If not enough, supplement from the first stage word's phonemes
-    this.tilePool  = this._buildTilePool(collectedPhonemes, stageData);
-    this.availableWords = stageData.words;
+    // Word queue — shuffled copy of stage words, one at a time
+    this._wordQueue     = this._shuffleArray([...stageData.words]);
+    this._wordQueueIdx  = 0;
+    this._currentWord   = null;
+    this._shuffledPh    = [];   // stable shuffled phonemes for current word
+    this._usedTileIdx   = new Set();  // which tile positions have been clicked
 
     // Battle state
-    this.state    = 'idle';    // idle | blending | boss-attack | riku-attack | won | lost
+    this.state    = 'idle';
     this._age     = 0;
-    this._bossAttackTimer = BOSS_ATTACK_INTERVAL;
     this._combo   = 0;
     this.score    = 0;
 
@@ -130,103 +137,85 @@ class BattleEngine {
 
     // Blend session
     this._blendTimeLeft  = BLEND_TIME;
-    this._blendTick      = 0;
     this._blendTimer     = null;
-    this._currentBuilt   = [];   // array of phonemes selected so far
-    this._typingMode     = false;
+    this._currentBuilt   = [];   // phonemes selected so far
+    this._wrongAttempts  = 0;    // wrong-order attempts for current word
 
-    // DOM refs (created by setupDOM)
+    // DOM refs (created by _setupDOM)
     this._tileEls   = [];
     this._setupDOM();
 
     this.done    = false;
     this.outcome = null;  // 'victory' | 'defeat'
+
+    // Kick off first word after a short delay (let canvas settle)
+    setTimeout(() => this._startNextWord(), 400);
   }
 
-  // ── Tile pool construction ───────────────────────────────────
-  _buildTilePool(collectedPhonemes, stage) {
-    let pool = collectedPhonemes.map(c => c.phoneme);
-    // Ensure at minimum 2 complete words can be formed
-    if (pool.length < MIN_TILE_POOL) {
-      const supplement = stage.words.slice(0, 2).flatMap(w => w.phonemes);
-      pool = [...new Set([...pool, ...supplement])];
+  // ── Utility: Fisher-Yates shuffle ───────────────────────────
+  _shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    // Deduplicate while keeping educational variety (keep max 2 of each)
-    const counts = {};
-    return pool.filter(ph => {
-      counts[ph] = (counts[ph] || 0) + 1;
-      return counts[ph] <= 2;
-    });
+    return arr;
   }
 
-  // ── Available words given current tile pool ──────────────────
-  _wordsFromPool() {
-    const poolCounts = {};
-    this.tilePool.forEach(ph => { poolCounts[ph] = (poolCounts[ph] || 0) + 1; });
-    return this.availableWords.filter(w => {
-      const needed = {};
-      w.phonemes.forEach(ph => { needed[ph] = (needed[ph] || 0) + 1; });
-      return Object.entries(needed).every(([ph, cnt]) => (poolCounts[ph] || 0) >= cnt);
-    });
-  }
-
-  // ── DOM setup: phoneme tiles + controls ─────────────────────
-  // Layout order (top → bottom):
-  //   1. controls row  — STICKY TOP so SLASH is always reachable
-  //   2. word builder  — shows tiles picked so far
-  //   3. timer bar     — blend countdown
-  //   4. tile pool     — phoneme tiles (scrollable if many)
-  //   5. hints         — word hints (hidden in landscape)
-  //   6. feedback      — success / error message
+  // ── DOM setup ────────────────────────────────────────────────
+  // Layout (top → bottom):
+  //   1. controls   — Clear + Hear buttons (sticky top)
+  //   2. target     — big emoji + blank slots
+  //   3. pool       — shuffled tiles for current word
+  //   4. timer bar
+  //   5. feedback
   _setupDOM() {
     this.overlay.innerHTML = '';
 
-    // ── 1. Controls — pinned to top of overlay ───────────────
+    // ── 1. Controls ─────────────────────────────────────────
     const controls = document.createElement('div');
     controls.className = 'be-controls';
 
-    this._submitBtn = document.createElement('button');
-    this._submitBtn.className = 'be-btn be-btn-slash';
-    this._submitBtn.innerHTML = '⚔️ SLASH!';
-    this._submitBtn.addEventListener('click', () => this._submitBuild());
-    this._submitBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._submitBuild(); });
-
     this._clearBtn = document.createElement('button');
     this._clearBtn.className   = 'be-btn be-btn-clear';
-    this._clearBtn.textContent = '✕';
-    this._clearBtn.title       = 'Clear';
+    this._clearBtn.innerHTML   = '✕ Clear';
+    this._clearBtn.title       = 'Clear your answer';
     this._clearBtn.addEventListener('click', () => this._clearBuild());
     this._clearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._clearBuild(); });
 
     this._hearBtn = document.createElement('button');
     this._hearBtn.className   = 'be-btn be-btn-hear';
-    this._hearBtn.textContent = '🔊';
-    this._hearBtn.title = 'Hear the word';
+    this._hearBtn.innerHTML   = '🔊 Hear';
+    this._hearBtn.title       = 'Hear the word';
     this._hearBtn.addEventListener('click', () => {
-      if (this._currentBuilt.length > 0) {
-        const word = this.availableWords.find(w => w.phonemes.join('') === this._currentBuilt.join(''));
-        if (word) this.audio?.playBlendSequence(word.phonemes, word.word);
-        else this._currentBuilt.forEach(ph => this.audio?.playPhoneme(ph));
+      if (this._currentWord) {
+        this.audio?.playBlendSequence(this._currentWord.phonemes, this._currentWord.word);
       }
     });
     this._hearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._hearBtn.click(); });
 
-    this._typeInput = document.createElement('input');
-    this._typeInput.className   = 'be-type-input';
-    this._typeInput.placeholder = 'Type & Enter…';
-    this._typeInput.addEventListener('keypress', e => {
-      if (e.key === 'Enter') this._submitTyped();
-    });
-
-    controls.append(this._submitBtn, this._clearBtn, this._hearBtn, this._typeInput);
+    controls.append(this._clearBtn, this._hearBtn);
     this.overlay.appendChild(controls);
 
-    // ── 2. Word builder ──────────────────────────────────────
-    this._buildEl = document.createElement('div');
-    this._buildEl.className = 'be-build';
-    this.overlay.appendChild(this._buildEl);
+    // ── 2. Target hint (emoji + blank slots) ────────────────
+    this._targetEl = document.createElement('div');
+    this._targetEl.className = 'be-target';
 
-    // ── 3. Timer bar ─────────────────────────────────────────
+    this._targetEmojiEl = document.createElement('div');
+    this._targetEmojiEl.className = 'be-target-emoji';
+    this._targetEmojiEl.textContent = '❓';
+
+    this._blanksEl = document.createElement('div');
+    this._blanksEl.className = 'be-blanks';
+
+    this._targetEl.append(this._targetEmojiEl, this._blanksEl);
+    this.overlay.appendChild(this._targetEl);
+
+    // ── 3. Tile pool ─────────────────────────────────────────
+    this._poolEl = document.createElement('div');
+    this._poolEl.className = 'be-pool';
+    this.overlay.appendChild(this._poolEl);
+
+    // ── 4. Timer bar ─────────────────────────────────────────
     this._timerBarWrap = document.createElement('div');
     this._timerBarWrap.className = 'be-timer-wrap';
     this._timerBar = document.createElement('div');
@@ -234,133 +223,186 @@ class BattleEngine {
     this._timerBarWrap.appendChild(this._timerBar);
     this.overlay.appendChild(this._timerBarWrap);
 
-    // ── 4. Tile pool ─────────────────────────────────────────
-    this._poolEl = document.createElement('div');
-    this._poolEl.className = 'be-pool';
-    this.overlay.appendChild(this._poolEl);
-
-    // ── 5. Hint words ────────────────────────────────────────
-    this._hintEl = document.createElement('div');
-    this._hintEl.className = 'be-hints';
-    this._hintEl.title = 'Hint: words you can make!';
-    this.overlay.appendChild(this._hintEl);
-
-    // ── 6. Feedback line ─────────────────────────────────────
+    // ── 5. Feedback line ─────────────────────────────────────
     this._feedbackEl = document.createElement('div');
     this._feedbackEl.className = 'be-feedback';
     this.overlay.appendChild(this._feedbackEl);
-
-    this._renderTiles();
-    this._renderHints();
-    this._startBlendTimer();
   }
 
-  _renderTiles() {
+  // ── Start next word ──────────────────────────────────────────
+  _startNextWord() {
+    if (this.done) return;
+
+    // Cycle through queue (re-shuffle when exhausted)
+    if (this._wordQueueIdx >= this._wordQueue.length) {
+      this._wordQueue    = this._shuffleArray([...this.stage.words]);
+      this._wordQueueIdx = 0;
+    }
+    this._currentWord   = this._wordQueue[this._wordQueueIdx++];
+    this._shuffledPh    = this._shuffleArray([...this._currentWord.phonemes]);
+    this._wrongAttempts = 0;
+    this._currentBuilt  = [];
+    this._usedTileIdx   = new Set();
+
+    this._renderTargetHint();
+    this._renderCurrentWordTiles();
+    this._setFeedback('');
+
+    // Speak the word as an audio hint (delayed so the tile animation settles first)
+    setTimeout(() => {
+      if (!this.done) this.audio?.playWord(this._currentWord.word);
+    }, 350);
+  }
+
+  // ── Render target hint (emoji + blank slots) ─────────────────
+  _renderTargetHint() {
+    if (!this._currentWord) return;
+    this._targetEmojiEl.textContent = this._currentWord.hint;
+    this._renderBlanks();
+  }
+
+  _renderBlanks() {
+    if (!this._currentWord) return;
+    const html = this._currentWord.phonemes.map((ph, i) => {
+      const built = this._currentBuilt[i];
+      if (built) {
+        return `<span class="be-blank be-blank-filled">${built.toUpperCase()}</span>`;
+      }
+      return `<span class="be-blank"></span>`;
+    }).join('');
+    this._blanksEl.innerHTML = html;
+  }
+
+  // ── Render tiles for current word only ───────────────────────
+  _renderCurrentWordTiles() {
     this._poolEl.innerHTML = '';
     this._tileEls = [];
-    const usedInBuild = {};
-    this._currentBuilt.forEach(ph => { usedInBuild[ph] = (usedInBuild[ph] || 0) + 1; });
 
-    this.tilePool.forEach((ph, idx) => {
-      const used = (usedInBuild[ph] || 0);
-      const tile = document.createElement('button');
-      tile.className = 'be-tile';
-      tile.textContent = ph.toUpperCase();
-      tile.dataset.phoneme = ph;
-      tile.dataset.idx = idx;
-      // Mark as used if already placed
-      if (used > 0) {
-        tile.classList.add('be-tile-used');
-        used > 0 && (usedInBuild[ph]--);
+    this._shuffledPh.forEach((ph, idx) => {
+      const isUsed = this._usedTileIdx.has(idx);
+      const tile   = document.createElement('button');
+      tile.className        = 'be-tile' + (isUsed ? ' be-tile-used' : '');
+      tile.textContent      = ph.toUpperCase();
+      tile.dataset.phoneme  = ph;
+      tile.dataset.idx      = idx;
+
+      if (!isUsed) {
+        tile.addEventListener('click', () => this._onTileClick(ph, tile, idx));
+        tile.addEventListener('mouseenter', () => this.audio?.playPhoneme(ph));
+        tile.addEventListener('touchstart', () => {
+          this.audio?.playPhoneme(ph);
+        }, { passive: true });
+        tile.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          this._onTileClick(ph, tile, idx);
+        });
       }
-      tile.addEventListener('click', () => this._onTileClick(ph, tile));
-      tile.addEventListener('mouseenter', () => this.audio?.playPhoneme(ph));
-      // Touch: play sound on start (must be in user-gesture handler for audio context),
-      // then handle selection on touchend — preventing the ghost click that would double-fire.
-      tile.addEventListener('touchstart', () => {
-        this.audio?.playPhoneme(ph);
-      }, { passive: true });
-      tile.addEventListener('touchend', (e) => {
-        e.preventDefault();   // stop ghost click
-        this._onTileClick(ph, tile);
-      });
+
       this._tileEls.push(tile);
       this._poolEl.appendChild(tile);
     });
   }
 
-  _renderHints() {
-    const possible = this._wordsFromPool().slice(0, 4);
-    this._hintEl.innerHTML = possible.map(w =>
-      `<span class="be-hint-word">${w.hint} <em>${w.word}</em></span>`
-    ).join('');
-  }
-
-  _renderBuild() {
-    this._buildEl.innerHTML = this._currentBuilt.length === 0
-      ? '<span class="be-build-placeholder">Click tiles to build a word…</span>'
-      : this._currentBuilt.map(ph => `<span class="be-build-tile">${ph.toUpperCase()}</span>`).join('');
-  }
-
   // ── Tile click ───────────────────────────────────────────────
-  _onTileClick(phoneme, tileEl) {
+  _onTileClick(phoneme, tileEl, tileIdx) {
     if (this.state !== 'idle' && this.state !== 'blending') return;
-    if (tileEl.classList.contains('be-tile-used')) return;
+    if (this._usedTileIdx.has(tileIdx)) return;
 
     this.state = 'blending';
     this._currentBuilt.push(phoneme);
+    this._usedTileIdx.add(tileIdx);
     tileEl.classList.add('be-tile-used');
 
-    if (this.audio) this.audio.playPhoneme(phoneme);
+    this.audio?.playPhoneme(phoneme);
 
-    this._renderBuild();
+    this._renderBlanks();
     this._setFeedback('');
-  }
 
-  // ── Submit ───────────────────────────────────────────────────
-  _submitBuild() {
-    const word = this._currentBuilt.join('');
-    this._checkWord(word, false);
-  }
-
-  _submitTyped() {
-    const word = this._typeInput.value.trim().toLowerCase();
-    if (!word) return;
-    this._typeInput.value = '';
-    this._checkWord(word, true);
-  }
-
-  _checkWord(attempt, typed) {
-    const match = this.availableWords.find(w => w.word === attempt || w.word === attempt.toLowerCase());
-
-    if (!match) {
-      this._wrongBlend(`"${attempt.toUpperCase()}" isn't in the word list — try again!`);
-      return;
+    // Auto-submit when all phonemes are placed
+    if (this._currentBuilt.length === this._currentWord.phonemes.length) {
+      setTimeout(() => this._checkCurrentWord(), 300);
     }
-
-    // Check that phonemes can be formed from tile pool
-    const poolCounts = {};
-    this.tilePool.forEach(ph => { poolCounts[ph] = (poolCounts[ph] || 0) + 1; });
-    const needed = {};
-    match.phonemes.forEach(ph => { needed[ph] = (needed[ph] || 0) + 1; });
-    const canForm = Object.entries(needed).every(([ph, cnt]) => (poolCounts[ph] || 0) >= cnt);
-
-    if (!canForm) {
-      this._wrongBlend(`You haven't collected all the tiles for "${match.word}" yet!`);
-      return;
-    }
-
-    this._successBlend(match, typed);
   }
 
-  _successBlend(wordObj, typed) {
+  // ── Check if built order matches target ─────────────────────
+  _checkCurrentWord() {
+    if (this.done) return;
+    const built  = this._currentBuilt.join('');
+    const target = this._currentWord.phonemes.join('');
+
+    if (built === target) {
+      this._successBlend(this._currentWord);
+    } else {
+      this._wrongAttempts++;
+      if (this._wrongAttempts >= MAX_WRONGS) {
+        this._skipWord();
+      } else {
+        this._wrongOrder();
+      }
+    }
+  }
+
+  // ── Wrong order: let player try again ────────────────────────
+  _wrongOrder() {
+    this._combo = 0;
+    this.state  = 'idle';
+
+    const dmg  = Math.floor(this.stage.bossAttack * 0.3);
+    this.rikuHp = Math.max(0, this.rikuHp - dmg);
+    this._rikuShake = 8;
+    if (this.audio) this.audio.sfxWrongBlend();
+
+    const triesLeft = MAX_WRONGS - this._wrongAttempts;
+    this._setFeedback(`❌ Not quite! ${triesLeft} ${triesLeft === 1 ? 'try' : 'tries'} left`, '#FF5252');
+
+    const _fy = Math.round(this.H * 0.58);
+    this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy * 0.50), `-${dmg}`, '#FF5252'));
+
+    // Reset build and re-render tiles in the same shuffled order
+    this._currentBuilt = [];
+    this._usedTileIdx  = new Set();
+    this._renderCurrentWordTiles();
+    this._renderBlanks();
+
+    if (this.rikuHp <= 0) { this._lose(); return; }
+  }
+
+  // ── Skip word after 3 failures ───────────────────────────────
+  _skipWord() {
+    this._stopBlendTimer();
+    this.state = 'boss-attack';
+    this._combo = 0;
+
+    const dmg = this.stage.bossAttack;
+    this.rikuHp = Math.max(0, this.rikuHp - dmg);
+    this._rikuShake = 14;
+    this._bossShake = 6;
+    if (this.audio) this.audio.sfxHurt();
+
+    const wordUp = this._currentWord.word.toUpperCase();
+    this._setFeedback(`💦 "${wordUp}" — the answer was: ${this._currentWord.phonemes.map(p=>p.toUpperCase()).join(' · ')}`, '#FF9800');
+
+    const _fy = Math.round(this.H * 0.58);
+    this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy * 0.50), `🦖 -${dmg}`, '#FF5252'));
+
+    if (this.progress) this.progress.recordBlend(this.stage.id, this._currentWord.word, false);
+
+    setTimeout(() => {
+      if (this.rikuHp <= 0) { this._lose(); return; }
+      this.state = 'idle';
+      this._startNextWord();
+      this._startBlendTimer();
+    }, 1600);
+  }
+
+  // ── Successful blend ─────────────────────────────────────────
+  _successBlend(wordObj) {
     this._stopBlendTimer();
     this.state = 'riku-attack';
 
-    const timeBonus  = this._blendTimeLeft / BLEND_TIME;
-    const comboMult  = 1 + Math.min(this._combo, 4) * 0.25;
-    const speedBonus = typed ? 1.3 : 1.0;
-    const damage     = Math.floor(wordObj.damage * comboMult * (0.7 + timeBonus * 0.3) * speedBonus);
+    const timeBonus = this._blendTimeLeft / BLEND_TIME;
+    const comboMult = 1 + Math.min(this._combo, 4) * 0.25;
+    const damage    = Math.floor(wordObj.damage * comboMult * (0.7 + timeBonus * 0.3));
 
     this._combo++;
     this.bossHp  = Math.max(0, this.bossHp - damage);
@@ -377,54 +419,33 @@ class BattleEngine {
     // Slash particles at boss center
     const floorY = Math.round(this.H * 0.58);
     const bossX  = Math.round(this.W * 0.72);
-    const bossY  = Math.round(floorY * 0.50);   // vertical center of boss
+    const bossY  = Math.round(floorY * 0.50);
     for (let i = 0; i < 3; i++) {
-      this.slashParticles.push(new SlashParticle(bossX + (Math.random()-0.5)*40, bossY + (Math.random()-0.5)*40));
+      this.slashParticles.push(new SlashParticle(
+        bossX + (Math.random()-0.5)*40,
+        bossY + (Math.random()-0.5)*40,
+      ));
     }
 
     const _praisePerfect = ['PERFECT! 💥','RICE POWER! 🍚⚡','UNSTOPPABLE! 🔥','SAMURAI STRIKE! ⚔️','PHONICS FURY! 💫'];
-    const _praiseGreat  = ['GREAT! ⚔️','NICE SLICE! 🗡️','WORD WARRIOR! 🏆','SLICED IT! ✨','DINO SMASHER! 💪'];
+    const _praiseGreat   = ['GREAT! ⚔️','NICE SLICE! 🗡️','WORD WARRIOR! 🏆','SLICED IT! ✨','DINO SMASHER! 💪'];
     const _rng = Math.floor(Math.random() * 5);
     const gradeText = this._combo >= 3 ? `COMBO ×${this._combo}! ⚡` :
                       timeBonus > 0.7  ? _praisePerfect[_rng] : _praiseGreat[_rng];
+
     this.damagePops.push(new DamagePop(bossX, bossY - 40, `-${damage}`, '#FFD700'));
     this.damagePops.push(new DamagePop(bossX, bossY - 80, gradeText, '#fff'));
-
     this._setFeedback(`⚔️ "${wordObj.word.toUpperCase()}" — ${gradeText} (${damage} dmg)`, '#FFD700');
 
     setTimeout(() => {
       if (this.bossHp <= 0) {
         this._win();
       } else {
-        this._clearBuild();
         this.state = 'idle';
+        this._startNextWord();
         this._startBlendTimer();
-        this._renderHints();
       }
     }, 1400);
-  }
-
-  _wrongBlend(msg) {
-    this._combo   = 0;
-    this.state    = 'boss-attack';
-    this._rikuShake = 14;
-    const dmg     = Math.floor(this.stage.bossAttack * 0.5);
-    this.rikuHp   = Math.max(0, this.rikuHp - dmg);
-
-    if (this.progress) this.progress.recordBlend(this.stage.id, '', false);
-    if (this.audio) this.audio.sfxWrongBlend();
-    if (this.audio) this.audio.sfxHurt();
-
-    const _fy1 = Math.round(this.H * 0.58);
-    this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy1 * 0.50), `-${dmg}`, '#FF5252'));
-    this._setFeedback('❌ ' + msg, '#FF5252');
-
-    setTimeout(() => {
-      this._clearBuild();
-      if (this.rikuHp <= 0) { this._lose(); return; }
-      this.state = 'idle';
-      this._startBlendTimer();
-    }, 1000);
   }
 
   // ── Timer ────────────────────────────────────────────────────
@@ -437,7 +458,6 @@ class BattleEngine {
       this._blendTimeLeft -= 0.1;
       const pct = Math.max(0, this._blendTimeLeft / BLEND_TIME);
       this._timerBar.style.width  = (pct * 100) + '%';
-      this._timerBar.style.background = '';  // let CSS classes handle colour
       this._timerBar.className = 'be-timer-fill' +
         (pct < 0.25 ? ' be-timer-urgent' : pct < 0.5 ? ' be-timer-warn' : '');
       if (this._blendTimeLeft <= 0) {
@@ -455,28 +475,34 @@ class BattleEngine {
     if (this.done) return;
     this.state = 'boss-attack';
     this._bossShake = 8;
+    this._combo = 0;
+
     const dmg = this.stage.bossAttack;
     this.rikuHp = Math.max(0, this.rikuHp - dmg);
     if (this.audio) this.audio.sfxBossHit();
     if (this.audio) this.audio.sfxHurt();
-    const _fy2 = Math.round(this.H * 0.58);
-    this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy2 * 0.50), `🦖 -${dmg}`, '#FF5252'));
-    this._setFeedback(`⚡ Boss attacks! -${dmg} HP — blend faster!`, '#FF9800');
-    this._combo = 0;
+
+    const _fy = Math.round(this.H * 0.58);
+    this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy * 0.50), `🦖 -${dmg}`, '#FF5252'));
+    this._setFeedback(`⚡ Too slow! Boss attacks! — blend faster!`, '#FF9800');
+
     setTimeout(() => {
-      this._clearBuild();
       if (this.rikuHp <= 0) { this._lose(); return; }
       this.state = 'idle';
+      this._startNextWord();
       this._startBlendTimer();
     }, 1200);
   }
 
-  // ── Clear build ──────────────────────────────────────────────
+  // ── Clear build (keep current word, reset attempts) ──────────
   _clearBuild() {
+    if (this.state === 'riku-attack' || this.state === 'boss-attack') return;
     this._currentBuilt = [];
-    this._typeInput.value = '';
-    this._renderBuild();
-    this._renderTiles();
+    this._usedTileIdx  = new Set();
+    this._renderCurrentWordTiles();
+    this._renderBlanks();
+    this._setFeedback('');
+    this.state = 'idle';
   }
 
   // ── Feedback text ────────────────────────────────────────────
@@ -547,18 +573,15 @@ class BattleEngine {
     const bgKey = this.stage.bg;
     const bgSp  = bgKey && this.sprites[bgKey];
     if (bgSp && bgSp.complete && bgSp.naturalWidth > 0) {
-      // Fill entire canvas with background image (cover fit)
       const imgW = bgSp.naturalWidth;
       const imgH = bgSp.naturalHeight;
       const scale = Math.max(this.W / imgW, this.H / imgH);
       const dw = imgW * scale;
       const dh = imgH * scale;
       ctx.drawImage(bgSp, (this.W - dw) / 2, (this.H - dh) / 2, dw, dh);
-      // Dark overlay so characters are readable
       ctx.fillStyle = 'rgba(0,0,0,0.30)';
       ctx.fillRect(0, 0, this.W, this.H);
     } else {
-      // Procedural fallback
       const colors = this.stage.skyColor || ['#1565C0', '#42A5F5'];
       const grad   = ctx.createLinearGradient(0, 0, 0, this.H * 0.75);
       grad.addColorStop(0, colors[0]);
@@ -569,43 +592,36 @@ class BattleEngine {
       ctx.fillRect(0, this.H * 0.55, this.W, 30);
     }
 
-    // Stage name watermark (always shown)
     ctx.font      = `bold 14px system-ui`;
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.textAlign = 'center';
     ctx.fillText(`${this.stage.name}  ⚔️  Boss Battle`, this.W / 2, 26);
   }
 
-  // The floor line sits just above the tile overlay (top ~58% is arena)
   _floorY() { return Math.round(this.H * 0.58); }
 
   _drawFloor(ctx) {
     const fy = this._floorY();
-    // Drop shadow for depth
     const shadow = ctx.createLinearGradient(0, fy - 14, 0, fy + 22);
     shadow.addColorStop(0, 'rgba(0,0,0,0.42)');
     shadow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = shadow;
     ctx.fillRect(0, fy - 14, this.W, 36);
-    // Floor fill
     ctx.fillStyle = this.stage.groundColor || '#2E7D32';
     ctx.fillRect(0, fy, this.W, this.H - fy);
-    // Top highlight line
     ctx.fillStyle = 'rgba(255,255,255,0.22)';
     ctx.fillRect(0, fy, this.W, 4);
-    // Dark second edge (AQ floor depth)
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.fillRect(0, fy + 4, this.W, 10);
   }
 
   _drawBoss(ctx) {
     const fy     = this._floorY();
-    // Boss: feet at floor, height fills ~90% of the arena (AQ style — imposing!)
     const bH     = Math.round(fy * 0.90);
     const bW     = Math.round(bH * 0.85);
-    const bCX    = Math.round(this.W * 0.72);   // center X (right side)
+    const bCX    = Math.round(this.W * 0.72);
     const bFeetY = fy;
-    const bCY    = bFeetY - bH / 2;             // center Y
+    const bCY    = bFeetY - bH / 2;
 
     const shakeX = this._bossShake > 0 ? (Math.random() - 0.5) * 14 : 0;
     const shakeY = this._bossShake > 0 ? (Math.random() - 0.5) * 8  : 0;
@@ -614,20 +630,18 @@ class BattleEngine {
     const hpPct  = this.bossHp / this.bossMaxHp;
     const sp     = this.sprites[this.stage.bossFile];
 
-    // Ground shadow ellipse
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.20)';
     ctx.beginPath();
     ctx.ellipse(bCX, bFeetY + 6, bW * 0.38, 11, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Boss sprite / fallback — centered, feet at floor
     ctx.translate(bCX + shakeX, bCY + shakeY + bob);
     ctx.scale(scale, scale);
 
     if (sp && sp.complete && sp.naturalWidth > 0) {
       ctx.save();
-      ctx.scale(-1, 1);   // mirror — boss faces left toward Riku
+      ctx.scale(-1, 1);
       ctx.drawImage(sp, -bW / 2, -bH / 2, bW, bH);
       ctx.restore();
       if (hpPct < 0.3) {
@@ -641,7 +655,6 @@ class BattleEngine {
     }
     ctx.restore();
 
-    // Boss name tag above head
     const nameY = bFeetY - bH + bob - 12;
     ctx.font        = `bold ${Math.max(13, Math.floor(this.W * 0.027))}px "Comic Sans MS", system-ui`;
     ctx.fillStyle   = '#fff';
@@ -657,22 +670,17 @@ class BattleEngine {
   }
 
   _drawFallbackBoss(ctx, hpPct, bossW, bossH) {
-    // Scale all coordinates relative to original 160px design
     const s   = (bossH || 160) / 160;
     const c   = this.stage.accentColor || '#FF6F00';
     const hue = hpPct < 0.3 ? '#B71C1C' : c;
 
-    // Body
     ctx.fillStyle = hue;
     ctx.beginPath(); ctx.ellipse(0, 20*s, 44*s, 36*s, 0, 0, Math.PI * 2); ctx.fill();
-    // Head
     ctx.beginPath(); ctx.ellipse(-36*s, -18*s, 34*s, 24*s, -0.3, 0, Math.PI * 2); ctx.fill();
-    // Jaw
     ctx.fillStyle = '#4E342E';
     ctx.beginPath();
     ctx.moveTo(-64*s, -10*s); ctx.quadraticCurveTo(-52*s, 2*s, -22*s, -4*s);
     ctx.closePath(); ctx.fill();
-    // Teeth
     ctx.fillStyle = '#fff';
     for (let i = 0; i < 4; i++) {
       ctx.beginPath();
@@ -681,24 +689,19 @@ class BattleEngine {
       ctx.lineTo((-50 + i*10)*s, -10*s);
       ctx.closePath(); ctx.fill();
     }
-    // Eye
     ctx.fillStyle = '#FFF176';
     ctx.beginPath(); ctx.ellipse(-30*s, -24*s, 10*s, 10*s, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#212121';
     ctx.beginPath(); ctx.ellipse(-28*s, -24*s, 5*s, 6*s, 0, 0, Math.PI * 2); ctx.fill();
-    // Tiny arms
     ctx.fillStyle = hue;
     ctx.fillRect(10*s, -2*s, 16*s, 10*s); ctx.fillRect(10*s, 10*s, 12*s, 10*s);
-    // Tail
     ctx.beginPath();
     ctx.moveTo(44*s, 20*s); ctx.quadraticCurveTo(80*s, 40*s, 90*s, 10*s);
     ctx.lineWidth = 18*s; ctx.strokeStyle = hue; ctx.stroke();
-    // Legs
     ctx.fillStyle = hue;
     ctx.fillRect(-20*s, 52*s, 20*s, 28*s); ctx.fillRect(8*s, 52*s, 20*s, 28*s);
     ctx.fillStyle = '#3E2723';
     ctx.fillRect(-24*s, 76*s, 26*s, 8*s); ctx.fillRect(6*s, 76*s, 26*s, 8*s);
-    // Crack at low HP
     if (hpPct < 0.5) {
       ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(-10*s, -30*s); ctx.lineTo(10*s, 10*s); ctx.stroke();
@@ -708,25 +711,22 @@ class BattleEngine {
 
   _drawRiku(ctx) {
     const fy     = this._floorY();
-    // Riku: feet at floor, height ~78% of arena (slightly smaller than boss)
     const rH     = Math.round(fy * 0.78);
     const rW     = Math.round(rH * 0.65);
-    const rCX    = Math.round(this.W * 0.22);   // center X (left side)
+    const rCX    = Math.round(this.W * 0.22);
     const rFeetY = fy;
-    const rCY    = rFeetY - rH / 2;             // center Y
+    const rCY    = rFeetY - rH / 2;
 
     const shakeX = this._rikuShake > 0 ? (Math.random() - 0.5) * 10 : 0;
     const shakeY = this._rikuShake > 0 ? (Math.random() - 0.5) * 5  : 0;
     const bob    = this.state === 'idle' ? Math.sin(this._age * 0.05) * 3 : 0;
 
-    // Pick sprite
     let spKey = 'riku-idle';
     if (this.state === 'riku-attack')                         spKey = 'riku-run';
     if (this.state === 'boss-attack' || this._rikuShake > 0) spKey = 'riku-hurt';
     if (this.done && this.outcome === 'victory')              spKey = 'riku-victory';
     const sp = this.sprites[spKey] || this.sprites['riku-idle'] || this.sprites['riku-run'];
 
-    // Ground shadow ellipse
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.16)';
     ctx.beginPath();
@@ -742,7 +742,6 @@ class BattleEngine {
     }
     ctx.restore();
 
-    // Victory sparkles
     if (this.done && this.outcome === 'victory') {
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2 + this._age * 0.05;
@@ -756,28 +755,18 @@ class BattleEngine {
     const cx = 0;
     const ty = -h / 2;
 
-    // Body
     ctx.fillStyle = '#F5F5F0';
     ctx.beginPath(); ctx.ellipse(cx, ty + h * 0.55, w * 0.38, h * 0.42, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Nori
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(cx - w * 0.38, ty + h * 0.38, w * 0.76, h * 0.16);
-
-    // Face
     ctx.fillStyle = '#fff9e0';
     ctx.beginPath(); ctx.ellipse(cx, ty + h * 0.24, w * 0.3, h * 0.26, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Eyes
     ctx.fillStyle = '#222';
     ctx.beginPath(); ctx.ellipse(cx - 10, ty + h * 0.22, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(cx + 10, ty + h * 0.22, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Hachimaki
     ctx.fillStyle = '#ff3322';
     ctx.fillRect(cx - w * 0.3, ty + h * 0.08, w * 0.6, 7);
 
-    // Battle pose sword (thrust toward right = toward boss)
     const swingAng = this.state === 'riku-attack' ? -0.4 : 0.1;
     ctx.save();
     ctx.translate(cx + 20, ty + h * 0.5);
@@ -801,26 +790,20 @@ class BattleEngine {
     ctx.shadowBlur = 0;
     ctx.textBaseline = 'middle';
 
-    // ── Helper: draw one HP bar ──────────────────────────────
     const drawBar = (x, pct, col1, col2, label, textRight) => {
-      // Track (dark inset)
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.beginPath(); ctx.roundRect(x - 2, barY - 2, barW + 4, barH + 4, barH / 2 + 2); ctx.fill();
-      // Track inner
       ctx.fillStyle = 'rgba(255,255,255,0.06)';
       ctx.beginPath(); ctx.roundRect(x, barY, barW, barH, barH / 2); ctx.fill();
-      // Fill
       if (pct > 0) {
         const g = ctx.createLinearGradient(x, barY, x, barY + barH);
         g.addColorStop(0, col1);
         g.addColorStop(1, col2);
         ctx.fillStyle = g;
         ctx.beginPath(); ctx.roundRect(x, barY, barW * pct, barH, barH / 2); ctx.fill();
-        // Shine
         ctx.fillStyle = 'rgba(255,255,255,0.22)';
         ctx.beginPath(); ctx.roundRect(x + 2, barY + 2, barW * pct - 4, barH * 0.4, (barH * 0.4) / 2); ctx.fill();
       }
-      // Label above bar
       ctx.font = 'bold 11px "Comic Sans MS", system-ui';
       ctx.fillStyle = '#fff';
       ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
@@ -829,14 +812,12 @@ class BattleEngine {
       ctx.shadowBlur = 0;
     };
 
-    // ── Riku HP (top-left) ───────────────────────────────────
     const rikuPct = Math.max(0, this.rikuHp / this.rikuMaxHp);
     const rikuC1 = rikuPct > 0.5 ? '#6DD56B' : rikuPct > 0.25 ? '#FFCA28' : '#FF5252';
     const rikuC2 = rikuPct > 0.5 ? '#2E7D32' : rikuPct > 0.25 ? '#F57F17' : '#B71C1C';
     drawBar(margin, rikuPct, rikuC1, rikuC2,
       `🍚 RIKU  ${Math.ceil(this.rikuHp)}/${this.rikuMaxHp}`, false);
 
-    // ── Boss HP (top-right) ──────────────────────────────────
     const bossPct = Math.max(0, this.bossHp / this.bossMaxHp);
     drawBar(this.W - margin - barW, bossPct, '#FF7043', '#B71C1C',
       `${this.stage.bossName}  ${Math.ceil(this.bossHp)}/${this.bossMaxHp}  🦖`, true);

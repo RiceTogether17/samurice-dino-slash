@@ -101,9 +101,19 @@ class SlashGame {
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.W = W;
       this.H = H;
+      // Propagate new dimensions to active sub-engine
+      if (this.battle) { this.battle.W = W; this.battle.H = H; }
     };
     resize();
     window.addEventListener('resize', resize);
+
+    // Fullscreen change: browser needs two frames to finish expanding.
+    // Fire resize after both frames so canvas picks up the new viewport size.
+    const onFsChange = () => {
+      requestAnimationFrame(() => { requestAnimationFrame(resize); });
+    };
+    document.addEventListener('fullscreenchange',       onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
   }
 
   // ── Sprite loading ───────────────────────────────────────────
@@ -360,7 +370,7 @@ class SlashGame {
     // Subtitle
     ctx.font      = `${Math.min(14, W * 0.033)}px "Comic Sans MS", system-ui`;
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('Phonics Platformer · 6 Stages · 150 Words', W / 2, rY + rH + 56);
+    ctx.fillText('Phonics Platformer · 6 Stages · Short Vowels → Blends', W / 2, rY + rH + 56);
 
     // Riku's flavour tagline
     ctx.font      = 'bold 15px "Comic Sans MS", system-ui';
