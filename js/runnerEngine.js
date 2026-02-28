@@ -183,12 +183,28 @@ class RunnerPlayer {
       // Squash-and-stretch only while walking
       const sqX = walking ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
       const sqY = walking ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
-      // All states draw against the player hitbox (this.w × this.h) so idle /
-      // walk / jump appear the same size.  Jump sprite has ~82% character fill
-      // vs ~89% for walk/idle, so boost it 1.085× to compensate.
-      const boost = this.onGround ? 1.0 : 1.085;
-      const dw = this.w * sqX * boost;
-      const dh = this.h * sqY * boost;
+
+      // Per-state normalisation so all three sprites render the character at the
+      // same visual size.  Walk sprite (1024×1536) is the reference — character
+      // fills ~80% w × ~89% h of its frame.  Idle and Jump sprites are square
+      // (1024×1024) with different fill ratios, so we scale the draw rect to
+      // compensate:
+      //   Idle  (1024×1024): char ~87% w × ~91% h  → normW=0.920w, normH=0.978h
+      //   Jump  (1024×1024): char ~87% w × ~82% h  → normW=0.920w, normH=1.085h
+      //   Walk  (1024×1536): char ~80% w × ~89% h  → reference (this.w × this.h)
+      let normW, normH;
+      if (!this.onGround) {
+        normW = this.w * 0.920;
+        normH = this.h * 1.085;
+      } else if (!walking) {
+        normW = this.w * 0.920;
+        normH = this.h * 0.978;
+      } else {
+        normW = this.w;
+        normH = this.h;
+      }
+      const dw = normW * sqX;
+      const dh = normH * sqY;
       // Centre horizontally; anchor at feet (sprite bottom = y + this.h)
       ctx.drawImage(sp, dx + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
     } else {
