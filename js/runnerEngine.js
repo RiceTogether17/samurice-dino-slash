@@ -153,9 +153,9 @@ class RunnerPlayer {
 
     ctx.save();
 
-    // Invincibility: soft alpha flicker (not invisible — stay readable)
+    // Invincibility flicker: slower period, higher minimum so Riku stays visible
     if (this.invincible > 0) {
-      ctx.globalAlpha = Math.floor(this.invincible / 5) % 2 === 0 ? 0.35 : 1.0;
+      ctx.globalAlpha = Math.floor(this.invincible / 8) % 2 === 0 ? 0.62 : 1.0;
     }
 
     // Facing direction: flip sprite when moving left

@@ -58,6 +58,12 @@
                 onclick="exitSlash()"
                 title="Back to menu">✕</button>
 
+        <!-- Fullscreen toggle -->
+        <button id="slashFsBtn"
+                class="slash-fs-btn game-fs-btn"
+                onclick="toggleFullscreen()"
+                title="Fullscreen">⛶</button>
+
         <!-- Runner D-pad controls (touch only, shown during runner phase) -->
         <div id="runnerControls" class="runner-controls hidden">
             <div class="dpad-move">
@@ -84,6 +90,7 @@
 
         <button id="muteBtn"        class="fd-btn fd-mute flappy-overlay-btn">🔊</button>
         <button id="flappyBackBtn"  class="fd-btn fd-back flappy-overlay-btn" onclick="exitFlappy()">✕</button>
+        <button id="flappyFsBtn"    class="fd-btn fd-fs   flappy-overlay-btn game-fs-btn" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
 
         <div id="skinPicker" class="fd-skin-picker">
             <button id="prevSkin" class="fd-skin-arrow flappy-overlay-btn">◀</button>
@@ -121,6 +128,31 @@
 <script src="js/battleEngine.js"></script>
 <script src="js/slashGame.js"></script>
 <script src="js/game.js"></script>
+
+<script>
+// ── Fullscreen toggle (works for both Slash and Dino Dash screens) ──
+function toggleFullscreen() {
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fsEl) {
+    const req = document.documentElement.requestFullscreen
+             || document.documentElement.webkitRequestFullscreen;
+    if (req) req.call(document.documentElement).catch(() => {});
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) exit.call(document).catch(() => {});
+  }
+}
+
+function _syncFsIcons() {
+  const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  document.querySelectorAll('.game-fs-btn').forEach(btn => {
+    btn.textContent = inFs ? '⊡' : '⛶';
+    btn.title = inFs ? 'Exit fullscreen' : 'Fullscreen';
+  });
+}
+document.addEventListener('fullscreenchange',       _syncFsIcons);
+document.addEventListener('webkitfullscreenchange', _syncFsIcons);
+</script>
 
 </body>
 </html>
