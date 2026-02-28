@@ -988,7 +988,4 @@ function exitFlappy() {
   document.getElementById('modeChooser').classList.add('active');
 }
 
-function launchSlashGame() {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('menu').classList.add('active');
-}
+// launchSlashGame() is defined in slashGame.js (loaded before this file)
