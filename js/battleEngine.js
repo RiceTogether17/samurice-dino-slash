@@ -18,6 +18,10 @@
 const BLEND_TIME  = 20;   // seconds per word attempt
 const MAX_WRONGS  = 3;    // wrong-order attempts before skipping
 
+// Boss phase thresholds
+const BOSS_PHASE2_PCT = 0.50;  // 50% HP → Phase 2 (faster, angrier)
+const BOSS_PHASE3_PCT = 0.25;  // 25% HP → Phase 3 (enraged)
+
 // ─────────────────────────────────────────────────────────────
 // SLASH PARTICLE
 // ─────────────────────────────────────────────────────────────
@@ -123,10 +127,13 @@ class BattleEngine {
     this._usedTileIdx   = new Set();  // which tile positions have been clicked
 
     // Battle state
-    this.state    = 'idle';
-    this._age     = 0;
-    this._combo   = 0;
-    this.score    = 0;
+    this.state       = 'idle';
+    this._age        = 0;
+    this._combo      = 0;
+    this.score       = 0;
+    this._bossPhase  = 1;   // 1, 2, or 3
+    this._phaseFlash = 0;   // frames of phase-change visual effect
+    this._specialReady = false;  // Riku special attack charged
 
     // Animations
     this.slashParticles = [];
@@ -395,6 +402,60 @@ class BattleEngine {
     }, 1600);
   }
 
+  // ── Boss phase check ─────────────────────────────────────────
+  _checkBossPhase() {
+    const pct = this.bossHp / this.bossMaxHp;
+    const oldPhase = this._bossPhase;
+    if (pct <= BOSS_PHASE3_PCT && this._bossPhase < 3) {
+      this._bossPhase = 3;
+    } else if (pct <= BOSS_PHASE2_PCT && this._bossPhase < 2) {
+      this._bossPhase = 2;
+    }
+    if (this._bossPhase !== oldPhase) {
+      this._enterBossPhase(this._bossPhase);
+    }
+  }
+
+  _enterBossPhase(phase) {
+    this._phaseFlash = 80;  // frames of flash effect
+    this._bossShake  = 30;
+    const msgs = {
+      2: ['💢 BOSS RAGE MODE!', `${this.stage.bossName} is angry!`],
+      3: ['🔥 BERSERK MODE!',    `${this.stage.bossName} goes WILD!`],
+    };
+    const [title, sub] = msgs[phase] || ['⚡ PHASE CHANGE!', ''];
+    this._setFeedback(`${title} — ${sub}`, phase === 3 ? '#FF1744' : '#FF9800');
+    this.damagePops.push(new DamagePop(
+      Math.round(this.W * 0.72), Math.round(this.H * 0.25),
+      title, phase === 3 ? '#FF1744' : '#FF8F00',
+    ));
+    if (this.audio) this.audio.sfxBossHit();
+  }
+
+  // ── Riku special attack (combo ≥ 5) ─────────────────────────
+  _rikuSpecialAttack(wordObj) {
+    this._specialReady = false;
+    const floorY = Math.round(this.H * 0.58);
+    const bossX  = Math.round(this.W * 0.72);
+    const bossY  = Math.round(floorY * 0.50);
+    const specialDmg = Math.floor(wordObj.damage * 3.5);
+
+    this.bossHp = Math.max(0, this.bossHp - specialDmg);
+    this._bossShake = 40;
+
+    // Massive particle burst
+    for (let i = 0; i < 8; i++) {
+      this.slashParticles.push(new SlashParticle(
+        bossX + (Math.random() - 0.5) * 80,
+        bossY + (Math.random() - 0.5) * 80,
+      ));
+    }
+    this.damagePops.push(new DamagePop(bossX, bossY - 50,  `⚡ MEGA STRIKE! -${specialDmg}`, '#FFD700'));
+    this.damagePops.push(new DamagePop(bossX, bossY - 100, '🍚 RICE POWER!! 🍚', '#FF4081'));
+    this._setFeedback(`🌟 RIKU SPECIAL ATTACK!! ${specialDmg} DAMAGE! 🌟`, '#FFD700');
+    this._checkBossPhase();
+  }
+
   // ── Successful blend ─────────────────────────────────────────
   _successBlend(wordObj) {
     this._stopBlendTimer();
@@ -402,12 +463,18 @@ class BattleEngine {
 
     const timeBonus = this._blendTimeLeft / BLEND_TIME;
     const comboMult = 1 + Math.min(this._combo, 4) * 0.25;
-    const damage    = Math.floor(wordObj.damage * comboMult * (0.7 + timeBonus * 0.3));
+    // Phase damage multiplier
+    const phaseMult = this._bossPhase === 3 ? 1.0 :
+                      this._bossPhase === 2 ? 1.0 : 1.0;  // player damage stays fair
+    const damage    = Math.floor(wordObj.damage * comboMult * (0.7 + timeBonus * 0.3) * phaseMult);
 
     this._combo++;
     this.bossHp  = Math.max(0, this.bossHp - damage);
     this.score  += damage * 2;
     this._bossShake = 22;
+
+    // Mark special as ready at combo 5
+    if (this._combo >= 5) this._specialReady = true;
 
     if (this.progress) this.progress.recordBlend(this.stage.id, wordObj.word, true);
     if (this.audio)    this.audio.sfxSlash();
@@ -416,27 +483,36 @@ class BattleEngine {
       if (this.audio) this.audio.playBlendSequence(wordObj.phonemes, wordObj.word);
     }, 200);
 
-    // Slash particles at boss center
     const floorY = Math.round(this.H * 0.58);
     const bossX  = Math.round(this.W * 0.72);
     const bossY  = Math.round(floorY * 0.50);
-    for (let i = 0; i < 3; i++) {
-      this.slashParticles.push(new SlashParticle(
-        bossX + (Math.random()-0.5)*40,
-        bossY + (Math.random()-0.5)*40,
-      ));
+
+    // At combo 5+: trigger Riku's special attack
+    if (this._combo >= 5 && this._specialReady) {
+      setTimeout(() => this._rikuSpecialAttack(wordObj), 400);
+    } else {
+      for (let i = 0; i < 3; i++) {
+        this.slashParticles.push(new SlashParticle(
+          bossX + (Math.random()-0.5)*40,
+          bossY + (Math.random()-0.5)*40,
+        ));
+      }
     }
 
     const _praisePerfect = ['PERFECT! 💥','RICE POWER! 🍚⚡','UNSTOPPABLE! 🔥','SAMURAI STRIKE! ⚔️','PHONICS FURY! 💫'];
     const _praiseGreat   = ['GREAT! ⚔️','NICE SLICE! 🗡️','WORD WARRIOR! 🏆','SLICED IT! ✨','DINO SMASHER! 💪'];
     const _rng = Math.floor(Math.random() * 5);
-    const gradeText = this._combo >= 3 ? `COMBO ×${this._combo}! ⚡` :
+    const gradeText = this._combo >= 5 ? `✨ RIKU SPECIAL! ×${this._combo}` :
+                      this._combo >= 3 ? `COMBO ×${this._combo}! ⚡` :
                       timeBonus > 0.7  ? _praisePerfect[_rng] : _praiseGreat[_rng];
 
     this.damagePops.push(new DamagePop(bossX, bossY - 40, `-${damage}`, '#FFD700'));
     this.damagePops.push(new DamagePop(bossX, bossY - 80, gradeText, '#fff'));
     this._setFeedback(`⚔️ "${wordObj.word.toUpperCase()}" — ${gradeText} (${damage} dmg)`, '#FFD700');
 
+    this._checkBossPhase();
+
+    const delay = this._combo >= 5 ? 2000 : 1400;
     setTimeout(() => {
       if (this.bossHp <= 0) {
         this._win();
@@ -445,7 +521,7 @@ class BattleEngine {
         this._startNextWord();
         this._startBlendTimer();
       }
-    }, 1400);
+    }, delay);
   }
 
   // ── Timer ────────────────────────────────────────────────────
@@ -474,24 +550,29 @@ class BattleEngine {
   _bossAutoAttack() {
     if (this.done) return;
     this.state = 'boss-attack';
-    this._bossShake = 8;
+    // Phase amplifies boss attack
+    const phaseMult = this._bossPhase === 3 ? 1.5 : this._bossPhase === 2 ? 1.25 : 1.0;
+    this._bossShake = this._bossPhase >= 2 ? 14 : 8;
     this._combo = 0;
 
-    const dmg = this.stage.bossAttack;
+    const dmg = Math.floor(this.stage.bossAttack * phaseMult);
     this.rikuHp = Math.max(0, this.rikuHp - dmg);
     if (this.audio) this.audio.sfxBossHit();
     if (this.audio) this.audio.sfxHurt();
 
     const _fy = Math.round(this.H * 0.58);
+    const roar = this._bossPhase === 3 ? '🔥 ENRAGED! ' : this._bossPhase === 2 ? '💢 ' : '';
     this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy * 0.50), `🦖 -${dmg}`, '#FF5252'));
-    this._setFeedback(`⚡ Too slow! Boss attacks! — blend faster!`, '#FF9800');
+    this._setFeedback(`${roar}⚡ Too slow! Boss attacks! — blend faster!`, '#FF9800');
 
+    // Phase 3: shorter recovery so boss feels relentless
+    const recoverDelay = this._bossPhase === 3 ? 900 : this._bossPhase === 2 ? 1050 : 1200;
     setTimeout(() => {
       if (this.rikuHp <= 0) { this._lose(); return; }
       this.state = 'idle';
       this._startNextWord();
       this._startBlendTimer();
-    }, 1200);
+    }, recoverDelay);
   }
 
   // ── Clear build (keep current word, reset attempts) ──────────
@@ -530,9 +611,12 @@ class BattleEngine {
   update() {
     if (this.done) return;
     this._age++;
-    if (this._bossShake > 0) this._bossShake--;
-    if (this._rikuShake > 0) this._rikuShake--;
-    this._bossBobOffset = Math.sin(this._age * 0.04) * 5;
+    if (this._bossShake  > 0) this._bossShake--;
+    if (this._rikuShake  > 0) this._rikuShake--;
+    if (this._phaseFlash > 0) this._phaseFlash--;
+    // Boss bob speed increases with phase
+    const bobSpeed = this._bossPhase === 3 ? 0.09 : this._bossPhase === 2 ? 0.06 : 0.04;
+    this._bossBobOffset = Math.sin(this._age * bobSpeed) * (this._bossPhase >= 2 ? 9 : 5);
 
     this.slashParticles.forEach(p => p.update());
     this.slashParticles = this.slashParticles.filter(p => !p.isDead());
@@ -554,7 +638,33 @@ class BattleEngine {
     this.slashParticles.forEach(p => p.draw(ctx));
     this.damagePops.forEach(p => p.draw(ctx));
 
-    // Combo badge
+    // ── Phase change flash overlay ──────────────────────────────
+    if (this._phaseFlash > 0) {
+      const alpha = (this._phaseFlash / 80) * 0.35;
+      ctx.fillStyle = this._bossPhase === 3
+        ? `rgba(255,23,68,${alpha})`
+        : `rgba(255,111,0,${alpha})`;
+      ctx.fillRect(0, 0, this.W, this.H);
+
+      // Phase banner
+      if (this._phaseFlash > 40) {
+        const bannerAlpha = (this._phaseFlash - 40) / 40;
+        ctx.save();
+        ctx.globalAlpha = bannerAlpha;
+        ctx.font        = `bold ${Math.min(32, this.W * 0.065)}px "Comic Sans MS", system-ui`;
+        ctx.textAlign   = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle   = this._bossPhase === 3 ? '#FF1744' : '#FF8F00';
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 12;
+        ctx.fillText(
+          this._bossPhase === 3 ? '🔥 BERSERK MODE! 🔥' : '💢 BOSS RAGE! 💢',
+          this.W / 2, this.H / 2,
+        );
+        ctx.restore();
+      }
+    }
+
+    // ── Combo badge ─────────────────────────────────────────────
     if (this._combo >= 2 && this.state === 'idle') {
       const pulse = 0.8 + 0.2 * Math.sin(this._age * 0.2);
       ctx.save();
@@ -565,6 +675,34 @@ class BattleEngine {
       ctx.shadowColor = '#FF6F00';
       ctx.shadowBlur  = 8;
       ctx.fillText(`🔥 COMBO ×${this._combo}`, this.W - 12, 90);
+      ctx.restore();
+    }
+
+    // ── Special attack ready badge ───────────────────────────────
+    if (this._specialReady && this.state === 'idle') {
+      const pulse = 0.7 + 0.3 * Math.sin(this._age * 0.3);
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.font        = `bold 18px "Comic Sans MS", system-ui`;
+      ctx.fillStyle   = '#FF4081';
+      ctx.textAlign   = 'left';
+      ctx.shadowColor = '#FF1744'; ctx.shadowBlur = 10;
+      ctx.fillText(`✨ SPECIAL READY!`, 12, 90);
+      ctx.restore();
+    }
+
+    // ── Boss phase indicator ─────────────────────────────────────
+    if (this._bossPhase >= 2) {
+      const phaseColor = this._bossPhase === 3 ? '#FF1744' : '#FF8F00';
+      const phaseLabel = this._bossPhase === 3 ? '🔥 BERSERK' : '💢 RAGE';
+      ctx.save();
+      ctx.font      = 'bold 12px "Comic Sans MS", system-ui';
+      ctx.fillStyle = phaseColor;
+      ctx.textAlign = 'center';
+      ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+      const alpha = 0.6 + 0.4 * Math.sin(this._age * 0.18);
+      ctx.globalAlpha = alpha;
+      ctx.fillText(phaseLabel, Math.round(this.W * 0.72), Math.round(this.H * 0.04));
       ctx.restore();
     }
   }
@@ -644,9 +782,24 @@ class BattleEngine {
     if (sp && sp.complete && sp.naturalWidth > 0) {
       ctx.save();
       ctx.scale(-1, 1);
+      // Phase 3: red glow filter
+      if (this._bossPhase === 3) {
+        ctx.shadowColor = '#FF1744';
+        ctx.shadowBlur  = 30 + Math.sin(this._age * 0.18) * 12;
+      } else if (this._bossPhase === 2) {
+        ctx.shadowColor = '#FF8F00';
+        ctx.shadowBlur  = 16 + Math.sin(this._age * 0.15) * 6;
+      }
       ctx.drawImage(sp, -bW / 2, -bH / 2, bW, bH);
       ctx.restore();
-      if (hpPct < 0.3) {
+      if (this._bossPhase >= 2) {
+        const phaseAlpha = (this._bossPhase === 3 ? 0.32 : 0.18) *
+                           (0.6 + 0.4 * Math.sin(this._age * 0.22));
+        ctx.globalAlpha = phaseAlpha;
+        ctx.fillStyle   = this._bossPhase === 3 ? '#FF1744' : '#FF8F00';
+        ctx.beginPath(); ctx.ellipse(0, 0, bW / 2, bH / 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if (hpPct < 0.3) {
         ctx.globalAlpha = 0.28 * (0.6 + 0.4 * Math.sin(this._age * 0.25));
         ctx.fillStyle   = '#F44336';
         ctx.beginPath(); ctx.ellipse(0, 0, bW / 2, bH / 2, 0, 0, Math.PI * 2); ctx.fill();

@@ -14,6 +14,8 @@ const R_GROUND_H   = 90;    // height of ground strip at canvas bottom
 const R_PLAYER_SCR = 0.28;  // fraction of canvas width where player is pinned
 const R_GRAVITY    = 0.65;
 const R_JUMP_VEL   = -17.0;
+const R_JUMP_CUT   = 0.45;  // vy multiplier on early jump release (variable height)
+const R_JUMP_HOLD  = 12;    // frames of grace window for variable jump
 const R_ACCEL      = 0.55;  // px/frame² acceleration
 const R_MAX_SPD    = 6.0;   // max run speed
 const R_FRICTION   = 0.78;  // velocity multiplier when no key held
@@ -21,6 +23,12 @@ const R_BOOST_DUR  = 240;   // frames of speed boost after full-word collect
 const R_COIN_R     = 28;    // coin collision radius
 const R_LEVEL_W    = 7800;  // world width per level (px)
 const R_WORDS_PER_STAGE = 8; // words shown in each runner level
+
+// ── Scoring constants ─────────────────────────────────────────
+const R_SCORE_COIN    = 50;
+const R_SCORE_STOMP   = 100;
+const R_SCORE_BLOCK   = 200;
+const R_SCORE_POWERUP = 500;
 
 // ─────────────────────────────────────────────────────────────
 // RUNNER PLAYER
@@ -43,6 +51,13 @@ class RunnerPlayer {
     this._frame  = 0;
     this._runCycle = 0;
     this._facing = 1;   // 1=right, -1=left
+    // Variable jump
+    this._holdingJump  = false;
+    this._jumpFrames   = 0;
+    // Power-up state
+    this.powerUp = null;    // 'rice-bowl' | 'chili' | 'shield-item' | null
+    this._powerUpTimer = 0;
+    // Score & lives tracked externally by RunnerEngine
   }
 
   get alive() { return this.hp > 0; }
@@ -54,14 +69,25 @@ class RunnerPlayer {
 
   jump(audio) {
     if (!this.onGround) return;
-    this.vy       = R_JUMP_VEL;
-    this.onGround = false;
+    this.vy          = R_JUMP_VEL;
+    this.onGround    = false;
+    this._holdingJump = true;
+    this._jumpFrames  = 0;
     if (audio) audio.sfxJump();
+  }
+
+  // Call when jump button is released — cuts the jump short (variable height)
+  releaseJump() {
+    if (this._holdingJump && this.vy < 0) {
+      this.vy *= R_JUMP_CUT;
+    }
+    this._holdingJump = false;
   }
 
   // Move horizontally based on input keys; called before physics
   applyInput(keys, levelW) {
-    const boost = this.boostFrames > 0 ? 1.5 : 1;
+    const chiliBoost = this.powerUp === 'chili' ? 1.35 : 1;
+    const boost = (this.boostFrames > 0 ? 1.5 : 1) * chiliBoost;
     if (keys.right) {
       this.vx = Math.min(this.vx + R_ACCEL * boost, R_MAX_SPD * boost);
       this._facing = 1;
@@ -80,6 +106,14 @@ class RunnerPlayer {
   update(groundY, platforms) {
     if (this.boostFrames > 0) this.boostFrames--;
     if (this.invincible > 0)  this.invincible--;
+    if (this._powerUpTimer > 0) this._powerUpTimer--;
+    if (this._powerUpTimer === 0 && this.powerUp === 'chili') { this.powerUp = null; }
+
+    // Variable jump: track hold duration
+    if (this._holdingJump) {
+      this._jumpFrames++;
+      if (this._jumpFrames > R_JUMP_HOLD) this._holdingJump = false;
+    }
 
     this.vy = Math.min(this.vy + R_GRAVITY, 20);
     this.y += this.vy;
@@ -617,6 +651,353 @@ class EndFlag {
 }
 
 // ─────────────────────────────────────────────────────────────
+// MOVING PLATFORM
+// Oscillates horizontally or vertically — classic Mario challenge.
+// ─────────────────────────────────────────────────────────────
+class MovingPlatform extends RunnerPlatform {
+  constructor(worldX, worldY, w, style, moveType, amplitude, speed = 0.022) {
+    super(worldX, worldY, w, style);
+    this._moveType  = moveType;   // 'h' | 'v'
+    this._amplitude = amplitude;
+    this._speed     = speed;
+    this._originX   = worldX;
+    this._originY   = worldY;
+    this._phase     = Math.random() * Math.PI * 2;
+    this._age       = 0;
+  }
+
+  update() {
+    this._age++;
+    const t = this._age * this._speed + this._phase;
+    if (this._moveType === 'h') {
+      this.worldX = this._originX + Math.sin(t) * this._amplitude;
+    } else {
+      this.worldY = this._originY + Math.sin(t) * this._amplitude;
+      this.sy     = this.worldY;
+    }
+  }
+
+  // Override to also update screen X with latest worldX
+  updateScreen(camOffsetX) {
+    this.sx = this.worldX - camOffsetX;
+  }
+
+  draw(ctx) {
+    super.draw(ctx, null); // use fallback (no tile sprites for moving)
+    // Pulsing outline to hint movement
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,220,0,0.55)';
+    ctx.lineWidth   = 2;
+    ctx.beginPath();
+    ctx.roundRect(this.sx, this.sy, this.w, this.h, 6);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// QUESTION BLOCK — hit from below to reveal bonus
+// ─────────────────────────────────────────────────────────────
+class QuestionBlock {
+  constructor(worldX, worldY, rewardType = 'coin') {
+    this.worldX     = worldX;
+    this.worldY     = worldY;
+    this.w          = 44;
+    this.h          = 44;
+    this.sx         = 0;
+    this.sy         = worldY;
+    this.rewardType = rewardType; // 'coin' | 'powerup'
+    this.hit        = false;
+    this._age       = 0;
+    this._bounce    = 0;  // upward bounce animation frames
+  }
+
+  updateScreen(camOffsetX) {
+    this.sx = this.worldX - camOffsetX;
+    this.sy = this.worldY - (this._bounce > 0 ? Math.sin(this._bounce / 8 * Math.PI) * 10 : 0);
+  }
+
+  update() {
+    this._age++;
+    if (this._bounce > 0) this._bounce--;
+  }
+
+  isVisible(canvasW) { return this.sx + this.w > -20 && this.sx < canvasW + 20; }
+
+  // Returns true if player hits block from below (head-butt)
+  checkHit(player) {
+    if (this.hit) return false;
+    const pb = player.bounds();
+    // Player must be moving upward and head must touch block bottom
+    const headY = pb.y;
+    const headX = pb.x;
+    return player.vy < 0 &&
+      headX + pb.w > this.sx + 4 &&
+      headX < this.sx + this.w - 4 &&
+      Math.abs(headY - (this.sy + this.h)) < 12;
+  }
+
+  activate() {
+    if (this.hit) return null;
+    this.hit     = true;
+    this._bounce = 8;
+    return this.rewardType;
+  }
+
+  draw(ctx) {
+    const x = this.sx;
+    const y = this.sy;
+    const w = this.w;
+    const h = this.h;
+    const pulse = this.hit ? 0 : 0.08 * Math.sin(this._age * 0.15);
+
+    ctx.save();
+    // Block body
+    const grad = ctx.createLinearGradient(x, y, x, y + h);
+    if (this.hit) {
+      grad.addColorStop(0, '#8D6E63');
+      grad.addColorStop(1, '#5D4037');
+    } else {
+      grad.addColorStop(0, '#FFD54F');
+      grad.addColorStop(0.5, '#FFA000');
+      grad.addColorStop(1, '#E65100');
+    }
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 6); ctx.fill();
+
+    // Dark border with 3D shadow
+    ctx.strokeStyle = this.hit ? '#3E2723' : '#7f5700';
+    ctx.lineWidth   = 2.5;
+    ctx.stroke();
+    // Inner highlight
+    ctx.fillStyle = this.hit ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.35)';
+    ctx.fillRect(x + 4, y + 3, w - 8, 5);
+    // Bottom dark shadow
+    ctx.fillStyle = this.hit ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x + 3, y + h - 6, w - 6, 4);
+
+    // Question mark or empty
+    if (!this.hit) {
+      ctx.font        = `bold ${Math.round(h * 0.58 + pulse * h)}px "Comic Sans MS", system-ui`;
+      ctx.textAlign   = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle   = '#fff';
+      ctx.shadowColor = '#FF6F00'; ctx.shadowBlur = 6;
+      ctx.fillText('?', x + w / 2, y + h / 2 + 1);
+      ctx.shadowBlur  = 0;
+    } else {
+      // Spent block shows empty circle
+      ctx.fillStyle   = 'rgba(255,255,255,0.15)';
+      ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, w * 0.22, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// POWER-UP ITEM — emerges from question block and bounces
+// Types: 'rice-bowl' (+1 HP), 'chili' (speed boost 8s), 'shield-item' (one-hit shield)
+// ─────────────────────────────────────────────────────────────
+class PowerUpItem {
+  constructor(worldX, worldY, type) {
+    this.worldX    = worldX;
+    this.worldY    = worldY;
+    this.w         = 36;
+    this.h         = 36;
+    this.type      = type;
+    this.vx        = 1.8;
+    this.vy        = -5;
+    this.sx        = 0;
+    this.collected = false;
+    this._age      = 0;
+    this._gravity  = 0.45;
+    this._groundY  = worldY;   // set by engine after creation
+  }
+
+  updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
+
+  update(groundY, platforms) {
+    if (this.collected) return;
+    this._age++;
+    this.vy = Math.min(this.vy + this._gravity, 14);
+    this.worldY += this.vy;
+    this.worldX += this.vx;
+
+    // Ground bounce
+    const gnd = groundY - this.h;
+    if (this.worldY >= gnd) {
+      this.worldY = gnd;
+      this.vy     = -4.5;  // bounce
+    }
+
+    // Platform bounce
+    for (const p of platforms) {
+      if (this.vy >= 0) {
+        const prevBottom = this.worldY - this.vy + this.h;
+        const curBottom  = this.worldY + this.h;
+        const sx = this.sx;
+        if (prevBottom <= p.sy + 4 && curBottom >= p.sy &&
+            sx + this.w > p.sx && sx < p.sx + p.w) {
+          this.worldY = p.sy - this.h;
+          this.vy = -4.5;
+        }
+      }
+    }
+
+    // Reverse on world edges
+    if (this.worldX < 0) this.vx = Math.abs(this.vx);
+  }
+
+  isVisible(canvasW) { return this.sx + this.w > -10 && this.sx < canvasW + 10; }
+
+  checkCollect(player) {
+    if (this.collected) return false;
+    const pb = player.bounds();
+    return pb.x < this.sx + this.w && pb.x + pb.w > this.sx &&
+           pb.y < this.worldY + this.h && pb.y + pb.h > this.worldY;
+  }
+
+  draw(ctx) {
+    if (this.collected) return;
+    const x = this.sx;
+    const y = this.worldY;
+    const w = this.w;
+    const h = this.h;
+    const bob = Math.sin(this._age * 0.14) * 2;
+
+    ctx.save();
+    // Glow
+    ctx.shadowColor = this.type === 'rice-bowl' ? '#FF4081' :
+                      this.type === 'chili'      ? '#FF6D00' : '#00B0FF';
+    ctx.shadowBlur  = 12;
+
+    // Icon based on type
+    ctx.font         = `${Math.round(h * 0.85)}px serif`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    const icon = this.type === 'rice-bowl' ? '🍚' :
+                 this.type === 'chili'      ? '🌶️' : '🛡️';
+    ctx.fillText(icon, x + w / 2, y + h / 2 + bob);
+
+    // Highlight ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth   = 2;
+    ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2 + bob, w / 2 + 3, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// FLYING ENEMY — Pterodactyl that patrols at height
+// Can be defeated by jumping on top; can't be stomped from front.
+// ─────────────────────────────────────────────────────────────
+class FlyingEnemy {
+  constructor(worldX, worldY, sprite = null) {
+    this.worldX   = worldX;
+    this.w        = 68;
+    this.h        = 52;
+    this._baseY   = worldY;
+    this.worldY   = worldY;
+    this.vx       = -1.4;
+    this.defeated = false;
+    this.deathFrames = 0;
+    this.sx       = 0;
+    this._age     = 0;
+    this._bobPhase = Math.random() * Math.PI * 2;
+    this._sprite  = sprite;
+    this._patrolMin = worldX - 160;
+    this._patrolMax = worldX + 160;
+  }
+
+  updateScreen(camOffsetX) {
+    this.sx = this.worldX - camOffsetX;
+  }
+
+  update() {
+    if (this.defeated) { this.deathFrames++; return; }
+    this._age++;
+    this.worldX += this.vx;
+    this.worldY = this._baseY + Math.sin(this._age * 0.055 + this._bobPhase) * 28;
+    if (this.worldX < this._patrolMin) this.vx =  Math.abs(this.vx);
+    if (this.worldX > this._patrolMax) this.vx = -Math.abs(this.vx);
+  }
+
+  checkCollision(player) {
+    if (this.defeated) return null;
+    const pb = player.bounds();
+    const mb = { x: this.sx + 6, y: this.worldY + 6, w: this.w - 12, h: this.h - 12 };
+    if (pb.x >= mb.x + mb.w || pb.x + pb.w <= mb.x ||
+        pb.y >= mb.y + mb.h || pb.y + pb.h <= mb.y) return null;
+    // Stomp: player falling, feet above enemy center
+    if (player.vy >= 0 && pb.y + pb.h < mb.y + mb.h / 2 + 8) return 'stomp';
+    return 'hit';
+  }
+
+  defeat() { this.defeated = true; this.deathFrames = 0; }
+  isGone()  { return this.defeated && this.deathFrames > 50; }
+
+  draw(ctx) {
+    if (this.isGone()) return;
+    const x = this.sx;
+    const y = this.worldY;
+    const wingFlap = Math.sin(this._age * 0.22) * 0.4;
+
+    ctx.save();
+    if (this.defeated) {
+      ctx.globalAlpha = Math.max(0, 1 - this.deathFrames / 50);
+      ctx.translate(x + this.w / 2, y + this.h / 2);
+      ctx.rotate(this.deathFrames * 0.18);
+    } else {
+      ctx.translate(x + this.w / 2, y + this.h / 2);
+      ctx.scale(this.vx < 0 ? 1 : -1, 1);
+    }
+
+    // Body (pterodactyl silhouette in canvas)
+    const c = this.defeated ? '#444' : '#7B1FA2';
+    // Wings
+    ctx.fillStyle = this.defeated ? '#333' : '#9C27B0';
+    ctx.save();
+    ctx.rotate(-wingFlap);
+    ctx.beginPath();
+    ctx.moveTo(-8, 0);
+    ctx.bezierCurveTo(-32, -22, -40, -8, -36, 8);
+    ctx.bezierCurveTo(-24, 12, -10, 6, -8, 0);
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.rotate(wingFlap);
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.bezierCurveTo(32, -22, 40, -8, 36, 8);
+    ctx.bezierCurveTo(24, 12, 10, 6, 8, 0);
+    ctx.fill();
+    ctx.restore();
+    // Body
+    ctx.fillStyle = c;
+    ctx.beginPath(); ctx.ellipse(0, 2, 14, 10, 0, 0, Math.PI * 2); ctx.fill();
+    // Head
+    ctx.beginPath(); ctx.ellipse(16, -4, 10, 8, 0.3, 0, Math.PI * 2); ctx.fill();
+    // Beak
+    ctx.fillStyle = '#FF8F00';
+    ctx.beginPath();
+    ctx.moveTo(22, -4); ctx.lineTo(34, -2); ctx.lineTo(22, 2);
+    ctx.closePath(); ctx.fill();
+    // Eye
+    if (!this.defeated) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(19, -5, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#212121';
+      ctx.beginPath(); ctx.arc(20, -5, 2, 0, Math.PI * 2); ctx.fill();
+    }
+    // Crest on head
+    ctx.fillStyle = this.defeated ? '#333' : '#CE93D8';
+    ctx.beginPath(); ctx.moveTo(12, -10); ctx.lineTo(20, -16); ctx.lineTo(22, -10); ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // PARTICLE SYSTEM (coins, stomps, boost)
 // ─────────────────────────────────────────────────────────────
 class RunnerParticle {
@@ -657,51 +1038,74 @@ class RunnerParticle {
 
 // ─────────────────────────────────────────────────────────────
 // LEVEL GENERATOR
-// Produces platform, coin, minion, and flag positions for a stage.
+// Produces platform, coin, minion, flag, moving platforms,
+// question blocks, power-ups, and flying enemies for a stage.
 // ─────────────────────────────────────────────────────────────
-// sprites is passed through so MinionDino can use the 'minion-dino' image
 function generateRunnerLevel(stageData, canvasH, sprites) {
   const groundY    = canvasH - R_GROUND_H;
   const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
   const difficulty = stageData.id - 1;             // 0-5
   const minionSp   = sprites && sprites['minion-dino'];
-  const minionSize = Math.max(96, Math.round(canvasH * 0.22));  // scale to canvas
-  const items      = { platforms: [], coins: [], minions: [], flag: null };
+  const minionSize = Math.max(96, Math.round(canvasH * 0.22));
+  const items      = {
+    platforms: [], coins: [], minions: [], flag: null,
+    movingPlatforms: [], questionBlocks: [], powerUps: [], flyingEnemies: [],
+  };
 
   let wx = 800; // start X (safe spawn zone)
 
   words.forEach((word, wIdx) => {
-    const elevated    = wIdx % 2 === 1;  // alternate ground / platform
-    const platformH   = elevated ? groundY - 100 - (difficulty * 12) : groundY;
-    const coinY       = platformH - Math.round(canvasH * 0.22);  // float at ~chest height above platform
+    const elevated    = wIdx % 2 === 1;
+    const movingPlat  = difficulty >= 2 && wIdx % 3 === 2; // use moving platform
+    const platformH   = elevated ? groundY - 100 - (difficulty * 14) : groundY;
+    const coinY       = platformH - Math.round(canvasH * 0.22);
     const platW       = word.phonemes.length * 82 + 60;
-
-    // Dojo blocks every 3rd platform, rice bundles otherwise
-    const style = (wIdx + difficulty) % 3 === 2 ? 'dojo' : 'rice';
+    const style       = (wIdx + difficulty) % 3 === 2 ? 'dojo' : 'rice';
 
     if (elevated) {
-      items.platforms.push(new RunnerPlatform(wx - 30, platformH - 20, platW, style));
+      if (movingPlat) {
+        // Moving platform: horizontal on even, vertical on odd within moving
+        const moveType = wIdx % 2 === 0 ? 'h' : 'v';
+        items.movingPlatforms.push(new MovingPlatform(wx - 30, platformH - 20, platW, style, moveType, 55));
+      } else {
+        items.platforms.push(new RunnerPlatform(wx - 30, platformH - 20, platW, style));
+      }
     }
 
-    // Place a coin for each phoneme of this word
+    // Question blocks — placed above some ground sections
+    if (wIdx % 3 === 1) {
+      const blockX = wx + Math.floor(word.phonemes.length / 2) * 82;
+      const blockY = elevated ? platformH - 100 : groundY - Math.round(canvasH * 0.42);
+      const rewardType = wIdx % 6 === 1 ? 'powerup' : 'coin';
+      items.questionBlocks.push(new QuestionBlock(blockX, blockY, rewardType));
+    }
+
+    // Phoneme coins
     word.phonemes.forEach((ph, pIdx) => {
       items.coins.push(new PhonemeCoin(
-        wx + pIdx * 82,
-        coinY,
-        ph,
-        wIdx, pIdx,
-        word.hint,
-        word.word,
+        wx + pIdx * 82, coinY, ph, wIdx, pIdx, word.hint, word.word,
       ));
     });
 
-    // Minion on every 2nd word section
+    // Ground minions on even sections (skip first)
     if (wIdx % 2 === 0 && wIdx > 0) {
       const mx = wx + word.phonemes.length * 40;
-      items.minions.push(new MinionDino(mx, groundY, elevated ? items.platforms[items.platforms.length - 1] : null, minionSp, minionSize));
+      items.minions.push(new MinionDino(
+        mx, groundY,
+        elevated ? (items.platforms[items.platforms.length - 1] ||
+                    items.movingPlatforms[items.movingPlatforms.length - 1]) : null,
+        minionSp, minionSize,
+      ));
     }
 
-    // In higher stages, add an extra platform mid-gap for challenge
+    // Flying enemies in stage 2+, every 3 word sections
+    if (difficulty >= 1 && wIdx % 3 === 2) {
+      const flyX = wx + platW / 2;
+      const flyY = elevated ? platformH - 80 : groundY - Math.round(canvasH * 0.38);
+      items.flyingEnemies.push(new FlyingEnemy(flyX, flyY, null));
+    }
+
+    // Extra bridge platform in higher stages
     if (difficulty >= 2 && elevated) {
       const bridgeX = wx + platW + 60;
       items.platforms.push(new RunnerPlatform(bridgeX, platformH, 70, 'dojo'));
@@ -728,41 +1132,48 @@ class RunnerEngine {
     this.sprites    = sprites || {};
     this.audio      = audio;
 
-    // Use logical dimensions passed from SlashGame (avoids DPR physical-pixel bug)
     const W = logicalW || canvas.clientWidth  || 480;
     const H = logicalH || canvas.clientHeight || 700;
     this.W  = W;
     this.H  = H;
 
     this.groundY   = H - R_GROUND_H;
-    this.camOffset = 0;    // world X that maps to screen X=0
+    this.camOffset = 0;
 
-    // Generate level (pass sprites so MinionDino gets the sprite reference)
-    const level    = generateRunnerLevel(stageData, H, sprites);
-    this.platforms = level.platforms;
-    this.coins     = level.coins;
-    this.minions   = level.minions;
-    this.flag      = level.flag;
-    this.levelW    = level.totalWidth;
+    const level           = generateRunnerLevel(stageData, H, sprites);
+    this.platforms        = level.platforms;
+    this.movingPlatforms  = level.movingPlatforms;
+    this.questionBlocks   = level.questionBlocks;
+    this.powerUps         = level.powerUps;     // items spawned at runtime
+    this.flyingEnemies    = level.flyingEnemies;
+    this.coins            = level.coins;
+    this.minions          = level.minions;
+    this.flag             = level.flag;
+    this.levelW           = level.totalWidth;
 
-    // Player
     this.player    = new RunnerPlayer(this.groundY, W, H, sprites);
 
-    // Input state
     this.keys = { right: false, left: false, jump: false };
     this._bindInput();
 
-    // State tracking
     this.collectedPhonemes = [];
     this.collectedCoinIds  = new Set();
     this.completedWords    = [];
     this.particles         = [];
-    this.timeLeft          = 120; // two minutes — manual control needs more time
+    this.timeLeft          = 120;
     this._timeTick         = 0;
 
-    // Parallax offsets for background
+    // Score, lives, combo stomp
+    this.score      = 0;
+    this.lives      = 3;
+    this._stompCombo = 0;
+    this._stompComboTimer = 0;
+    this._screenShake = 0;   // frames of screen shake remaining
+
+    // Parallax layers
     this._bgOffset1 = 0;
     this._bgOffset2 = 0;
+    this._bgOffset3 = 0;
     this._age       = 0;
 
     this.done    = false;
@@ -783,23 +1194,26 @@ class RunnerEngine {
     };
     hold(leftBtn,  'left');
     hold(rightBtn, 'right');
-    // Jump: trigger on press, not hold
-    const doJump = (e) => { e.preventDefault(); this.player.jump(this.audio); jumpBtn.classList.add('held'); };
-    const endJump = () => jumpBtn.classList.remove('held');
-    jumpBtn.addEventListener('touchstart', doJump, { passive: false });
-    jumpBtn.addEventListener('touchend',   endJump);
+    // Jump: variable height — press to jump, release to cut
+    const doJump  = (e) => { e.preventDefault(); this.player.jump(this.audio); jumpBtn.classList.add('held'); };
+    const endJump = (e) => { e.preventDefault(); this.player.releaseJump(); jumpBtn.classList.remove('held'); };
+    jumpBtn.addEventListener('touchstart', doJump,  { passive: false });
+    jumpBtn.addEventListener('touchend',   endJump, { passive: false });
+    jumpBtn.addEventListener('touchcancel',endJump);
     jumpBtn.addEventListener('mousedown',  doJump);
     jumpBtn.addEventListener('mouseup',    endJump);
   }
 
   // ── Keyboard input ────────────────────────────────────────────
   _bindInput() {
+    const isJump = (e) => e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW';
     this._kd = (e) => {
-      if (e.code === 'Space' || e.code === 'ArrowUp'    || e.code === 'KeyW') { e.preventDefault(); this.player.jump(this.audio); }
+      if (isJump(e)) { e.preventDefault(); this.player.jump(this.audio); }
       if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.keys.right = true; }
       if (e.code === 'ArrowLeft'  || e.code === 'KeyA') { this.keys.left  = true; }
     };
     this._ku = (e) => {
+      if (isJump(e)) { this.player.releaseJump(); }  // variable jump
       if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = false;
       if (e.code === 'ArrowLeft'  || e.code === 'KeyA') this.keys.left  = false;
     };
@@ -817,32 +1231,63 @@ class RunnerEngine {
     if (this.done) return;
     this._age++;
 
-    // Manual player movement — apply keyboard/D-pad input
+    // Screen shake decay
+    if (this._screenShake > 0) this._screenShake--;
+    // Stomp combo timer
+    if (this._stompComboTimer > 0) this._stompComboTimer--;
+    else if (this._stompComboTimer === 0) this._stompCombo = 0;
+
     this.player.applyInput(this.keys, this.levelW);
 
-    // Camera follow: keep player pinned at R_PLAYER_SCR fraction of screen
     const pinX = Math.round(this.W * R_PLAYER_SCR);
     this.camOffset = Math.max(0, Math.min(this.player.worldX - pinX, this.levelW - this.W));
     this.player.screenX = this.player.worldX - this.camOffset;
 
-    // Background parallax driven by player speed
     const spd = Math.abs(this.player.vx);
-    this._bgOffset1 = (this._bgOffset1 + spd * 0.15) % this.W;
-    this._bgOffset2 = (this._bgOffset2 + spd * 0.40) % this.W;
+    this._bgOffset1 = (this._bgOffset1 + spd * 0.08) % this.W;
+    this._bgOffset2 = (this._bgOffset2 + spd * 0.22) % this.W;
+    this._bgOffset3 = (this._bgOffset3 + spd * 0.50) % this.W;
 
     // Timer
     this._timeTick++;
     if (this._timeTick >= 60) { this._timeTick = 0; this.timeLeft--; }
     if (this.timeLeft <= 0) { this._end('timeout'); return; }
 
-    // Update platform screen positions
+    // Update static + moving platforms
     this.platforms.forEach(p => p.updateScreen(this.camOffset));
+    this.movingPlatforms.forEach(mp => { mp.update(); mp.updateScreen(this.camOffset); });
 
-    // Player physics (pass visible platforms only)
-    const visPlat = this.platforms.filter(p => p.isVisible(this.W));
+    // All platforms for physics
+    const allPlat = [...this.platforms, ...this.movingPlatforms];
+    const visPlat = allPlat.filter(p => p.isVisible(this.W));
     this.player.update(this.groundY, visPlat);
 
-    if (!this.player.alive) { this._end('death'); return; }
+    if (!this.player.alive) {
+      this._screenShake = 20;
+      this._end('death');
+      return;
+    }
+
+    // Question blocks — head-butt detection
+    this.questionBlocks.forEach(qb => {
+      qb.update();
+      qb.updateScreen(this.camOffset);
+      if (qb.checkHit(this.player)) {
+        const reward = qb.activate();
+        this.player.vy = Math.abs(this.player.vy) * 0.5; // small push down
+        this.score += R_SCORE_BLOCK;
+        if (reward === 'coin') {
+          this.particles.push(new RunnerParticle(qb.sx + qb.w / 2, qb.sy - 16, '🪙', '#FFD700', -5));
+          this.particles.push(new RunnerParticle(qb.sx + qb.w / 2, qb.sy - 10, `+${R_SCORE_BLOCK}`, '#FFF176', -3));
+        } else if (reward === 'powerup') {
+          const types = ['rice-bowl', 'chili', 'shield-item'];
+          const t = types[this.stage.id % types.length];
+          const pu = new PowerUpItem(qb.worldX + qb.w / 2, qb.worldY - 36, t);
+          pu._groundY = this.groundY;
+          this.powerUps.push(pu);
+        }
+      }
+    });
 
     // Coins
     this.coins.forEach(c => {
@@ -851,10 +1296,22 @@ class RunnerEngine {
       if (!c.collected && c.checkCollect(this.player)) {
         c.collected = true;
         this._onCoinCollect(c);
+        this.score += R_SCORE_COIN;
       }
     });
 
-    // Minions
+    // Power-up items
+    this.powerUps.forEach(pu => {
+      pu.updateScreen(this.camOffset);
+      pu.update(this.groundY, visPlat);
+      if (!pu.collected && pu.checkCollect(this.player)) {
+        pu.collected = true;
+        this._onPowerUpCollect(pu);
+      }
+    });
+    this.powerUps = this.powerUps.filter(pu => !pu.collected || pu._age < 5);
+
+    // Ground minions
     this.minions.forEach(m => {
       m.updateScreen(this.camOffset);
       m.update();
@@ -862,18 +1319,29 @@ class RunnerEngine {
         const res = m.checkCollision(this.player);
         if (res === 'stomp') {
           m.defeat();
-          this.player.vy = -8;   // bounce
-          if (this.audio) this.audio.sfxStomp();
-          this.particles.push(new RunnerParticle(m.sx, m.groundY, '💥', '#FF8F00'));
+          this._doStomp(m.sx, m.groundY);
         } else if (res === 'hit') {
-          const took = this.player.takeDamage(this.audio);
-          if (took) {
-            this.particles.push(new RunnerParticle(this.player.screenX, this.player.y, '-❤️', '#e53935', -4));
-          }
+          this._doPlayerHit();
         }
       }
     });
     this.minions = this.minions.filter(m => !m.isGone());
+
+    // Flying enemies
+    this.flyingEnemies.forEach(fe => {
+      fe.updateScreen(this.camOffset);
+      fe.update();
+      if (!fe.defeated) {
+        const res = fe.checkCollision(this.player);
+        if (res === 'stomp') {
+          fe.defeat();
+          this._doStomp(fe.sx + fe.w / 2, fe.worldY);
+        } else if (res === 'hit') {
+          this._doPlayerHit();
+        }
+      }
+    });
+    this.flyingEnemies = this.flyingEnemies.filter(fe => !fe.isGone());
 
     // Flag
     this.flag.updateScreen(this.camOffset);
@@ -882,6 +1350,53 @@ class RunnerEngine {
     // Particles
     this.particles.forEach(p => p.update());
     this.particles = this.particles.filter(p => !p.isDead());
+  }
+
+  // ── Stomp an enemy (shared for ground + flying) ──────────────
+  _doStomp(ex, ey) {
+    this._stompCombo++;
+    this._stompComboTimer = 90; // frames to chain next stomp
+    const bounceVy = this._stompCombo >= 3 ? -14 : -8;
+    this.player.vy = bounceVy;
+    const bonus = this._stompCombo * R_SCORE_STOMP;
+    this.score += bonus;
+    if (this.audio) this.audio.sfxStomp();
+    this.particles.push(new RunnerParticle(ex, ey, '💥', '#FF8F00'));
+    if (this._stompCombo >= 2) {
+      this.particles.push(new RunnerParticle(ex, ey - 30,
+        `COMBO ×${this._stompCombo}!`, '#FFD700', -5));
+    }
+    this.particles.push(new RunnerParticle(ex, ey - 10,
+      `+${bonus}`, '#FFF176', -3, 1));
+  }
+
+  // ── Player takes a hit ────────────────────────────────────────
+  _doPlayerHit() {
+    const took = this.player.takeDamage(this.audio);
+    if (took) {
+      this._screenShake = 12;
+      this._stompCombo  = 0;
+      this.particles.push(new RunnerParticle(
+        this.player.screenX, this.player.y, '-❤️', '#e53935', -4));
+    }
+  }
+
+  // ── Power-up collection ───────────────────────────────────────
+  _onPowerUpCollect(pu) {
+    this.score += R_SCORE_POWERUP;
+    if (pu.type === 'rice-bowl') {
+      this.player.hp = Math.min(this.player.hp + 1, 5); // +1 HP up to 5
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY, '❤️ +1 HP!', '#FF4081', -5));
+    } else if (pu.type === 'chili') {
+      this.player.powerUp = 'chili';
+      this.player._powerUpTimer = 480; // 8 seconds
+      this.player.activateBoost();
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY, '🌶️ SPEED UP!', '#FF6D00', -5));
+    } else if (pu.type === 'shield-item') {
+      this.player.shieldActive = true;
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY, '🛡️ SHIELD!', '#00B0FF', -5));
+    }
+    if (this.audio) this.audio.sfxBoost();
   }
 
   // ── Coin collection logic ────────────────────────────────────
@@ -938,77 +1453,130 @@ class RunnerEngine {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.W, this.H);
 
+    // Screen shake transform
+    let shakeX = 0, shakeY = 0;
+    if (this._screenShake > 0) {
+      shakeX = (Math.random() - 0.5) * this._screenShake * 1.2;
+      shakeY = (Math.random() - 0.5) * this._screenShake * 0.7;
+    }
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+
     this._drawBackground(ctx);
     this._drawGround(ctx);
 
-    // Platforms
+    // Moving platforms
+    this.movingPlatforms.filter(mp => mp.isVisible(this.W)).forEach(mp => mp.draw(ctx));
+
+    // Static platforms
     this.platforms.filter(p => p.isVisible(this.W)).forEach(p => p.draw(ctx, this.sprites.tiles));
+
+    // Question blocks
+    this.questionBlocks.filter(qb => qb.isVisible(this.W)).forEach(qb => qb.draw(ctx));
 
     // Coins
     this.coins.filter(c => c.isVisible(this.W) && !c.collected).forEach(c => c.draw(ctx, this.audio));
 
-    // Minions (sprites passed for fallback-free rendering)
+    // Power-up items
+    this.powerUps.filter(pu => pu.isVisible(this.W) && !pu.collected).forEach(pu => pu.draw(ctx));
+
+    // Ground minions
     this.minions.forEach(m => m.draw(ctx));
+
+    // Flying enemies
+    this.flyingEnemies.forEach(fe => fe.draw(ctx));
 
     // Flag
     if (this.flag.sx < this.W + 100 && this.flag.sx > -100) {
       this.flag.draw(ctx, this.groundY);
     }
 
-    // Player
+    // Player (on top of everything)
     this.player.draw(ctx, this.sprites);
 
     // Particles
     this.particles.forEach(p => p.draw(ctx));
 
-    // HUD
+    ctx.restore(); // end screen-shake transform
+
+    // HUD always drawn without shake
     this._drawHUD(ctx);
   }
 
-  // ── Background ───────────────────────────────────────────────
+  // ── Background ── 3-layer parallax ───────────────────────────
   _drawBackground(ctx) {
     const bgKey = this.stage.bg;
     const bgSp  = bgKey && this.sprites[bgKey];
     if (bgSp && bgSp.complete && bgSp.naturalWidth > 0) {
-      // Draw real background image, scrolling slowly (two copies tiled)
-      const imgW = bgSp.naturalWidth;
-      const imgH = bgSp.naturalHeight;
+      const imgW  = bgSp.naturalWidth;
+      const imgH  = bgSp.naturalHeight;
       const drawH = this.H;
-      const drawW = drawH * (imgW / imgH);   // maintain aspect ratio
-      // Parallax offset (slow scroll tied to cam)
-      const off = (this._bgOffset1 * 0.4) % drawW;
-      for (let x = -off; x < this.W + drawW; x += drawW) {
+      const drawW = drawH * (imgW / imgH);
+      // Layer 1: far background scrolls very slowly
+      const off1 = (this._bgOffset1 * 0.2) % drawW;
+      for (let x = -off1; x < this.W + drawW; x += drawW) {
         ctx.drawImage(bgSp, x, 0, drawW, drawH);
       }
+
+      // Layer 2: mid-ground tinted overlay for depth
+      ctx.save();
+      ctx.globalAlpha = 0.0;  // bg image is clear; add procedural mid layer below
+      ctx.restore();
+
+      // Procedural mid layer: semi-transparent hills scrolling at mid speed
+      this._drawParallaxLayer(ctx, this._bgOffset2, 0.45, 5, 90, 'rgba(0,0,0,0.07)', 0.35);
+      // Procedural near layer: darker, faster
+      this._drawParallaxLayer(ctx, this._bgOffset3, 0.80, 7, 55, 'rgba(0,0,0,0.13)', 0.50);
       return;
     }
 
     // ── Procedural fallback ───────────────────────────────────
     const colors = this.stage.skyColor || ['#87CEEB', '#c5e8f8'];
     const sky = ctx.createLinearGradient(0, 0, 0, this.H);
-    sky.addColorStop(0, colors[0]);
+    sky.addColorStop(0,   colors[0]);
     sky.addColorStop(0.7, colors[1]);
-    sky.addColorStop(1, this.stage.groundColor || '#5a8a3c');
+    sky.addColorStop(1,   this.stage.groundColor || '#5a8a3c');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.W, this.H);
 
-    // Far hills
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    for (let i = 0; i < 5; i++) {
-      const hx = ((i * 220 - this._bgOffset1 * 0.3) % (this.W + 220)) - 110;
-      const hr = 80 + (i * 37 % 60);
+    // Layer 1: far clouds / snow peaks
+    this._drawMountainLayer(ctx, this._bgOffset1, 0.28, 7, 110, 'rgba(255,255,255,0.10)');
+    // Layer 2: mid hills
+    this._drawMountainLayer(ctx, this._bgOffset2, 0.45, 5,  80, 'rgba(0,100,0,0.18)');
+    // Layer 3: near trees
+    this._drawTreeLayer(ctx, this._bgOffset3);
+  }
+
+  _drawParallaxLayer(ctx, offset, scroll, count, radius, color, yFrac) {
+    ctx.fillStyle = color;
+    for (let i = 0; i < count; i++) {
+      const hx = ((i * (this.W / count * 1.6) - offset * scroll) % (this.W + radius * 2)) - radius;
+      const hy = this.groundY * yFrac + (i * 37 % 30);
       ctx.beginPath();
-      ctx.arc(hx, this.groundY - 5, hr, 0, Math.PI * 2);
+      ctx.arc(hx, hy, radius + (i * 23 % 35), 0, Math.PI * 2);
       ctx.fill();
     }
-    // Mid trees
-    ctx.fillStyle = 'rgba(0,80,0,0.18)';
-    for (let i = 0; i < 8; i++) {
-      const tx = ((i * 130 - this._bgOffset2 * 0.5) % (this.W + 60)) - 30;
-      const th = 50 + (i * 23 % 40);
+  }
+
+  _drawMountainLayer(ctx, offset, scroll, count, radius, color) {
+    ctx.fillStyle = color;
+    for (let i = 0; i < count; i++) {
+      const gap = (this.W + radius * 2) / count;
+      const hx  = ((i * gap - offset * scroll) % (this.W + radius * 2)) - radius;
+      ctx.beginPath();
+      ctx.arc(hx, this.groundY - 5, radius + (i * 37 % 50), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  _drawTreeLayer(ctx, offset) {
+    ctx.fillStyle = 'rgba(0,80,0,0.20)';
+    for (let i = 0; i < 9; i++) {
+      const tx = ((i * 138 - offset * 0.8) % (this.W + 60)) - 30;
+      const th = 52 + (i * 23 % 42);
       ctx.fillRect(tx, this.groundY - th, 14, th);
       ctx.beginPath();
-      ctx.arc(tx + 7, this.groundY - th, 22, 0, Math.PI * 2);
+      ctx.arc(tx + 7, this.groundY - th, 24, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -1045,68 +1613,109 @@ class RunnerEngine {
     ctx.save();
     ctx.textBaseline = 'top';
 
-    // ── Background strip (semi-transparent pill at top) ──────
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.beginPath(); ctx.roundRect(6, 6, this.W - 12, 46, 14); ctx.fill();
+    // ── Top HUD bar ─────────────────────────────────────────────
+    ctx.fillStyle = 'rgba(0,0,0,0.52)';
+    ctx.beginPath(); ctx.roundRect(6, 6, this.W - 12, 52, 14); ctx.fill();
 
-    // ── HP hearts (top-left)
-    ctx.font = '28px serif';
-    for (let i = 0; i < 3; i++) {
-      ctx.globalAlpha = i < p.hp ? 1 : 0.22;
-      ctx.fillText('❤️', 18 + i * 36, 11);
+    // ── HP hearts (top-left) — up to 5 hearts
+    const maxHp = Math.max(3, p.hp);
+    ctx.font = '24px serif';
+    for (let i = 0; i < Math.max(3, maxHp); i++) {
+      ctx.globalAlpha = i < p.hp ? 1 : 0.18;
+      ctx.fillText('❤️', 12 + i * 28, 13);
     }
     ctx.globalAlpha = 1;
 
+    // Active power-up icon next to HP
+    if (p.powerUp) {
+      const puIcon = p.powerUp === 'chili' ? '🌶️' : p.powerUp === 'shield-item' ? '🛡️' : '';
+      if (puIcon) {
+        ctx.font = '20px serif';
+        ctx.fillText(puIcon, 12 + Math.max(3, maxHp) * 28 + 4, 16);
+      }
+    }
+    if (p.shieldActive) {
+      ctx.font = '20px serif';
+      ctx.globalAlpha = 0.7 + 0.3 * Math.sin(this._age * 0.2);
+      ctx.fillText('🛡️', 12 + Math.max(3, maxHp) * 28 + 4, 16);
+      ctx.globalAlpha = 1;
+    }
+
     // ── Timer (top-center)
     const urgent = this.timeLeft < 15;
-    ctx.font      = `bold ${urgent ? '28px' : '24px'} "Comic Sans MS", system-ui`;
-    ctx.fillStyle = urgent ? '#FF5252' : '#FFFFFF';
-    ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.font        = `bold ${urgent ? '26px' : '22px'} "Comic Sans MS", system-ui`;
+    ctx.fillStyle   = urgent ? '#FF5252' : '#FFFFFF';
+    ctx.textAlign   = 'center';
+    ctx.shadowColor = urgent ? '#FF000088' : 'rgba(0,0,0,0.8)';
     ctx.shadowBlur  = 5;
-    if (urgent) { ctx.fillStyle = '#FF5252'; ctx.shadowColor = '#FF000088'; }
-    ctx.fillText(`⏱ ${this.timeLeft}s`, this.W / 2, 12);
-    ctx.shadowBlur = 0;
+    if (urgent && this._age % 20 < 10) ctx.fillStyle = '#FF8A80'; // blink
+    ctx.fillText(`⏱ ${this.timeLeft}s`, this.W / 2, 14);
+    ctx.shadowBlur  = 0;
+
+    // ── Score (top-center, below timer)
+    ctx.font      = `bold 13px "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFD700';
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 2;
+    ctx.fillText(`⭐ ${this.score.toLocaleString()}`, this.W / 2, 38);
+    ctx.shadowBlur  = 0;
 
     // ── Coins collected (top-right)
     const total     = this.coins.length;
     const collected = this.coins.filter(c => c.collected).length;
-    ctx.font      = 'bold 18px "Comic Sans MS", system-ui';
+    ctx.font      = 'bold 16px "Comic Sans MS", system-ui';
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'right';
     ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 3;
-    ctx.fillText(`🪙 ${collected}/${total}`, this.W - 16, 13);
-    ctx.shadowBlur = 0;
+    ctx.fillText(`🪙 ${collected}/${total}`, this.W - 12, 14);
+    // Lives remaining
+    ctx.font      = '14px "Comic Sans MS", system-ui';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`✕${this.lives} 🍙`, this.W - 12, 34);
+    ctx.shadowBlur  = 0;
     ctx.restore();
 
     // ── Boost bar (center-bottom when active)
     if (p.boostFrames > 0) {
       const pct = p.boostFrames / R_BOOST_DUR;
-      const bw  = 200;
+      const bw  = Math.min(220, this.W * 0.45);
       const bx  = (this.W - bw) / 2;
-      const by  = this.H - R_GROUND_H - 38;
+      const by  = this.H - R_GROUND_H - 40;
 
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.beginPath(); ctx.roundRect(bx - 2, by - 2, bw + 4, 18, 6); ctx.fill();
 
       const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
-      grad.addColorStop(0,   '#FFD700');
-      grad.addColorStop(0.5, '#FF6F00');
-      grad.addColorStop(1,   '#FFD700');
+      grad.addColorStop(0,   p.powerUp === 'chili' ? '#FF6D00' : '#FFD700');
+      grad.addColorStop(0.5, p.powerUp === 'chili' ? '#FF8F00' : '#FF6F00');
+      grad.addColorStop(1,   p.powerUp === 'chili' ? '#FF6D00' : '#FFD700');
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.roundRect(bx, by, bw * pct, 14, 4); ctx.fill();
 
       ctx.fillStyle   = '#fff';
       ctx.font        = 'bold 12px "Comic Sans MS", system-ui';
       ctx.textAlign   = 'center';
-      ctx.fillText('⚡ BLEND BOOST!', this.W / 2, by - 6);
+      ctx.fillText(p.powerUp === 'chili' ? '🌶️ CHILI RUSH!' : '⚡ BLEND BOOST!',
+        this.W / 2, by - 7);
     }
 
-    // Stage label (bottom-left)
-    ctx.font      = '13px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    // ── Stomp combo badge (right side)
+    if (this._stompCombo >= 2 && this._stompComboTimer > 0) {
+      const pulse = 0.8 + 0.2 * Math.sin(this._age * 0.25);
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.font        = `bold ${14 + this._stompCombo * 3}px "Comic Sans MS", system-ui`;
+      ctx.fillStyle   = '#FFD700';
+      ctx.textAlign   = 'right';
+      ctx.shadowColor = '#FF6F00'; ctx.shadowBlur = 8;
+      ctx.fillText(`👟 STOMP ×${this._stompCombo}`, this.W - 12, this.H - R_GROUND_H - 48);
+      ctx.restore();
+    }
+
+    // ── Stage label (bottom-left)
+    ctx.font      = '12px system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.textAlign = 'left';
-    ctx.fillText(`Stage ${this.stage.id}: ${this.stage.name}`, 12, this.H - R_GROUND_H - 10);
+    ctx.fillText(`Stage ${this.stage.id}: ${this.stage.name}`, 10, this.H - R_GROUND_H - 10);
 
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign    = 'left';
