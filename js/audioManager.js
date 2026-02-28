@@ -9,6 +9,16 @@ const CONSONANT_BLENDS = new Set([
   'sc','sk','sl','sm','sn','sp','st','sw','tr','tw',
   'scr','spl','spr','str','shr','thr',
 ]);
+
+// Phonetic TTS text for individual letter sounds (not letter names).
+// "c" → "kuh", "a" → "ah", not "see" / "ay".
+const LETTER_SOUNDS_TTS = {
+  'a': 'ah',  'b': 'buh', 'c': 'kuh', 'd': 'duh', 'e': 'eh',
+  'f': 'fuh', 'g': 'guh', 'h': 'huh', 'i': 'ih',  'j': 'juh',
+  'k': 'kuh', 'l': 'luh', 'm': 'muh', 'n': 'nuh', 'o': 'oh',
+  'p': 'puh', 'q': 'kwuh','r': 'ruh', 's': 'suh', 't': 'tuh',
+  'u': 'uh',  'v': 'vuh', 'w': 'wuh', 'x': 'ks',  'y': 'yuh', 'z': 'zuh',
+};
 // Priority order:
 //   1. Loaded audio file (assets/audio/phonemes/<ph>.mp3 etc.)
 //   2. Web Speech API (TTS) — always available in modern browsers
@@ -138,7 +148,11 @@ class AudioManager {
     const safe = phoneme.replace(/[^a-z]/gi, '').toLowerCase();
     const key  = `ph_${safe}`;
     if (!this._playBuffer(key)) {
-      this._speak(phoneme, 0.75, 1.2);
+      // Use phonetic sound ("kuh") not letter name ("see") for single letters
+      const ttsText = (safe.length === 1 && LETTER_SOUNDS_TTS[safe])
+                       ? LETTER_SOUNDS_TTS[safe]
+                       : phoneme;
+      this._speak(ttsText, 0.75, 1.2);
     }
   }
 
