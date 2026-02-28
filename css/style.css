@@ -670,13 +670,18 @@ body {
     left: 0;
     right: 0;
     z-index: 20;
-    background: transparent;
-    /* No top border or shadow — content floats on canvas */
+    /* Very subtle gradient scrim so UI pops without a solid panel */
+    background: linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(0,0,0,0.18) 30%,
+        rgba(0,0,0,0.30) 100%
+    );
     padding: 0 0 10px;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    max-height: 60dvh;
+    max-height: 55dvh;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -889,6 +894,7 @@ body {
     z-index: 6;
     background: transparent;
     padding: 8px 16px;
+    /* no sticky panel background — buttons have their own dark bg */
 }
 .be-btn {
     height: 48px;
@@ -912,20 +918,22 @@ body {
 .be-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
 
 .be-btn-clear {
-    background: rgba(244,67,54,0.22);
-    color: #FF8A80;
-    border: 1.5px solid rgba(244,67,54,0.4);
+    background: rgba(180,30,20,0.75);
+    color: #FFB3AE;
+    border: 1.5px solid rgba(244,67,54,0.7);
     font-size: 0.95rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
-.be-btn-clear:hover { background: rgba(244,67,54,0.4); border-color: #F44336; color: #fff; }
+.be-btn-clear:hover { background: rgba(244,67,54,0.9); border-color: #F44336; color: #fff; }
 
 .be-btn-hear {
-    background: rgba(33,150,243,0.22);
-    color: #82CFFF;
-    border: 1.5px solid rgba(33,150,243,0.4);
+    background: rgba(20,90,180,0.75);
+    color: #A8DAFF;
+    border: 1.5px solid rgba(33,150,243,0.7);
     font-size: 0.95rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
-.be-btn-hear:hover { background: rgba(33,150,243,0.45); color: #fff; }
+.be-btn-hear:hover { background: rgba(33,150,243,0.9); color: #fff; }
 
 
 /* ── Feedback flash ──────────────────────────────────────── */

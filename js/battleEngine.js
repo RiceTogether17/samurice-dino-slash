@@ -582,12 +582,14 @@ class BattleEngine {
       ctx.fillStyle = 'rgba(0,0,0,0.30)';
       ctx.fillRect(0, 0, this.W, this.H);
     } else {
+      // Fallback: gradient fills the full canvas so no bare areas show
       const colors = this.stage.skyColor || ['#1565C0', '#42A5F5'];
-      const grad   = ctx.createLinearGradient(0, 0, 0, this.H * 0.75);
-      grad.addColorStop(0, colors[0]);
-      grad.addColorStop(1, colors[1]);
+      const grad   = ctx.createLinearGradient(0, 0, 0, this.H);
+      grad.addColorStop(0,    colors[0]);
+      grad.addColorStop(0.65, colors[1]);
+      grad.addColorStop(1,    colors[1]);
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, this.W, this.H * 0.75);
+      ctx.fillRect(0, 0, this.W, this.H);
       ctx.fillStyle = 'rgba(255,255,255,0.07)';
       ctx.fillRect(0, this.H * 0.55, this.W, 30);
     }
@@ -602,17 +604,17 @@ class BattleEngine {
 
   _drawFloor(ctx) {
     const fy = this._floorY();
-    const shadow = ctx.createLinearGradient(0, fy - 14, 0, fy + 22);
-    shadow.addColorStop(0, 'rgba(0,0,0,0.42)');
-    shadow.addColorStop(1, 'rgba(0,0,0,0)');
+    // Soft shadow above the ground line
+    const shadow = ctx.createLinearGradient(0, fy - 18, 0, fy + 4);
+    shadow.addColorStop(0, 'rgba(0,0,0,0.0)');
+    shadow.addColorStop(1, 'rgba(0,0,0,0.45)');
     ctx.fillStyle = shadow;
-    ctx.fillRect(0, fy - 14, this.W, 36);
+    ctx.fillRect(0, fy - 18, this.W, 22);
+    // Thin grass strip only — background image shows through below
     ctx.fillStyle = this.stage.groundColor || '#2E7D32';
-    ctx.fillRect(0, fy, this.W, this.H - fy);
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-    ctx.fillRect(0, fy, this.W, 4);
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.fillRect(0, fy + 4, this.W, 10);
+    ctx.fillRect(0, fy, this.W, 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.30)';
+    ctx.fillRect(0, fy, this.W, 2);
   }
 
   _drawBoss(ctx) {
