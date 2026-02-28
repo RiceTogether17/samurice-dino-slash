@@ -59,16 +59,13 @@ class AudioManager {
     };
     this._sfxKeys = Object.keys(sfxFiles);
     this._sfxKeys.forEach(k => this._preload(`sfx/${k}`, sfxFiles[k]));
+
+    // Music player (created after ctx)
+    this._music = this.ctx ? new MusicPlayer(this.ctx) : null;
   }
 
   // ── Mute toggle ─────────────────────────────────────────────
   get isMuted() { return this.muted; }
-  toggleMute() {
-    this.muted = !this.muted;
-    localStorage.setItem('samurice_muted', this.muted);
-    if (this.muted && window.speechSynthesis) speechSynthesis.cancel();
-    return this.muted;
-  }
 
   // ── Resume AudioContext (required after user gesture) ────────
   _resume() {
@@ -203,7 +200,195 @@ class AudioManager {
   sfxHurt()     { if (!this._playBuffer('sfx/riku-hurt')){ this._tone(200,'square',0.14,0.45); } }
   sfxJump()     { if (!this._playBuffer('sfx/jump'))     { this._tone(520,'sine',0.1,0.3); this._tone(660,'sine',0.07,0.2,0.07); } }
   sfxStomp()    { if (!this._playBuffer('sfx/stomp'))    { this._tone(300,'square',0.1,0.4); this._tone(150,'sawtooth',0.08,0.3,0.06); } }
-  sfxWrongBlend(){ this._tone(180,'sawtooth',0.2,0.4); }
+  sfxWrongBlend()  { this._tone(180,'sawtooth',0.2,0.4); }
+  sfxGroundPound() { this._tone(70,'square',0.22,0.65); this._tone(170,'sawtooth',0.12,0.40,0.06); }
+  sfxWallJump()    { this._tone(380,'triangle',0.10,0.30); this._tone(560,'sine',0.08,0.22,0.06); }
+  sfxStarPower()   { [523,659,784,880,1047,1319].forEach((f,i) => this._tone(f,'sine',0.10,0.30,i*0.055)); }
+  sfxSpring()      { this._tone(280,'sine',0.04,0.35); this._tone(540,'sine',0.07,0.30,0.05); this._tone(820,'sine',0.08,0.25,0.09); }
+  sfxCheckpoint()  { [523,659,784].forEach((f,i) => this._tone(f,'sine',0.14,0.32,i*0.09)); }
+
+  // ── Music control ─────────────────────────────────────────────
+  startMusic(stageId) {
+    if (this.muted || !this._music) return;
+    this._resume();
+    this._music.play(stageId);
+  }
+  stopMusic() { if (this._music) this._music.stop(); }
+
+  toggleMute() {
+    this.muted = !this.muted;
+    localStorage.setItem('samurice_muted', this.muted);
+    if (this.muted) {
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      this.stopMusic();
+    }
+    return this.muted;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// MUSIC PLAYER — procedural chiptune stage music
+// Schedules Web Audio API oscillators ahead of time via AudioContext.currentTime
+// so there are zero gaps or glitches even at high CPU load.
+// ─────────────────────────────────────────────────────────────
+class MusicPlayer {
+  // 6 stage configs. melody/bass are indices into scale[]; drums is a hit pattern.
+  // The 8th-note grid has 16 steps per loop (2 bars of 8 eighth notes each).
+  static STAGES = [
+    // Stage 1 — CVC words: bright & simple (C major, 128 BPM)
+    { bpm: 128, rootHz: 261.63, scale: [0,2,4,5,7,9,11],
+      melody: [0,4,7,4, 5,4,2,0, 0,4,7,9, 7,5,4,2],
+      bass:   [0,0,7,7, 5,5,4,4],
+      drums:  [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0] },
+    // Stage 2 — digraphs sh/ch/th: swing feel (D pentatonic, 136 BPM)
+    { bpm: 136, rootHz: 293.66, scale: [0,2,4,7,9],
+      melody: [0,2,4,2, 4,3,2,0, 0,2,4,4, 3,2,0,2],
+      bass:   [0,0,4,4, 2,2,3,3, 0,0,4,4, 2,2,3,3],
+      drums:  [1,0,1,1, 1,0,1,0, 1,0,1,1, 1,0,1,0] },
+    // Stage 3 — blends bl/cl/fl: energetic (E natural minor, 144 BPM)
+    { bpm: 144, rootHz: 164.81, scale: [0,2,3,5,7,8,10],
+      melody: [0,3,5,7, 5,3,2,0, 7,5,3,2, 0,3,7,5],
+      bass:   [0,0,5,5, 3,3,7,7, 0,0,5,5, 3,3,7,7],
+      drums:  [1,0,1,0, 1,1,1,0, 1,0,1,0, 1,1,1,0] },
+    // Stage 4 — vowel teams ai/ee/oa: smooth (F major, 140 BPM)
+    { bpm: 140, rootHz: 174.61, scale: [0,2,4,5,7,9,11],
+      melody: [4,7,9,7, 5,4,2,0, 4,5,7,5, 2,4,5,4],
+      bass:   [0,0,7,7, 5,5,2,2, 0,0,7,7, 5,5,2,2],
+      drums:  [1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1] },
+    // Stage 5 — r-controlled: adventurous (G minor, 150 BPM)
+    { bpm: 150, rootHz: 196.00, scale: [0,2,3,5,7,8,10],
+      melody: [0,2,3,5, 7,8,7,5, 3,2,0,3, 5,7,5,3],
+      bass:   [0,0,3,3, 7,7,5,5, 0,0,3,3, 7,7,5,5],
+      drums:  [1,1,0,1, 1,0,1,1, 1,1,0,1, 1,0,1,1] },
+    // Stage 6 — complex patterns: epic (A aeolian, 160 BPM)
+    { bpm: 160, rootHz: 220.00, scale: [0,2,3,5,7,8,10],
+      melody: [0,3,5,7, 8,7,5,3, 0,3,5,8, 7,5,3,0],
+      bass:   [0,0,3,3, 7,7,5,5, 0,0,3,3, 7,7,5,5],
+      drums:  [1,0,1,1, 1,1,1,0, 1,0,1,1, 1,1,1,0] },
+  ];
+
+  constructor(ctx) {
+    this._ctx     = ctx;
+    this._gain    = null;
+    this._playing = false;
+    this._beatIdx = 0;
+    this._nextBeat = 0;
+    this._cfg     = null;
+    this._timer   = null;
+    if (ctx) {
+      this._gain = ctx.createGain();
+      this._gain.gain.value = 0.20;
+      this._gain.connect(ctx.destination);
+    }
+  }
+
+  play(stageId) {
+    if (!this._ctx) return;
+    this.stop();
+    this._cfg      = MusicPlayer.STAGES[Math.min(stageId - 1, 5)];
+    this._playing  = true;
+    this._beatIdx  = 0;
+    this._nextBeat = this._ctx.currentTime + 0.08;
+    this._schedule();
+  }
+
+  stop() {
+    this._playing = false;
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+  }
+
+  setVolume(v) {
+    if (this._gain && this._ctx) {
+      this._gain.gain.linearRampToValueAtTime(
+        Math.max(0, Math.min(1, v)), this._ctx.currentTime + 0.15);
+    }
+  }
+
+  _schedule() {
+    if (!this._playing) return;
+    const LOOKAHEAD = 0.18; // seconds of audio to schedule ahead
+    const INTERVAL  = 55;   // ms between scheduler wakeups
+    while (this._nextBeat < this._ctx.currentTime + LOOKAHEAD) {
+      this._scheduleBeat(this._nextBeat);
+      // Advance by one 8th-note duration
+      this._nextBeat += (60 / this._cfg.bpm) / 2;
+      this._beatIdx   = (this._beatIdx + 1) % 16;
+    }
+    this._timer = setTimeout(() => this._schedule(), INTERVAL);
+  }
+
+  _scheduleBeat(t) {
+    const { scale, melody, bass, drums, rootHz, bpm } = this._cfg;
+    const bi      = this._beatIdx;
+    const beatSec = 60 / bpm;
+
+    // ── Melody (square wave, one octave above root) ──────────
+    const mNote = melody[bi] % scale.length;
+    const mHz   = rootHz * 2 * Math.pow(2, scale[mNote] / 12);
+    this._playNote(mHz, 'square', beatSec * 0.40, 0.08, t);
+
+    // ── Bass (triangle, one octave below root, every quarter note) ──
+    if (bi % 2 === 0) {
+      const bIdx = Math.floor(bi / 2) % bass.length;
+      const bHz  = rootHz * 0.5 * Math.pow(2, scale[bass[bIdx] % scale.length] / 12);
+      this._playNote(bHz, 'triangle', beatSec * 0.85, 0.13, t);
+    }
+
+    // ── Drums ────────────────────────────────────────────────
+    if (drums[bi]) {
+      const type = (bi === 0 || bi === 8)  ? 'kick'  :
+                   (bi === 4 || bi === 12) ? 'snare' : 'hihat';
+      this._playDrum(type, t);
+    }
+  }
+
+  _playNote(hz, type, dur, vol, t) {
+    if (!this._gain) return;
+    const osc  = this._ctx.createOscillator();
+    const gain = this._ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this._gain);
+    osc.type = type;
+    osc.frequency.setValueAtTime(hz, t);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(vol, t + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + Math.max(dur, 0.04));
+    osc.start(t);
+    osc.stop(t + Math.max(dur, 0.04) + 0.01);
+  }
+
+  _playDrum(type, t) {
+    if (!this._gain) return;
+    const gain = this._ctx.createGain();
+    gain.connect(this._gain);
+    if (type === 'kick') {
+      const osc = this._ctx.createOscillator();
+      osc.connect(gain);
+      osc.frequency.setValueAtTime(165, t);
+      osc.frequency.exponentialRampToValueAtTime(38, t + 0.09);
+      gain.gain.setValueAtTime(0.42, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      osc.start(t); osc.stop(t + 0.15);
+    } else {
+      // White noise buffer for snare / hi-hat
+      const bufSize = Math.ceil(this._ctx.sampleRate * 0.12);
+      const buf  = this._ctx.createBuffer(1, bufSize, this._ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+      const src = this._ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(gain);
+      if (type === 'snare') {
+        gain.gain.setValueAtTime(0.22, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+        src.start(t); src.stop(t + 0.12);
+      } else { // hihat
+        gain.gain.setValueAtTime(0.07, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.022);
+        src.start(t); src.stop(t + 0.03);
+      }
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
