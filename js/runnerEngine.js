@@ -102,7 +102,10 @@ class RunnerPlayer {
     if (this.y > groundY + 200) this.hp = 0;
 
     this._frame++;
-    if (this._frame % 7 === 0) this._runCycle = (this._runCycle + 1) % 6;
+    // Walk cycle advances only while actually moving on the ground
+    if (this._frame % 7 === 0 && this.onGround && Math.abs(this.vx) >= 0.5) {
+      this._runCycle = (this._runCycle + 1) % 4;
+    }
   }
 
   // screenX is set externally by RunnerEngine from camOffset
@@ -138,43 +141,48 @@ class RunnerPlayer {
     };
   }
 
-  // Draw Riku — cycles walk frames on ground, jump frame in air
+  // Draw Riku — idle when still, walk cycle when moving, jump sprite in air
   draw(ctx, sprites) {
     const x = this.screenX || 0;
     const y = this.y;
 
-    // Sprite selection: idle → walk-1..4 → run cycle on ground, jump sprite in air
-    const GROUND_CYCLE = ['riku-idle', 'riku-walk-1', 'riku-walk-2', 'riku-walk-3', 'riku-walk-4', 'riku-run'];
+    // State-based sprite selection (no attack/run sprite in runner mode)
     let sp;
     if (!this.onGround) {
-      sp = sprites && (sprites['riku-jump-1'] || sprites['riku-run']);
+      sp = sprites && sprites['riku-jump-1'];
+    } else if (Math.abs(this.vx) < 0.5) {
+      sp = sprites && sprites['riku-idle'];
     } else {
-      const key = GROUND_CYCLE[this._runCycle % GROUND_CYCLE.length];
-      sp = sprites && (sprites[key] || sprites['riku-run'] || sprites['riku-idle']);
+      sp = sprites && sprites[`riku-walk-${this._runCycle + 1}`];
+    }
+    // Fallback chain: never show undefined
+    if (!sp || !sp.complete || !sp.naturalWidth) {
+      sp = (sprites && (sprites['riku-idle'] || sprites['riku-run'])) || null;
     }
 
     ctx.save();
 
-    // Invincibility indicator: red glow — Riku stays fully visible (no transparency)
+    // Invincibility: red glow, Riku stays fully opaque
     if (this.invincible > 0 && Math.floor(this.invincible / 6) % 2 === 0) {
       ctx.shadowColor = '#FF4444';
       ctx.shadowBlur  = 22;
     }
 
-    // Facing direction: flip sprite when moving left
+    // Flip sprite when facing left
     if (this._facing === -1) {
       ctx.translate(x + this.w, 0);
       ctx.scale(-1, 1);
     }
     const dx = this._facing === -1 ? 0 : x;
 
-    // Always draw at full opacity regardless of previous canvas state
+    // Always draw at full opacity
     ctx.globalAlpha = 1;
 
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      // Squash-and-stretch on ground only; jump uses natural scale
-      const scaleX = this.onGround ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
-      const scaleY = this.onGround ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
+      // Subtle squash-and-stretch while walking; natural scale when idle or jumping
+      const walking = this.onGround && Math.abs(this.vx) >= 0.5;
+      const scaleX = walking ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
+      const scaleY = walking ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
       // Use sprite's natural aspect ratio so Riku is never stretched
       const ratio  = sp.naturalWidth / sp.naturalHeight;
       const dh     = this.h * scaleY;

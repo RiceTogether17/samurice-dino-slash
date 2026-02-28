@@ -118,11 +118,37 @@ class SlashGame {
 
   // ── Sprite loading ───────────────────────────────────────────
   _loadSprites() {
-    Object.entries(SLASH_SPRITES).forEach(([key, url]) => {
+    const entries = Object.entries(SLASH_SPRITES);
+    let loaded = 0;
+    this._spritesReady = false;
+    entries.forEach(([key, url]) => {
       const img = new Image();
-      img.src   = url;
+      const done = () => { if (++loaded >= entries.length) this._spritesReady = true; };
+      img.onload  = done;
+      img.onerror = done;
+      img.src = url;
       this.sprites[key] = img;
     });
+  }
+
+  // ── Loading screen (shown while sprites stream in) ───────────
+  _drawLoading() {
+    const ctx = this.ctx;
+    const W = this.W; const H = this.H;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, W, H);
+    const dots = ['', '.', '..', '...'][Math.floor(this._age / 12) % 4];
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${Math.min(32, W * 0.07)}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle   = '#FFD700';
+    ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 12;
+    ctx.fillText(`🍚 Loading${dots}`, W / 2, H / 2 - 20);
+    ctx.shadowBlur  = 0;
+    ctx.font = `${Math.min(15, W * 0.034)}px system-ui`;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText("Preparing Riku's moves!", W / 2, H / 2 + 22);
   }
 
   // ── Menu input (keyboard) ─────────────────────────────────────
@@ -293,6 +319,9 @@ class SlashGame {
   _loop() {
     this._rafId = requestAnimationFrame(this._loop);
     this._age++;
+
+    // Block all states until sprites are ready; show loading screen instead
+    if (!this._spritesReady) { this._drawLoading(); return; }
 
     switch (this.state) {
       case 'menu':         this._updateMenu();       break;
