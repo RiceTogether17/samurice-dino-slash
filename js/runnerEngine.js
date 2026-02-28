@@ -102,7 +102,7 @@ class RunnerPlayer {
     if (this.y > groundY + 200) this.hp = 0;
 
     this._frame++;
-    if (this._frame % 7 === 0) this._runCycle = (this._runCycle + 1) % 4;
+    if (this._frame % 7 === 0) this._runCycle = (this._runCycle + 1) % 6;
   }
 
   // screenX is set externally by RunnerEngine from camOffset
@@ -143,12 +143,14 @@ class RunnerPlayer {
     const x = this.screenX || 0;
     const y = this.y;
 
+    // Sprite selection: idle → walk-1..4 → run cycle on ground, jump sprite in air
+    const GROUND_CYCLE = ['riku-idle', 'riku-walk-1', 'riku-walk-2', 'riku-walk-3', 'riku-walk-4', 'riku-run'];
     let sp;
     if (!this.onGround) {
-      sp = sprites && (sprites['riku-jump-1'] || sprites['riku-jump'] || sprites['riku-run']);
+      sp = sprites && (sprites['riku-jump-1'] || sprites['riku-run']);
     } else {
-      const frame = (this._runCycle % 4) + 1;
-      sp = sprites && (sprites[`riku-walk-${frame}`] || sprites['riku-run'] || sprites['riku-idle']);
+      const key = GROUND_CYCLE[this._runCycle % GROUND_CYCLE.length];
+      sp = sprites && (sprites[key] || sprites['riku-run'] || sprites['riku-idle']);
     }
 
     ctx.save();
@@ -166,9 +168,13 @@ class RunnerPlayer {
     }
     const dx = this._facing === -1 ? 0 : x;
 
+    // Always draw at full opacity regardless of previous canvas state
+    ctx.globalAlpha = 1;
+
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      const scaleX = this.onGround ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 0.92;
-      const scaleY = this.onGround ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.08;
+      // Squash-and-stretch on ground only; jump uses natural scale
+      const scaleX = this.onGround ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
+      const scaleY = this.onGround ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
       // Use sprite's natural aspect ratio so Riku is never stretched
       const ratio  = sp.naturalWidth / sp.naturalHeight;
       const dh     = this.h * scaleY;
@@ -178,8 +184,6 @@ class RunnerPlayer {
     } else {
       this._drawFallback(ctx, dx, y);
     }
-
-    ctx.globalAlpha = 1;
 
     // Boost glow ring
     if (this.boostFrames > 0) {
@@ -635,7 +639,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
   const difficulty = stageData.id - 1;             // 0-5
   const minionSp   = sprites && sprites['minion-dino'];
-  const minionSize = Math.max(72, Math.round(canvasH * 0.14));  // scale to canvas
+  const minionSize = Math.max(96, Math.round(canvasH * 0.22));  // scale to canvas
   const items      = { platforms: [], coins: [], minions: [], flag: null };
 
   let wx = 800; // start X (safe spawn zone)

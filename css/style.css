@@ -670,20 +670,14 @@ body {
     left: 0;
     right: 0;
     z-index: 20;
-    background: linear-gradient(180deg,
-        rgba(6,4,18,0.88) 0%,
-        rgba(6,4,18,0.98) 15%,
-        rgba(6,4,18,1.00) 100%);
-    border-top: 3px solid #FFD700;
-    box-shadow: 0 -4px 24px rgba(255,215,0,0.22);
-    /* No top padding — controls row handles its own padding */
+    background: transparent;
+    /* No top border or shadow — content floats on canvas */
     padding: 0 0 10px;
     display: flex;
     flex-direction: column;
     gap: 6px;
     max-height: 60dvh;
     overflow-y: auto;
-    /* Smooth momentum scrolling on iOS */
     -webkit-overflow-scrolling: touch;
 }
 .battle-overlay.hidden { display: none; }
@@ -725,8 +719,8 @@ body {
     min-width: 40px;
     height: 44px;
     padding: 0 6px;
-    background: rgba(255,255,255,0.06);
-    border: 2.5px dashed rgba(255,215,0,0.35);
+    background: rgba(0,0,0,0.5);
+    border: 2.5px dashed rgba(255,215,0,0.7);
     border-radius: 10px;
     font-size: 1rem;
     font-family: 'Comic Sans MS', system-ui, sans-serif;
@@ -754,8 +748,8 @@ body {
     justify-content: center;
     flex-wrap: wrap;
     gap: 5px;
-    background: rgba(255,255,255,0.04);
-    border: 1.5px dashed rgba(255,215,0,0.3);
+    background: rgba(0,0,0,0.45);
+    border: 1.5px dashed rgba(255,215,0,0.55);
     border-radius: 12px;
     padding: 4px 8px;
     margin: 0 12px;
@@ -791,7 +785,7 @@ body {
 /* ── Blend timer bar ─────────────────────────────────────── */
 .be-timer-wrap {
     height: 8px;
-    background: rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.4);
     border-radius: 5px;
     overflow: hidden;
     border: 1px solid rgba(255,255,255,0.08);
@@ -814,7 +808,10 @@ body {
     gap: 6px;
     justify-content: center;
     align-items: center;
-    padding: 4px 12px;
+    padding: 6px 12px;
+    background: rgba(0,0,0,0.35);
+    border-radius: 14px;
+    margin: 0 8px;
     /* Scrollable if an extreme number of tiles overflow */
     overflow-y: auto;
     max-height: 130px;
@@ -890,10 +887,8 @@ body {
     position: sticky;
     top: 0;
     z-index: 6;
-    background: rgba(6,4,18,1);
+    background: transparent;
     padding: 8px 16px;
-    border-bottom: 1.5px solid rgba(255,215,0,0.28);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
 }
 .be-btn {
     height: 48px;
