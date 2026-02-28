@@ -179,20 +179,18 @@ class RunnerPlayer {
     ctx.globalAlpha = 1;
 
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      // Subtle squash-and-stretch while walking; natural scale when idle or jumping
       const walking = this.onGround && Math.abs(this.vx) >= 0.5;
-      const scaleX = walking ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
-      const scaleY = walking ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
-      // Walk sprites are 1024×1536 (char fills ~89% of height).
-      // Jump sprite is 1024×1024 (char fills ~82% of height).
-      // Boost jump draw size so the character appears the same visual height as walk.
-      const jumpBoost = this.onGround ? 1.0 : 1.085;
-      const ratio  = sp.naturalWidth / sp.naturalHeight;
-      const dh     = this.h * scaleY * jumpBoost;
-      const dw     = this.h * ratio  * scaleX * jumpBoost;
-      const natW   = this.h * ratio  * jumpBoost;
-      // Anchor at feet (sprite bottom = y + this.h regardless of jumpBoost)
-      ctx.drawImage(sp, dx + (this.w - natW) / 2, y + (this.h - dh), dw, dh);
+      // Squash-and-stretch only while walking
+      const sqX = walking ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
+      const sqY = walking ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.0;
+      // All states draw against the player hitbox (this.w × this.h) so idle /
+      // walk / jump appear the same size.  Jump sprite has ~82% character fill
+      // vs ~89% for walk/idle, so boost it 1.085× to compensate.
+      const boost = this.onGround ? 1.0 : 1.085;
+      const dw = this.w * sqX * boost;
+      const dh = this.h * sqY * boost;
+      // Centre horizontally; anchor at feet (sprite bottom = y + this.h)
+      ctx.drawImage(sp, dx + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
     } else {
       this._drawFallback(ctx, dx, y);
     }
