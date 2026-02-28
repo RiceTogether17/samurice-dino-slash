@@ -27,7 +27,7 @@ const SLASH_SPRITES = {
   // ── Minion dino ───────────────────────────────────────────
   'minion-dino':   'assets/sprites/dino-minion.png',
   // ── Stage bosses ──────────────────────────────────────────
-  'stage-1-rex':    'assets/dinosaurs/stage-1-rex.png',
+  'stage-1-rex':    'assets/dinosaurs/trex.png',
   'stage-1-tri':    'assets/dinosaurs/stage-1-tri.png',
   'stage-2-rapi':   'assets/dinosaurs/stage-2-rapi.png',
   'stage-2-stego':  'assets/dinosaurs/stage-2-stego.png',
@@ -313,88 +313,237 @@ class SlashGame {
   _drawMenu() {
     const ctx = this.ctx;
     const W = this.W; const H = this.H;
+    const t = this._age;
     ctx.clearRect(0, 0, W, H);
+    ctx.textBaseline = 'top';
 
-    // Animated background
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#1a4a0f');
-    grad.addColorStop(0.5, '#2d6a1f');
-    grad.addColorStop(1, '#3d8c2a');
-    ctx.fillStyle = grad;
+    // ── Sky-to-ground gradient background ──────────────────────
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0,    '#0a1e6e');   // deep midnight blue at top
+    sky.addColorStop(0.38, '#1a6bb5');   // bright sky blue
+    sky.addColorStop(0.62, '#4eb34e');   // bright grass green
+    sky.addColorStop(1,    '#27622a');   // rich dark green at bottom
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
-    // Floating rice particles
-    for (let i = 0; i < 8; i++) {
-      const x  = ((i * 137 + this._age * 0.5) % W);
-      const y  = (H - ((this._age * 0.3 + i * 90) % H));
-      ctx.globalAlpha = 0.2 + 0.1 * Math.sin(this._age * 0.05 + i);
-      ctx.font = '18px serif';
+    // ── Twinkling stars in sky half ─────────────────────────────
+    const stars = [
+      { x: 0.12, y: 0.06 }, { x: 0.28, y: 0.03 }, { x: 0.45, y: 0.09 },
+      { x: 0.6,  y: 0.04 }, { x: 0.75, y: 0.08 }, { x: 0.88, y: 0.02 },
+      { x: 0.18, y: 0.15 }, { x: 0.52, y: 0.18 }, { x: 0.82, y: 0.13 },
+      { x: 0.35, y: 0.22 }, { x: 0.7,  y: 0.20 }, { x: 0.05, y: 0.24 },
+    ];
+    stars.forEach((s, i) => {
+      const tw   = 0.6 + 0.4 * Math.sin(t * 0.07 + i * 1.4);
+      const size = 2 + Math.sin(t * 0.05 + i) * 1;
+      ctx.globalAlpha = tw * 0.85;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(s.x * W, s.y * H, size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // ── Distant mountains / clouds ───────────────────────────────
+    const cloudOffX = (t * 0.18) % W;
+    const clouds = [
+      { cx: 0.18, cy: 0.28, rx: 0.08, ry: 0.04 },
+      { cx: 0.52, cy: 0.24, rx: 0.10, ry: 0.05 },
+      { cx: 0.80, cy: 0.30, rx: 0.07, ry: 0.04 },
+    ];
+    clouds.forEach(c => {
+      const cx = ((c.cx * W + cloudOffX) % (W + c.rx * W * 2)) - c.rx * W;
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.beginPath();
+      ctx.ellipse(cx, c.cy * H, c.rx * W, c.ry * H, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx - c.rx * W * 0.5, c.cy * H + c.ry * H * 0.3, c.rx * W * 0.7, c.ry * H * 0.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + c.rx * W * 0.55, c.cy * H + c.ry * H * 0.2, c.rx * W * 0.65, c.ry * H * 0.75, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // ── Rolling green hills at horizon ──────────────────────────
+    const hillY = H * 0.60;
+    ctx.fillStyle = '#2e8b35';
+    ctx.beginPath();
+    ctx.moveTo(0, hillY);
+    for (let x = 0; x <= W; x += 4) {
+      const y = hillY - Math.sin((x / W) * Math.PI * 3 + t * 0.01) * H * 0.07
+                       - Math.sin((x / W) * Math.PI * 5 - t * 0.008) * H * 0.04;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+
+    // ── Ground strip with rice paddy lines ──────────────────────
+    const groundY = H * 0.72;
+    const groundG = ctx.createLinearGradient(0, groundY, 0, H);
+    groundG.addColorStop(0, '#388e3c');
+    groundG.addColorStop(1, '#1b5e20');
+    ctx.fillStyle = groundG;
+    ctx.fillRect(0, groundY, W, H - groundY);
+    ctx.strokeStyle = 'rgba(0,100,0,0.3)';
+    ctx.lineWidth = 2;
+    for (let x = -(t * 0.6 % 40); x < W; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, groundY); ctx.lineTo(x, H); ctx.stroke();
+    }
+
+    // ── Floating rice emojis (background depth layer) ───────────
+    for (let i = 0; i < 10; i++) {
+      const xf = ((i * 173 + t * 0.4) % (W + 40)) - 20;
+      const yf = ((t * 0.25 + i * 80) % H);
+      ctx.globalAlpha = 0.12 + 0.07 * Math.sin(t * 0.04 + i);
+      ctx.font = `${14 + i % 8}px serif`;
       ctx.textAlign = 'center';
-      ctx.fillText('🍚', x, y);
+      ctx.fillText('🍚', xf, yf);
     }
     ctx.globalAlpha = 1;
 
-    // Title panel
-    const panW = Math.min(380, W - 40);
-    const panX = (W - panW) / 2;
-    const panY = H * 0.12;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.beginPath(); ctx.roundRect(panX, panY, panW, H * 0.72, 24); ctx.fill();
-    ctx.strokeStyle = '#FFD700';
+    // ── Central hero card (semi-transparent, frosted glass look) ─
+    const cardW = Math.min(360, W - 32);
+    const cardX = (W - cardW) / 2;
+    const cardY = H * 0.08;
+    const cardH = H * 0.78;
+
+    // Dark gradient card
+    const cardG = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH);
+    cardG.addColorStop(0, 'rgba(5,15,5,0.82)');
+    cardG.addColorStop(1, 'rgba(10,40,10,0.88)');
+    ctx.fillStyle = cardG;
+    ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 28); ctx.fill();
+
+    // Gold border with glow
+    const borderPulse = 0.7 + 0.3 * Math.sin(t * 0.04);
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur  = 18 * borderPulse;
+    ctx.strokeStyle = `rgba(255,215,0,${borderPulse})`;
+    ctx.lineWidth   = 3;
+    ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 28); ctx.stroke();
+    ctx.shadowBlur  = 0;
+
+    // ── Riku sprite — centered, natural aspect ratio ─────────────
+    const riku     = this.sprites['riku-idle'] || this.sprites['riku-run'];
+    const rikuH    = Math.round(cardH * 0.28);
+    const rikuY    = cardY + 16;
+    const bounce   = Math.sin(t * 0.06) * 5;
+    ctx.textAlign  = 'center';
+    if (riku && riku.complete && riku.naturalWidth > 0) {
+      const ratio = riku.naturalWidth / riku.naturalHeight;
+      const rikuW = Math.round(rikuH * ratio);
+      ctx.drawImage(riku, W / 2 - rikuW / 2, rikuY + bounce, rikuW, rikuH);
+    } else {
+      ctx.font = `${rikuH}px serif`;
+      ctx.fillText('🍙', W / 2, rikuY + rikuH * 0.8 + bounce);
+    }
+
+    // ── Game title — big, bold, gold with outline ────────────────
+    const titleY  = rikuY + rikuH + 18 + bounce * 0.3;
+    const titleSz = Math.round(Math.min(36, W * 0.08));
+    ctx.font        = `900 ${titleSz}px "Comic Sans MS", system-ui`;
+    ctx.textAlign   = 'center';
+
+    // Title shadow/outline for readability
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur  = 12;
+    ctx.strokeStyle = '#5d2d00';
+    ctx.lineWidth   = 7;
+    ctx.strokeText('⚔️ Samurice', W / 2, titleY);
+    ctx.strokeText('Dino Slash! 🦕', W / 2, titleY + titleSz + 6);
+
+    const titleGrad = ctx.createLinearGradient(0, titleY, 0, titleY + titleSz * 2);
+    titleGrad.addColorStop(0, '#FFF176');
+    titleGrad.addColorStop(0.5, '#FFD700');
+    titleGrad.addColorStop(1, '#FF8F00');
+    ctx.fillStyle = titleGrad;
+    ctx.fillText('⚔️ Samurice', W / 2, titleY);
+    ctx.fillText('Dino Slash! 🦕', W / 2, titleY + titleSz + 6);
+    ctx.shadowBlur  = 0;
+
+    // ── Subtitle ─────────────────────────────────────────────────
+    const subY = titleY + titleSz * 2 + 22;
+    ctx.font      = `bold ${Math.round(Math.min(13, W * 0.031))}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle = 'rgba(200,240,200,0.82)';
+    ctx.fillText('Phonics Adventure · 6 Stages · Short Vowels → Blends', W / 2, subY);
+
+    // ── Animated dino emojis left/right of card ──────────────────
+    const dinoY  = subY + 22;
+    const dinoA  = Math.sin(t * 0.05) * 0.15;
+    ctx.save();
+    ctx.translate(cardX + 22, dinoY + 14);
+    ctx.rotate(-dinoA);
+    ctx.font = '28px serif'; ctx.textAlign = 'center';
+    ctx.fillText('🦖', 0, 0);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(cardX + cardW - 22, dinoY + 14);
+    ctx.rotate(dinoA);
+    ctx.font = '28px serif'; ctx.textAlign = 'center';
+    ctx.fillText('🦕', 0, 0);
+    ctx.restore();
+
+    // ── Rice power tagline ───────────────────────────────────────
+    const tagY   = dinoY + 36;
+    const tagPul = 0.75 + 0.25 * Math.sin(t * 0.06);
+    ctx.globalAlpha = tagPul;
+    ctx.font      = `bold ${Math.round(Math.min(15, W * 0.036))}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFD700';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 8;
+    ctx.fillText('🍚 Rice Power · Phonics Mastery! 🍚', W / 2, tagY);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+
+    // ── Progress row ─────────────────────────────────────────────
+    const completed = PHONICS_DATA.stageList.filter((_, i) => this.progress.getStars(i + 1) > 0).length;
+    ctx.font      = `${Math.round(Math.min(12, W * 0.028))}px system-ui`;
+    ctx.fillStyle = 'rgba(180,255,180,0.7)';
+    ctx.fillText(`${completed}/6 stages cleared · ${this.progress.getRicePoints()} 🍚 rice points`, W / 2, tagY + 28);
+
+    // ── TAP TO PLAY button ───────────────────────────────────────
+    const btnW    = Math.min(cardW - 40, 260);
+    const btnH    = Math.round(H * 0.075);
+    const btnX    = W / 2 - btnW / 2;
+    const btnY    = cardY + cardH - btnH - 20;
+    const tapPul  = 0.72 + 0.28 * Math.sin(t * 0.08);
+
+    // Button glow
+    ctx.shadowColor = '#00FF88';
+    ctx.shadowBlur  = 16 * tapPul;
+    const btnG = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+    btnG.addColorStop(0, `rgba(0,220,100,${0.8 + 0.2 * tapPul})`);
+    btnG.addColorStop(1, `rgba(0,150,60,${0.85 + 0.15 * tapPul})`);
+    ctx.fillStyle = btnG;
+    ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, btnH / 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
     ctx.lineWidth   = 2;
     ctx.stroke();
+    ctx.shadowBlur  = 0;
 
-    // Riku sprite
-    const riku = this.sprites['riku-idle'] || this.sprites['riku-run'];
-    const rW   = 90; const rH = 105;
-    const rX   = W / 2 - rW / 2;
-    const rY   = panY + 22;
-    if (riku && riku.complete && riku.naturalWidth > 0) {
-      ctx.drawImage(riku, rX, rY, rW, rH);
-    } else {
-      // Fallback rice ball
-      ctx.font = '64px serif'; ctx.textAlign = 'center';
-      ctx.fillText('🍙', W / 2, rY + 70);
-    }
-
-    // Title
-    ctx.font        = `bold ${Math.min(32, W * 0.07)}px "Comic Sans MS", system-ui`;
-    ctx.textAlign   = 'center';
-    ctx.textBaseline = 'top';
-    ctx.strokeStyle = '#2d6a1f';
-    ctx.lineWidth   = 5;
-    ctx.strokeText('⚔️ Samurice Dino Slash', W / 2, rY + rH + 14);
-    ctx.fillStyle   = '#FFD700';
-    ctx.fillText('⚔️ Samurice Dino Slash', W / 2, rY + rH + 14);
-
-    // Subtitle
-    ctx.font      = `${Math.min(14, W * 0.033)}px "Comic Sans MS", system-ui`;
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('Phonics Platformer · 6 Stages · Short Vowels → Blends', W / 2, rY + rH + 56);
-
-    // Riku's flavour tagline
-    ctx.font      = 'bold 15px "Comic Sans MS", system-ui';
-    ctx.fillStyle = '#FFD700';
-    const pulse   = 0.7 + 0.3 * Math.sin(this._age * 0.06);
-    ctx.globalAlpha = pulse;
-    ctx.fillText('🍚 Rice Power · Phonics Mastery! 🍚', W / 2, rY + rH + 86);
-    ctx.globalAlpha = 1;
-
-    // Progress summary
-    const completed = PHONICS_DATA.stageList.filter((_, i) => this.progress.getStars(i + 1) > 0).length;
-    ctx.font      = '13px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    ctx.fillText(`${completed}/6 stages cleared · ${this.progress.getRicePoints()} 🍚 rice points`, W / 2, rY + rH + 112);
-
-    // TAP TO START pulse
-    const tap = 0.65 + 0.35 * Math.sin(this._age * 0.07);
-    ctx.globalAlpha = tap;
-    ctx.font        = `bold ${Math.min(22, W * 0.05)}px "Comic Sans MS", system-ui`;
+    // Button text
+    const tapSz = Math.round(Math.min(20, W * 0.046));
+    ctx.font        = `900 ${tapSz}px "Comic Sans MS", system-ui`;
     ctx.fillStyle   = '#fff';
-    ctx.fillText('Tap anywhere to start! ▶', W / 2, panY + H * 0.72 - 52);
-    ctx.globalAlpha = 1;
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('▶ TAP TO PLAY!', W / 2, btnY + btnH / 2);
+    ctx.textBaseline = 'top';
 
-    ctx.textBaseline = 'alphabetic';
+    // ── Corner sparkles around the card ─────────────────────────
+    const sparkles = [
+      { x: cardX - 2,       y: cardY - 2 },
+      { x: cardX + cardW + 2, y: cardY - 2 },
+      { x: cardX - 2,       y: cardY + cardH + 2 },
+      { x: cardX + cardW + 2, y: cardY + cardH + 2 },
+    ];
+    sparkles.forEach((sp, i) => {
+      const sa = 0.5 + 0.5 * Math.sin(t * 0.1 + i * 1.57);
+      ctx.globalAlpha = sa;
+      ctx.font = '16px serif'; ctx.textAlign = 'center';
+      ctx.fillText('✨', sp.x, sp.y);
+    });
+    ctx.globalAlpha = 1;
   }
 
   // ── STAGE SELECT ─────────────────────────────────────────────
