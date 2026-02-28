@@ -638,7 +638,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   words.forEach((word, wIdx) => {
     const elevated    = wIdx % 2 === 1;  // alternate ground / platform
     const platformH   = elevated ? groundY - 100 - (difficulty * 12) : groundY;
-    const coinY       = platformH - 70;   // coins float above ground/platform
+    const coinY       = platformH - Math.round(canvasH * 0.22);  // float at ~chest height above platform
     const platW       = word.phonemes.length * 82 + 60;
 
     // Dojo blocks every 3rd platform, rice bundles otherwise
