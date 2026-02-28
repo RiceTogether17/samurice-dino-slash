@@ -274,6 +274,9 @@ class SlashGame {
     if (dL && dR && dJ) this.runner.bindDpad(dL, dR, dJ);
     this._showDpad();
 
+    // Start stage music
+    this.audio.startMusic(this.stageId);
+
     this.state  = 'runner';
   }
 
@@ -288,6 +291,7 @@ class SlashGame {
   // ── BATTLE PHASE ─────────────────────────────────────────────
   _startBattle(collectedPhonemes) {
     if (this.runner) { this.runner.destroy(); this.runner = null; }
+    this.audio.stopMusic();
 
     this.overlay.classList.remove('hidden');
     this.overlay.innerHTML = '';
@@ -328,6 +332,7 @@ class SlashGame {
   exit() {
     if (this.runner)  { this.runner.destroy();  this.runner  = null; }
     if (this.battle)  { this.battle.destroy();  this.battle  = null; }
+    this.audio.stopMusic();
     this._hideDpad();
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
@@ -1222,7 +1227,10 @@ document.addEventListener('keydown', (e) => {
     if (slashActive && _slashGameInstance) {
       const s = _slashGameInstance.state;
       if (s === 'menu' || s === 'stage-select' || s === 'world-map') exitSlash();
-      else if (s === 'runner' || s === 'battle') _slashGameInstance.state = 'world-map';
+      else if (s === 'runner' || s === 'battle') {
+        _slashGameInstance.audio.stopMusic();
+        _slashGameInstance.state = 'world-map';
+      }
     }
   }
 });

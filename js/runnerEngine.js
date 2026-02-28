@@ -30,6 +30,12 @@ const R_SCORE_STOMP   = 100;
 const R_SCORE_BLOCK   = 200;
 const R_SCORE_POWERUP = 500;
 
+// ── Advanced mechanics constants ──────────────────────────────
+const R_COYOTE_FRAMES  = 6;    // frames after leaving edge where jump still works
+const R_JUMP_BUFFER    = 10;   // frames to queue a jump before landing
+const R_SPRING_VEL     = -22;  // spring pad launch velocity
+const R_STAR_DUR       = 480;  // 8 seconds of star invincibility (60 fps)
+
 // ─────────────────────────────────────────────────────────────
 // RUNNER PLAYER
 // ─────────────────────────────────────────────────────────────
@@ -55,8 +61,14 @@ class RunnerPlayer {
     this._holdingJump  = false;
     this._jumpFrames   = 0;
     // Power-up state
-    this.powerUp = null;    // 'rice-bowl' | 'chili' | 'shield-item' | null
+    this.powerUp = null;    // 'rice-bowl' | 'chili' | 'shield-item' | 'star' | null
     this._powerUpTimer = 0;
+    // Advanced movement
+    this._coyoteFrames      = 0;   // frames remaining where late jump is allowed
+    this._jumpBuffer        = 0;   // frames remaining for buffered jump input
+    this.groundPounding     = false;
+    this._groundPoundLanded = false;
+    this._starTimer         = 0;   // frames of star-power remaining
     // Score & lives tracked externally by RunnerEngine
   }
 
@@ -68,12 +80,27 @@ class RunnerPlayer {
   }
 
   jump(audio) {
-    if (!this.onGround) return;
-    this.vy          = R_JUMP_VEL;
-    this.onGround    = false;
-    this._holdingJump = true;
-    this._jumpFrames  = 0;
+    const canJump = this.onGround || this._coyoteFrames > 0;
+    if (!canJump) {
+      // Buffer the jump — execute automatically the moment we land
+      this._jumpBuffer = R_JUMP_BUFFER;
+      return;
+    }
+    this.groundPounding  = false;
+    this.vy              = R_JUMP_VEL;
+    this.onGround        = false;
+    this._coyoteFrames   = 0;
+    this._holdingJump    = true;
+    this._jumpFrames     = 0;
     if (audio) audio.sfxJump();
+  }
+
+  // Down key while airborne — slam to ground at maximum speed
+  groundPound() {
+    if (this.onGround || this.groundPounding) return;
+    this.groundPounding = true;
+    this.vy = 16;          // immediate downward burst
+    this._holdingJump = false;
   }
 
   // Call when jump button is released — cuts the jump short (variable height)
@@ -108,6 +135,8 @@ class RunnerPlayer {
     if (this.invincible > 0)  this.invincible--;
     if (this._powerUpTimer > 0) this._powerUpTimer--;
     if (this._powerUpTimer === 0 && this.powerUp === 'chili') { this.powerUp = null; }
+    if (this._starTimer > 0)   { this._starTimer--;   if (this._starTimer === 0 && this.powerUp === 'star') this.powerUp = null; }
+    if (this._jumpBuffer > 0)  this._jumpBuffer--;
 
     // Variable jump: track hold duration
     if (this._holdingJump) {
@@ -115,16 +144,22 @@ class RunnerPlayer {
       if (this._jumpFrames > R_JUMP_HOLD) this._holdingJump = false;
     }
 
-    this.vy = Math.min(this.vy + R_GRAVITY, 20);
+    const _wasOnGround = this.onGround;
+
+    // Ground pound: slam downward at max speed
+    const maxFall = this.groundPounding ? 26 : 20;
+    if (this.groundPounding) this.vy = Math.max(this.vy, 16);
+    this.vy = Math.min(this.vy + R_GRAVITY, maxFall);
     this.y += this.vy;
 
+    // Ground landing
     const gnd = groundY - this.h;
+    this.onGround = false;
     if (this.y >= gnd) {
       this.y = gnd; this.vy = 0; this.onGround = true;
-    } else {
-      this.onGround = false;
     }
 
+    // Platform landing
     if (this.vy >= 0) {
       for (const p of platforms) {
         if (this._overlapsPlatform(p)) {
@@ -135,8 +170,32 @@ class RunnerPlayer {
 
     if (this.y > groundY + 200) this.hp = 0;
 
+    // ── Coyote time: walked off edge without jumping ─────────
+    if (_wasOnGround && !this.onGround && this.vy > 0) {
+      this._coyoteFrames = R_COYOTE_FRAMES;
+    } else if (this.onGround) {
+      this._coyoteFrames = 0;
+    } else if (this._coyoteFrames > 0) {
+      this._coyoteFrames--;
+    }
+
+    // ── Landing events ───────────────────────────────────────
+    if (this.onGround && !_wasOnGround) {
+      if (this.groundPounding) {
+        this.groundPounding      = false;
+        this._groundPoundLanded  = true;
+        this._jumpBuffer         = 0; // don't auto-jump after ground pound
+      } else if (this._jumpBuffer > 0) {
+        // Execute the buffered jump immediately on landing
+        this._jumpBuffer   = 0;
+        this.vy            = R_JUMP_VEL;
+        this.onGround      = false;
+        this._holdingJump  = true;
+        this._jumpFrames   = 0;
+      }
+    }
+
     this._frame++;
-    // Walk cycle advances only while actually moving on the ground
     if (this._frame % 7 === 0 && this.onGround && Math.abs(this.vx) >= 0.5) {
       this._runCycle = (this._runCycle + 1) % 4;
     }
@@ -158,6 +217,7 @@ class RunnerPlayer {
 
   takeDamage(audio) {
     if (this.invincible > 0) return false;
+    if (this._starTimer > 0) return false;        // star power: total immunity
     if (this.shieldActive) { this.shieldActive = false; return false; }
     this.hp--;
     this.invincible = 80;
@@ -243,6 +303,27 @@ class RunnerPlayer {
       ctx.drawImage(sp, dx + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
     } else {
       this._drawFallback(ctx, dx, y);
+    }
+
+    // Star power: rainbow cycling glow (drawn before boost ring)
+    if (this._starTimer > 0) {
+      const hue   = (this._frame * 10) % 360;
+      const pulse = 0.45 + 0.30 * Math.sin(this._frame * 0.5);
+      ctx.globalAlpha = pulse;
+      ctx.strokeStyle = `hsl(${hue},100%,65%)`;
+      ctx.shadowColor = `hsl(${hue},100%,65%)`;
+      ctx.shadowBlur  = 28;
+      ctx.lineWidth   = 5;
+      ctx.beginPath();
+      ctx.ellipse(dx + this.w / 2, y + this.h / 2, this.w / 2 + 14, this.h / 2 + 14, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // Second ring offset
+      ctx.globalAlpha = pulse * 0.5;
+      ctx.strokeStyle = `hsl(${(hue + 120) % 360},100%,65%)`;
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.ellipse(dx + this.w / 2, y + this.h / 2, this.w / 2 + 22, this.h / 2 + 22, 0, 0, Math.PI * 2);
+      ctx.stroke();
     }
 
     // Boost glow ring
@@ -468,6 +549,20 @@ class MinionDino {
     this._patrolMin = worldX - 120;
     this._patrolMax = worldX + 120;
     this._sprite  = sprite;   // Image | null
+    this.armor    = 0;        // 0=none, 1=armored (needs 2 stomps)
+    this._armorBroken = false;
+  }
+
+  // Returns 'stomp', 'armor-break', or calls nothing for already-defeated.
+  // Engine must NOT call defeat() separately when using this method.
+  takeStompHit() {
+    if (this.armor > 0 && !this._armorBroken) {
+      this._armorBroken = true;
+      this.armor = 0;
+      return 'armor-break';
+    }
+    this.defeat();
+    return 'stomp';
   }
 
   updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
@@ -539,8 +634,20 @@ class MinionDino {
     const faceDir = this.vx < 0 ? 1 : -1;
     ctx.scale(faceDir, 1);
 
+    // Armored shell overlay (silver ring before drawing body)
+    if (this.armor > 0 && !this._armorBroken) {
+      ctx.strokeStyle = '#B0BEC5';
+      ctx.lineWidth   = 5;
+      ctx.shadowColor = '#78909C';
+      ctx.shadowBlur  = 8;
+      ctx.beginPath();
+      ctx.ellipse(0, 4, 20, 18, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur  = 0;
+    }
+
     // Body
-    ctx.fillStyle = '#558B2F';
+    ctx.fillStyle = this.armor > 0 && !this._armorBroken ? '#607D8B' : '#558B2F';
     ctx.beginPath();
     ctx.ellipse(0, 6, 16, 14, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -866,17 +973,23 @@ class PowerUpItem {
     const bob = Math.sin(this._age * 0.14) * 2;
 
     ctx.save();
-    // Glow
-    ctx.shadowColor = this.type === 'rice-bowl' ? '#FF4081' :
-                      this.type === 'chili'      ? '#FF6D00' : '#00B0FF';
-    ctx.shadowBlur  = 12;
+    // Glow (star power gets rainbow pulse)
+    if (this.type === 'star') {
+      const hue = (this._age * 8) % 360;
+      ctx.shadowColor = `hsl(${hue},100%,65%)`;
+    } else {
+      ctx.shadowColor = this.type === 'rice-bowl' ? '#FF4081' :
+                        this.type === 'chili'      ? '#FF6D00' : '#00B0FF';
+    }
+    ctx.shadowBlur  = 14;
 
     // Icon based on type
     ctx.font         = `${Math.round(h * 0.85)}px serif`;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
     const icon = this.type === 'rice-bowl' ? '🍚' :
-                 this.type === 'chili'      ? '🌶️' : '🛡️';
+                 this.type === 'chili'      ? '🌶️' :
+                 this.type === 'star'       ? '⭐' : '🛡️';
     ctx.fillText(icon, x + w / 2, y + h / 2 + bob);
 
     // Highlight ring
@@ -998,6 +1111,133 @@ class FlyingEnemy {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SPRING PAD — launches player into the air on contact
+// ─────────────────────────────────────────────────────────────
+class SpringPad {
+  constructor(worldX, groundY) {
+    this.worldX  = worldX;
+    this.groundY = groundY;
+    this.w       = 42;
+    this.h       = 30;
+    this.sx      = 0;
+    this._age    = 0;
+    this._bounce = 0; // animation frames
+  }
+
+  updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
+  isVisible(canvasW) { return this.sx + this.w > -20 && this.sx < canvasW + 20; }
+
+  update() {
+    this._age++;
+    if (this._bounce > 0) this._bounce--;
+  }
+
+  // Returns true if player lands on the spring pad from above
+  checkLand(player) {
+    if (this._bounce > 0) return false; // cooldown after activation
+    const pb       = player.bounds();
+    const springTop = this.groundY - this.h;
+    return player.vy >= 0 &&
+      pb.y + pb.h >= springTop - 4 && pb.y + pb.h <= springTop + 16 &&
+      pb.x + pb.w > this.sx + 4 && pb.x < this.sx + this.w - 4;
+  }
+
+  activate() { this._bounce = 16; }
+
+  draw(ctx) {
+    const x        = this.sx;
+    const compress = this._bounce > 0 ? Math.sin(this._bounce / 16 * Math.PI) * 0.45 : 0;
+    const h        = Math.round(this.h * (1 - compress * 0.5));
+    const baseY    = this.groundY;
+
+    ctx.save();
+    // Coil (zigzag spring)
+    ctx.strokeStyle = '#FF6F00';
+    ctx.lineWidth   = 3.5;
+    ctx.lineCap     = 'round';
+    const coils = 4;
+    const coilH = h / (coils * 2);
+    ctx.beginPath();
+    ctx.moveTo(x + 4, baseY);
+    for (let i = 0; i < coils * 2; i++) {
+      const cy = baseY - (i + 1) * coilH;
+      const cx = (i % 2 === 0) ? x + this.w - 4 : x + 4;
+      ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+    // Base
+    ctx.fillStyle = '#E65100';
+    ctx.beginPath(); ctx.roundRect(x, baseY - 5, this.w, 5, 2); ctx.fill();
+    // Top pad (bounces with spring)
+    ctx.fillStyle = '#FFB300';
+    ctx.shadowColor = '#FF6F00'; ctx.shadowBlur = this._bounce > 0 ? 12 : 0;
+    ctx.beginPath(); ctx.roundRect(x + 3, baseY - h, this.w - 6, 8, 3); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// CHECKPOINT FLAG — mid-level save point
+// ─────────────────────────────────────────────────────────────
+class CheckpointFlag {
+  constructor(worldX, groundY) {
+    this.worldX    = worldX;
+    this.groundY   = groundY;
+    this.sx        = 0;
+    this.activated = false;
+    this._age      = 0;
+  }
+
+  updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
+  isVisible(canvasW) { return this.sx + 55 > 0 && this.sx - 10 < canvasW; }
+
+  check(player) {
+    if (this.activated) return false;
+    const dist = Math.abs(this.sx - (player.screenX + player.w / 2));
+    if (dist < 55) { this.activated = true; return true; }
+    return false;
+  }
+
+  draw(ctx, groundY) {
+    this._age++;
+    const x        = this.sx;
+    const waveAmt  = Math.sin(this._age * 0.14) * 7;
+    const color    = this.activated ? '#00E676' : '#FFD600';
+
+    ctx.save();
+    // Pole
+    ctx.strokeStyle = '#9E9E9E'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x, groundY - 8); ctx.lineTo(x, groundY - 82); ctx.stroke();
+    // Flag body
+    ctx.fillStyle = color;
+    ctx.save();
+    ctx.translate(x, groundY - 82);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(24 + waveAmt, 12, 28, 22);
+    ctx.quadraticCurveTo(24 + waveAmt, 32, 0, 24);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // Icon on flag
+    ctx.font = 'bold 13px serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = this.activated ? '#004D40' : '#5D4037';
+    ctx.fillText(this.activated ? '✓' : '★', x + 13, groundY - 62);
+    // Active glow
+    if (this.activated) {
+      const pulse = 0.25 + 0.18 * Math.sin(this._age * 0.3);
+      const glow  = ctx.createRadialGradient(x, groundY - 45, 2, x, groundY - 45, 32);
+      glow.addColorStop(0, `rgba(0,230,118,${pulse})`);
+      glow.addColorStop(1, 'rgba(0,230,118,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(x, groundY - 45, 32, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // PARTICLE SYSTEM (coins, stomps, boost)
 // ─────────────────────────────────────────────────────────────
 class RunnerParticle {
@@ -1050,6 +1290,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   const items      = {
     platforms: [], coins: [], minions: [], flag: null,
     movingPlatforms: [], questionBlocks: [], powerUps: [], flyingEnemies: [],
+    springs: [], checkpoint: null,
   };
 
   let wx = 800; // start X (safe spawn zone)
@@ -1089,13 +1330,15 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
 
     // Ground minions on even sections (skip first)
     if (wIdx % 2 === 0 && wIdx > 0) {
-      const mx = wx + word.phonemes.length * 40;
-      items.minions.push(new MinionDino(
+      const mx     = wx + word.phonemes.length * 40;
+      const minion = new MinionDino(
         mx, groundY,
         elevated ? (items.platforms[items.platforms.length - 1] ||
                     items.movingPlatforms[items.movingPlatforms.length - 1]) : null,
         minionSp, minionSize,
-      ));
+      );
+      if (difficulty >= 3 && wIdx % 4 === 2) minion.armor = 1; // armored in stage 4+
+      items.minions.push(minion);
     }
 
     // Flying enemies in stage 2+, every 3 word sections
@@ -1103,6 +1346,16 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
       const flyX = wx + platW / 2;
       const flyY = elevated ? platformH - 80 : groundY - Math.round(canvasH * 0.38);
       items.flyingEnemies.push(new FlyingEnemy(flyX, flyY, null));
+    }
+
+    // Spring pads in stage 3+ (before elevated word clusters)
+    if (difficulty >= 2 && wIdx % 3 === 1 && wIdx > 0) {
+      items.springs.push(new SpringPad(wx - 70, groundY));
+    }
+
+    // Checkpoint at mid-level (after the 3rd word)
+    if (wIdx === 3) {
+      items.checkpoint = new CheckpointFlag(wx - 80, groundY);
     }
 
     // Extra bridge platform in higher stages
@@ -1146,6 +1399,9 @@ class RunnerEngine {
     this.questionBlocks   = level.questionBlocks;
     this.powerUps         = level.powerUps;     // items spawned at runtime
     this.flyingEnemies    = level.flyingEnemies;
+    this.springs          = level.springs;
+    this.checkpoint       = level.checkpoint;
+    this._checkpointWorldX = null;  // set when checkpoint is activated
     this.coins            = level.coins;
     this.minions          = level.minions;
     this.flag             = level.flag;
@@ -1209,6 +1465,7 @@ class RunnerEngine {
     const isJump = (e) => e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW';
     this._kd = (e) => {
       if (isJump(e)) { e.preventDefault(); this.player.jump(this.audio); }
+      if (e.code === 'ArrowDown'  || e.code === 'KeyS') { e.preventDefault(); this.player.groundPound(); }
       if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.keys.right = true; }
       if (e.code === 'ArrowLeft'  || e.code === 'KeyA') { this.keys.left  = true; }
     };
@@ -1264,8 +1521,43 @@ class RunnerEngine {
 
     if (!this.player.alive) {
       this._screenShake = 20;
+      // Checkpoint respawn: use it if activated and player has extra lives
+      if (this._checkpointWorldX !== null && this.lives > 1) {
+        this.lives--;
+        this.player.hp          = 2;
+        this.player.worldX      = this._checkpointWorldX;
+        this.player.vy          = 0;
+        this.player.vx          = 0;
+        this.player.onGround    = true;
+        this.player.invincible  = 120;
+        this.player.groundPounding = false;
+        this.player._groundPoundLanded = false;
+        this.particles.push(new RunnerParticle(
+          this.W / 2, this.H * 0.4, '💔 Respawn!', '#FF4081', -4));
+        return;
+      }
       this._end('death');
       return;
+    }
+
+    // Ground pound landing: screen shake + defeat nearby enemies
+    if (this.player._groundPoundLanded) {
+      this.player._groundPoundLanded = false;
+      this._screenShake = 18;
+      if (this.audio) this.audio.sfxGroundPound();
+      // Defeat ground minions within radius
+      const poundX = this.player.screenX + this.player.w / 2;
+      const POUND_RADIUS = 90;
+      this.minions.forEach(m => {
+        if (!m.defeated && Math.abs(m.sx - poundX) < POUND_RADIUS) {
+          m.takeStompHit();
+          m.defeat(); // ensure defeated even if armored (ground pound breaks armor)
+          this._doStomp(m.sx, m.groundY);
+        }
+      });
+      this.particles.push(new RunnerParticle(
+        this.player.screenX + this.player.w / 2,
+        this.player.y + this.player.h, '💥 POUND!', '#FF6F00', -3));
     }
 
     // Question blocks — head-butt detection
@@ -1280,7 +1572,7 @@ class RunnerEngine {
           this.particles.push(new RunnerParticle(qb.sx + qb.w / 2, qb.sy - 16, '🪙', '#FFD700', -5));
           this.particles.push(new RunnerParticle(qb.sx + qb.w / 2, qb.sy - 10, `+${R_SCORE_BLOCK}`, '#FFF176', -3));
         } else if (reward === 'powerup') {
-          const types = ['rice-bowl', 'chili', 'shield-item'];
+          const types = ['rice-bowl', 'chili', 'shield-item', 'star'];
           const t = types[this.stage.id % types.length];
           const pu = new PowerUpItem(qb.worldX + qb.w / 2, qb.worldY - 36, t);
           pu._groundY = this.groundY;
@@ -1318,10 +1610,24 @@ class RunnerEngine {
       if (!m.defeated) {
         const res = m.checkCollision(this.player);
         if (res === 'stomp') {
-          m.defeat();
-          this._doStomp(m.sx, m.groundY);
+          const stompResult = m.takeStompHit();
+          if (stompResult === 'armor-break') {
+            this.player.vy = -8;  // small bounce, not full stomp height
+            this._screenShake = 6;
+            this._stompCombo  = 0; // armor-break resets combo
+            if (this.audio) this.audio.sfxBossHit();
+            this.particles.push(new RunnerParticle(m.sx, m.groundY - 10, '🛡️ ARMOR BREAK!', '#FF6D00', -5));
+          } else {
+            this._doStomp(m.sx, m.groundY);
+          }
         } else if (res === 'hit') {
-          this._doPlayerHit();
+          if (this.player._starTimer > 0) {
+            // Star power: contact defeats enemies
+            m.defeat();
+            this._doStomp(m.sx, m.groundY);
+          } else {
+            this._doPlayerHit();
+          }
         }
       }
     });
@@ -1337,11 +1643,42 @@ class RunnerEngine {
           fe.defeat();
           this._doStomp(fe.sx + fe.w / 2, fe.worldY);
         } else if (res === 'hit') {
-          this._doPlayerHit();
+          if (this.player._starTimer > 0) {
+            fe.defeat();
+            this._doStomp(fe.sx + fe.w / 2, fe.worldY);
+          } else {
+            this._doPlayerHit();
+          }
         }
       }
     });
     this.flyingEnemies = this.flyingEnemies.filter(fe => !fe.isGone());
+
+    // Spring pads
+    this.springs.forEach(sp => {
+      sp.updateScreen(this.camOffset);
+      sp.update();
+      if (sp.checkLand(this.player)) {
+        sp.activate();
+        this.player.vy        = R_SPRING_VEL;
+        this.player.onGround  = false;
+        this.player.groundPounding = false;
+        if (this.audio) this.audio.sfxSpring();
+        this.particles.push(new RunnerParticle(
+          sp.sx + sp.w / 2, sp.groundY - sp.h, '🌀 BOING!', '#FF6F00', -6));
+      }
+    });
+
+    // Checkpoint
+    if (this.checkpoint) {
+      this.checkpoint.updateScreen(this.camOffset);
+      if (!this.checkpoint.activated && this.checkpoint.check(this.player)) {
+        this._checkpointWorldX = this.player.worldX;
+        if (this.audio) this.audio.sfxCheckpoint();
+        this.particles.push(new RunnerParticle(
+          this.checkpoint.sx, this.groundY - 70, '✓ CHECKPOINT!', '#00E676', -5));
+      }
+    }
 
     // Flag
     this.flag.updateScreen(this.camOffset);
@@ -1372,6 +1709,7 @@ class RunnerEngine {
 
   // ── Player takes a hit ────────────────────────────────────────
   _doPlayerHit() {
+    if (this.player._starTimer > 0) return; // star power: immune
     const took = this.player.takeDamage(this.audio);
     if (took) {
       this._screenShake = 12;
@@ -1387,16 +1725,30 @@ class RunnerEngine {
     if (pu.type === 'rice-bowl') {
       this.player.hp = Math.min(this.player.hp + 1, 5); // +1 HP up to 5
       this.particles.push(new RunnerParticle(pu.sx, pu.worldY, '❤️ +1 HP!', '#FF4081', -5));
+      if (this.audio) this.audio.sfxBoost();
     } else if (pu.type === 'chili') {
       this.player.powerUp = 'chili';
       this.player._powerUpTimer = 480; // 8 seconds
       this.player.activateBoost();
       this.particles.push(new RunnerParticle(pu.sx, pu.worldY, '🌶️ SPEED UP!', '#FF6D00', -5));
+      if (this.audio) this.audio.sfxBoost();
     } else if (pu.type === 'shield-item') {
       this.player.shieldActive = true;
       this.particles.push(new RunnerParticle(pu.sx, pu.worldY, '🛡️ SHIELD!', '#00B0FF', -5));
+      if (this.audio) this.audio.sfxBoost();
+    } else if (pu.type === 'star') {
+      this.player.powerUp    = 'star';
+      this.player._starTimer = R_STAR_DUR;
+      this.player.invincible = R_STAR_DUR;
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY, '⭐ STAR POWER!', '#FFD700', -6));
+      for (let i = 0; i < 5; i++) {
+        this.particles.push(new RunnerParticle(
+          pu.sx + (Math.random() - 0.5) * 60,
+          pu.worldY + (Math.random() - 0.5) * 30,
+          ['✨','🌟','💫'][i % 3], '#FFD700', -4 - Math.random() * 3));
+      }
+      if (this.audio) this.audio.sfxStarPower();
     }
-    if (this.audio) this.audio.sfxBoost();
   }
 
   // ── Coin collection logic ────────────────────────────────────
@@ -1464,6 +1816,14 @@ class RunnerEngine {
 
     this._drawBackground(ctx);
     this._drawGround(ctx);
+
+    // Spring pads (drawn behind platforms)
+    this.springs.filter(sp => sp.isVisible(this.W)).forEach(sp => sp.draw(ctx));
+
+    // Checkpoint flag
+    if (this.checkpoint && this.checkpoint.isVisible(this.W)) {
+      this.checkpoint.draw(ctx, this.groundY);
+    }
 
     // Moving platforms
     this.movingPlatforms.filter(mp => mp.isVisible(this.W)).forEach(mp => mp.draw(ctx));
@@ -1628,10 +1988,18 @@ class RunnerEngine {
 
     // Active power-up icon next to HP
     if (p.powerUp) {
-      const puIcon = p.powerUp === 'chili' ? '🌶️' : p.powerUp === 'shield-item' ? '🛡️' : '';
+      const puIcon = p.powerUp === 'chili'      ? '🌶️' :
+                     p.powerUp === 'shield-item' ? '🛡️' :
+                     p.powerUp === 'star'        ? '⭐' : '';
       if (puIcon) {
+        if (p.powerUp === 'star') {
+          // Rainbow flash for star
+          const hue = (this._age * 10) % 360;
+          ctx.shadowColor = `hsl(${hue},100%,65%)`; ctx.shadowBlur = 10;
+        }
         ctx.font = '20px serif';
         ctx.fillText(puIcon, 12 + Math.max(3, maxHp) * 28 + 4, 16);
+        ctx.shadowBlur = 0;
       }
     }
     if (p.shieldActive) {
