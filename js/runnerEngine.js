@@ -153,9 +153,10 @@ class RunnerPlayer {
 
     ctx.save();
 
-    // Invincibility flicker: slower period, higher minimum so Riku stays visible
-    if (this.invincible > 0) {
-      ctx.globalAlpha = Math.floor(this.invincible / 8) % 2 === 0 ? 0.62 : 1.0;
+    // Invincibility indicator: red glow — Riku stays fully visible (no transparency)
+    if (this.invincible > 0 && Math.floor(this.invincible / 6) % 2 === 0) {
+      ctx.shadowColor = '#FF4444';
+      ctx.shadowBlur  = 22;
     }
 
     // Facing direction: flip sprite when moving left
@@ -168,9 +169,12 @@ class RunnerPlayer {
     if (sp && sp.complete && sp.naturalWidth > 0) {
       const scaleX = this.onGround ? 1 + Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 0.92;
       const scaleY = this.onGround ? 1 - Math.sin(this._runCycle * Math.PI / 2) * 0.04 : 1.08;
-      const dw = this.w * scaleX;
-      const dh = this.h * scaleY;
-      ctx.drawImage(sp, dx + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
+      // Use sprite's natural aspect ratio so Riku is never stretched
+      const ratio  = sp.naturalWidth / sp.naturalHeight;
+      const dh     = this.h * scaleY;
+      const dw     = this.h * ratio * scaleX;
+      const natW   = this.h * ratio;
+      ctx.drawImage(sp, dx + (this.w - natW) / 2, y + (this.h - dh), dw, dh);
     } else {
       this._drawFallback(ctx, dx, y);
     }
@@ -385,10 +389,10 @@ class PhonemeCoin {
 // ─────────────────────────────────────────────────────────────
 class MinionDino {
   // sprite: the 'minion-dino' Image object (or null → canvas fallback)
-  constructor(worldX, groundY, platform = null, sprite = null) {
+  constructor(worldX, groundY, platform = null, sprite = null, size = 72) {
     this.worldX   = worldX;
-    this.w        = 72;
-    this.h        = 72;
+    this.w        = size;
+    this.h        = size;
     // Plant minion so its feet are on the ground (or platform top)
     const baseY = platform ? platform.worldY : groundY;
     this.groundY  = baseY - this.h;
@@ -631,6 +635,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
   const difficulty = stageData.id - 1;             // 0-5
   const minionSp   = sprites && sprites['minion-dino'];
+  const minionSize = Math.max(72, Math.round(canvasH * 0.14));  // scale to canvas
   const items      = { platforms: [], coins: [], minions: [], flag: null };
 
   let wx = 800; // start X (safe spawn zone)
@@ -663,7 +668,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
     // Minion on every 2nd word section
     if (wIdx % 2 === 0 && wIdx > 0) {
       const mx = wx + word.phonemes.length * 40;
-      items.minions.push(new MinionDino(mx, groundY, elevated ? items.platforms[items.platforms.length - 1] : null, minionSp));
+      items.minions.push(new MinionDino(mx, groundY, elevated ? items.platforms[items.platforms.length - 1] : null, minionSp, minionSize));
     }
 
     // In higher stages, add an extra platform mid-gap for challenge

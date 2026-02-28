@@ -239,7 +239,7 @@ class BattleEngine {
       this._wordQueueIdx = 0;
     }
     this._currentWord   = this._wordQueue[this._wordQueueIdx++];
-    this._shuffledPh    = this._shuffleArray([...this._currentWord.phonemes]);
+    this._shuffledPh    = [...this._currentWord.phonemes];  // in correct order per user request
     this._wrongAttempts = 0;
     this._currentBuilt  = [];
     this._usedTileIdx   = new Set();
@@ -711,8 +711,17 @@ class BattleEngine {
 
   _drawRiku(ctx) {
     const fy     = this._floorY();
+
+    // Resolve sprite first so we can use its natural aspect ratio (avoids stretching)
+    let spKey = 'riku-idle';
+    if (this.state === 'riku-attack')                         spKey = 'riku-run';
+    if (this.state === 'boss-attack' || this._rikuShake > 0) spKey = 'riku-hurt';
+    if (this.done && this.outcome === 'victory')              spKey = 'riku-victory';
+    const sp = this.sprites[spKey] || this.sprites['riku-idle'] || this.sprites['riku-run'];
+
     const rH     = Math.round(fy * 0.78);
-    const rW     = Math.round(rH * 0.65);
+    const _ar    = (sp && sp.complete && sp.naturalWidth > 0) ? sp.naturalWidth / sp.naturalHeight : 0.65;
+    const rW     = Math.round(rH * _ar);
     const rCX    = Math.round(this.W * 0.22);
     const rFeetY = fy;
     const rCY    = rFeetY - rH / 2;
@@ -720,12 +729,6 @@ class BattleEngine {
     const shakeX = this._rikuShake > 0 ? (Math.random() - 0.5) * 10 : 0;
     const shakeY = this._rikuShake > 0 ? (Math.random() - 0.5) * 5  : 0;
     const bob    = this.state === 'idle' ? Math.sin(this._age * 0.05) * 3 : 0;
-
-    let spKey = 'riku-idle';
-    if (this.state === 'riku-attack')                         spKey = 'riku-run';
-    if (this.state === 'boss-attack' || this._rikuShake > 0) spKey = 'riku-hurt';
-    if (this.done && this.outcome === 'victory')              spKey = 'riku-victory';
-    const sp = this.sprites[spKey] || this.sprites['riku-idle'] || this.sprites['riku-run'];
 
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.16)';

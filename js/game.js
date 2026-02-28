@@ -84,7 +84,7 @@ function getDailySeed() {
 }
 
 // ── AUDIO MANAGER ────────────────────────────────────────────
-class AudioManager {
+class FlappyAudioManager {
   constructor() {
     this.ctx   = null;
     this.muted = localStorage.getItem('dinoDashMuted') === 'true';
@@ -467,7 +467,7 @@ class FlappyGame {
   constructor(canvasId) {
     this.canvas = document.getElementById(canvasId);
     this.ctx    = this.canvas.getContext('2d');
-    this.audio  = new AudioManager();
+    this.audio  = new FlappyAudioManager();
 
     this._dpr   = window.devicePixelRatio || 1;
     this._setupCanvas();
