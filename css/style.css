@@ -502,11 +502,10 @@ body {
     #slashScreen.active .rotate-prompt { display: flex; }
 }
 
-/* ── Exit button ─────────────────────────────────────────── */
-.slash-exit-btn {
+/* ── Shared styles for exit + fullscreen overlay buttons ─── */
+.slash-exit-btn,
+.slash-fs-btn {
     position: absolute;
-    top: 10px;
-    right: 10px;
     z-index: 30;
     background: rgba(0,0,0,0.55);
     color: #fff;
@@ -524,8 +523,19 @@ body {
     transition: background 0.15s, transform 0.1s;
     touch-action: manipulation;
 }
+.slash-exit-btn { top: 10px; right: 10px; }
+.slash-fs-btn   { top: 10px; right: 58px; font-size: 1.1rem; }
 .slash-exit-btn:hover  { background: rgba(200,30,30,0.75); }
-.slash-exit-btn:active { transform: scale(0.9); }
+.slash-exit-btn:active,
+.slash-fs-btn:active   { transform: scale(0.9); }
+.slash-fs-btn:hover    { background: rgba(255,215,0,0.3); border: 1px solid rgba(255,215,0,0.5); }
+
+/* ── Flappy screen fullscreen button ─────────────────────── */
+.fd-fs {
+    top: 10px;
+    /* sits to the left of the back button; game.js positions fd-back at top-right */
+    right: 58px;
+}
 
 /* ── Runner D-pad controls ───────────────────────────────── */
 .runner-controls {
@@ -599,6 +609,7 @@ body {
 
 /* ═══════════════════════════════════════════════════════════
    BATTLE OVERLAY  — bottom panel, always on top of canvas
+   Layout: controls (sticky-top) → build → timer → pool → hints → feedback
 ═══════════════════════════════════════════════════════════ */
 .battle-overlay {
     position: absolute;
@@ -606,19 +617,21 @@ body {
     left: 0;
     right: 0;
     z-index: 20;
-    /* Rich dark gradient so canvas art shows nicely above */
     background: linear-gradient(180deg,
-        rgba(6,4,18,0.82) 0%,
-        rgba(6,4,18,0.97) 18%,
+        rgba(6,4,18,0.88) 0%,
+        rgba(6,4,18,0.98) 15%,
         rgba(6,4,18,1.00) 100%);
     border-top: 3px solid #FFD700;
-    box-shadow: 0 -4px 24px rgba(255,215,0,0.18);
-    padding: 10px 12px 12px;
+    box-shadow: 0 -4px 24px rgba(255,215,0,0.22);
+    /* No top padding — controls row handles its own padding */
+    padding: 0 0 10px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    max-height: 62dvh;
+    gap: 6px;
+    max-height: 60dvh;
     overflow-y: auto;
+    /* Smooth momentum scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
 }
 .battle-overlay.hidden { display: none; }
 
@@ -629,6 +642,7 @@ body {
     flex-wrap: wrap;
     gap: 5px;
     justify-content: center;
+    padding: 0 12px;
 }
 .be-hint-word {
     font-size: 0.76rem;
@@ -649,16 +663,17 @@ body {
 
 /* ── Word being built ────────────────────────────────────── */
 .be-build {
-    min-height: 42px;
+    min-height: 38px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
     gap: 5px;
     background: rgba(255,255,255,0.04);
-    border: 1.5px dashed rgba(255,215,0,0.25);
-    border-radius: 14px;
+    border: 1.5px dashed rgba(255,215,0,0.3);
+    border-radius: 12px;
     padding: 4px 8px;
+    margin: 0 12px;
 }
 .be-build-placeholder {
     color: rgba(255,255,255,0.28);
@@ -690,11 +705,12 @@ body {
 
 /* ── Blend timer bar ─────────────────────────────────────── */
 .be-timer-wrap {
-    height: 10px;
+    height: 8px;
     background: rgba(255,255,255,0.1);
     border-radius: 5px;
     overflow: hidden;
     border: 1px solid rgba(255,255,255,0.08);
+    margin: 0 12px;
 }
 .be-timer-fill {
     height: 100%;
@@ -710,10 +726,13 @@ body {
 .be-pool {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
     justify-content: center;
     align-items: center;
-    padding: 2px 0;
+    padding: 4px 12px;
+    /* Scrollable if an extreme number of tiles overflow */
+    overflow-y: auto;
+    max-height: 130px;
 }
 
 /* Individual tile — Mario question-block style */
@@ -721,40 +740,42 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 56px;
-    height: 56px;
-    padding: 0 10px;
+    min-width: 44px;
+    height: 46px;
+    padding: 0 8px;
     background: linear-gradient(160deg, #FFF9C4, #FFD600);
     color: #3E2000;
     font-weight: 900;
-    font-size: clamp(1rem, 4.5vw, 1.25rem);
+    font-size: clamp(0.9rem, 4vw, 1.1rem);
     font-family: 'Comic Sans MS', system-ui, sans-serif;
     border: 2px solid #C89000;
     border-bottom-color: #7f5700;
     border-right-color: #a07000;
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow:
-        0 6px 0 #7f5700,
-        0 7px 2px rgba(0,0,0,0.45),
+        0 5px 0 #7f5700,
+        0 6px 2px rgba(0,0,0,0.4),
         inset 0 1px 0 rgba(255,255,255,0.7);
     cursor: pointer;
     user-select: none;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
-    transition: transform 0.07s, box-shadow 0.07s;
+    transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
     letter-spacing: 0.03em;
 }
+/* Gentle upward float + glow on hover — satisfying for kids */
 .be-tile:hover:not(.be-tile-used) {
-    background: linear-gradient(160deg, #FFFF8D, #FFD600);
-    transform: translateY(-3px);
+    background: linear-gradient(160deg, #FFFF8D, #FFE000);
+    transform: translateY(-4px) scale(1.08);
     box-shadow:
         0 9px 0 #7f5700,
-        0 10px 4px rgba(0,0,0,0.4),
-        inset 0 1px 0 rgba(255,255,255,0.8);
+        0 10px 6px rgba(0,0,0,0.35),
+        0 0 12px rgba(255,215,0,0.55),
+        inset 0 1px 0 rgba(255,255,255,0.85);
 }
 .be-tile:active:not(.be-tile-used) {
-    transform: translateY(5px);
-    box-shadow: 0 1px 0 #7f5700, inset 0 2px 4px rgba(0,0,0,0.25);
+    transform: translateY(4px) scale(0.96);
+    box-shadow: 0 1px 0 #7f5700, inset 0 2px 4px rgba(0,0,0,0.3);
     background: linear-gradient(160deg, #FFD600, #FFA000);
 }
 .be-tile-used {
@@ -764,22 +785,32 @@ body {
     box-shadow: 0 3px 0 #263238;
     cursor: default;
     transform: none !important;
-    opacity: 0.6;
+    opacity: 0.55;
 }
+/* Entrance pop animation when a new tile set is rendered */
+@keyframes tileEntrance {
+    0%   { transform: scale(0.6) translateY(10px); opacity: 0; }
+    70%  { transform: scale(1.08) translateY(-2px); opacity: 1; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.be-tile { animation: tileEntrance 0.22s cubic-bezier(0.34,1.56,0.64,1) both; }
 
 
-/* ── Controls ────────────────────────────────────────────── */
+/* ── Controls — always pinned to the top of the overlay ─── */
 .be-controls {
     display: flex;
     gap: 8px;
     align-items: stretch;
     justify-content: center;
+    /* Stick to the top of the scrollable overlay container */
     position: sticky;
-    bottom: 0;
-    background: rgba(6,4,18,0.98);
-    padding-top: 4px;
-    padding-bottom: 2px;
-    margin-top: auto;
+    top: 0;
+    z-index: 6;
+    background: rgba(6,4,18,1);
+    padding: 8px 12px 8px;
+    border-bottom: 1.5px solid rgba(255,215,0,0.28);
+    /* Subtle bottom glow so it looks "lifted" */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
 }
 .be-btn {
     height: 48px;
@@ -865,13 +896,13 @@ body {
 
 /* ── Feedback flash ──────────────────────────────────────── */
 .be-feedback {
-    min-height: 22px;
-    font-size: clamp(0.82rem, 3.5vw, 1rem);
+    min-height: 20px;
+    font-size: clamp(0.8rem, 3.5vw, 0.98rem);
     font-family: 'Comic Sans MS', system-ui, sans-serif;
     font-weight: bold;
     color: #FFD700;
     text-align: center;
-    padding: 0;
+    padding: 0 12px;
     text-shadow: 0 0 8px rgba(255,215,0,0.5);
     line-height: 1.3;
 }
@@ -880,22 +911,25 @@ body {
 /* ── Landscape: battle overlay compact ──────────────────── */
 @media (orientation: landscape) {
     .battle-overlay {
-        max-height: 52dvh;   /* leave top 48% for the battle scene */
-        padding: 5px 10px 6px;
+        max-height: 50dvh;
+        padding: 0 0 6px;
         gap: 4px;
     }
-    .be-tile        { min-width: 44px; height: 44px; font-size: 0.9rem; }
-    .be-btn         { height: 40px; padding: 0 14px; }
-    .be-btn-slash   { min-width: 90px; font-size: 1rem; }
-    .be-build       { min-height: 32px; padding: 2px 6px; }
-    .be-hints       { display: none; }   /* no room in landscape */
-    .be-feedback    { min-height: 16px; font-size: 0.8rem; }
-    .be-timer-wrap  { height: 7px; }
+    .be-controls    { padding: 5px 10px; }
+    .be-tile        { min-width: 36px; height: 38px; font-size: 0.82rem; padding: 0 6px; }
+    .be-btn         { height: 38px; padding: 0 12px; font-size: 0.9rem; }
+    .be-btn-slash   { min-width: 80px; font-size: 0.95rem; }
+    .be-build       { min-height: 28px; padding: 2px 6px; }
+    .be-hints       { display: none; }
+    .be-feedback    { min-height: 14px; font-size: 0.78rem; }
+    .be-timer-wrap  { height: 6px; }
+    .be-pool        { max-height: 90px; gap: 5px; padding: 2px 10px; }
 }
 
-/* ── Small portrait screens ──────────────────────────────── */
-@media (max-width: 380px) {
-    .be-tile        { min-width: 44px; height: 48px; font-size: 0.9rem; }
-    .be-btn         { height: 42px; padding: 0 10px; font-size: 0.88rem; }
-    .battle-overlay { padding: 6px 8px 8px; gap: 5px; }
+/* ── Small portrait phones (< 400px) ────────────────────── */
+@media (max-width: 400px) {
+    .be-tile        { min-width: 40px; height: 42px; font-size: 0.86rem; }
+    .be-btn         { height: 40px; padding: 0 10px; font-size: 0.88rem; }
+    .be-controls    { padding: 6px 8px; gap: 6px; }
+    .be-pool        { max-height: 110px; }
 }

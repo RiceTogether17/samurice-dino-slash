@@ -171,42 +171,23 @@ class BattleEngine {
   }
 
   // ── DOM setup: phoneme tiles + controls ─────────────────────
+  // Layout order (top → bottom):
+  //   1. controls row  — STICKY TOP so SLASH is always reachable
+  //   2. word builder  — shows tiles picked so far
+  //   3. timer bar     — blend countdown
+  //   4. tile pool     — phoneme tiles (scrollable if many)
+  //   5. hints         — word hints (hidden in landscape)
+  //   6. feedback      — success / error message
   _setupDOM() {
-    // Clear any stale content
     this.overlay.innerHTML = '';
 
-    // Hint words (bottom of canvas area) — shown above tiles
-    this._hintEl = document.createElement('div');
-    this._hintEl.className = 'be-hints';
-    this._hintEl.title = 'Hint: words you can make!';
-    this.overlay.appendChild(this._hintEl);
-
-    // Word being built (shows tiles in order)
-    this._buildEl = document.createElement('div');
-    this._buildEl.className = 'be-build';
-    this.overlay.appendChild(this._buildEl);
-
-    // Timer bar
-    this._timerBarWrap = document.createElement('div');
-    this._timerBarWrap.className = 'be-timer-wrap';
-    this._timerBar = document.createElement('div');
-    this._timerBar.className = 'be-timer-fill';
-    this._timerBarWrap.appendChild(this._timerBar);
-    this.overlay.appendChild(this._timerBarWrap);
-
-    // Tile pool
-    this._poolEl = document.createElement('div');
-    this._poolEl.className = 'be-pool';
-    this.overlay.appendChild(this._poolEl);
-
-    // Controls row
+    // ── 1. Controls — pinned to top of overlay ───────────────
     const controls = document.createElement('div');
     controls.className = 'be-controls';
 
-    // ── Primary action buttons (big, thumb-friendly) ────────────
     this._submitBtn = document.createElement('button');
-    this._submitBtn.className   = 'be-btn be-btn-slash';
-    this._submitBtn.innerHTML   = '⚔️ SLASH!';
+    this._submitBtn.className = 'be-btn be-btn-slash';
+    this._submitBtn.innerHTML = '⚔️ SLASH!';
     this._submitBtn.addEventListener('click', () => this._submitBuild());
     this._submitBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._submitBuild(); });
 
@@ -230,7 +211,6 @@ class BattleEngine {
     });
     this._hearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._hearBtn.click(); });
 
-    // Hidden text input kept for keyboard users
     this._typeInput = document.createElement('input');
     this._typeInput.className   = 'be-type-input';
     this._typeInput.placeholder = 'Type & Enter…';
@@ -241,7 +221,31 @@ class BattleEngine {
     controls.append(this._submitBtn, this._clearBtn, this._hearBtn, this._typeInput);
     this.overlay.appendChild(controls);
 
-    // Feedback line
+    // ── 2. Word builder ──────────────────────────────────────
+    this._buildEl = document.createElement('div');
+    this._buildEl.className = 'be-build';
+    this.overlay.appendChild(this._buildEl);
+
+    // ── 3. Timer bar ─────────────────────────────────────────
+    this._timerBarWrap = document.createElement('div');
+    this._timerBarWrap.className = 'be-timer-wrap';
+    this._timerBar = document.createElement('div');
+    this._timerBar.className = 'be-timer-fill';
+    this._timerBarWrap.appendChild(this._timerBar);
+    this.overlay.appendChild(this._timerBarWrap);
+
+    // ── 4. Tile pool ─────────────────────────────────────────
+    this._poolEl = document.createElement('div');
+    this._poolEl.className = 'be-pool';
+    this.overlay.appendChild(this._poolEl);
+
+    // ── 5. Hint words ────────────────────────────────────────
+    this._hintEl = document.createElement('div');
+    this._hintEl.className = 'be-hints';
+    this._hintEl.title = 'Hint: words you can make!';
+    this.overlay.appendChild(this._hintEl);
+
+    // ── 6. Feedback line ─────────────────────────────────────
     this._feedbackEl = document.createElement('div');
     this._feedbackEl.className = 'be-feedback';
     this.overlay.appendChild(this._feedbackEl);
@@ -378,8 +382,11 @@ class BattleEngine {
       this.slashParticles.push(new SlashParticle(bossX + (Math.random()-0.5)*40, bossY + (Math.random()-0.5)*40));
     }
 
+    const _praisePerfect = ['PERFECT! 💥','RICE POWER! 🍚⚡','UNSTOPPABLE! 🔥','SAMURAI STRIKE! ⚔️','PHONICS FURY! 💫'];
+    const _praiseGreat  = ['GREAT! ⚔️','NICE SLICE! 🗡️','WORD WARRIOR! 🏆','SLICED IT! ✨','DINO SMASHER! 💪'];
+    const _rng = Math.floor(Math.random() * 5);
     const gradeText = this._combo >= 3 ? `COMBO ×${this._combo}! ⚡` :
-                      timeBonus > 0.7  ? 'PERFECT! 💥' : 'GREAT! ⚔️';
+                      timeBonus > 0.7  ? _praisePerfect[_rng] : _praiseGreat[_rng];
     this.damagePops.push(new DamagePop(bossX, bossY - 40, `-${damage}`, '#FFD700'));
     this.damagePops.push(new DamagePop(bossX, bossY - 80, gradeText, '#fff'));
 
