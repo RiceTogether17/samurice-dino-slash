@@ -62,8 +62,8 @@ const SHAKE_MAG       = 8;
 const PARTICLE_COUNT  = 22;
 
 const SKINS = [
-  { name: 'Raptor',       file: 'assets/dinosaurs/raptor.png'       },
-  { name: 'Velociraptor', file: 'assets/dinosaurs/velociraptor.png' },
+  { name: 'Raptor',       file: 'assets/dinosaurs/velociraptor.png'  },
+  { name: 'Velociraptor', file: 'assets/dinosaurs/velociraptor2.png' },
   { name: 'Stego',        file: 'assets/dinosaurs/stegosaurus.png'  },
   { name: 'Triceratops',  file: 'assets/dinosaurs/triceratops.png'  },
   { name: 'T-Rex Boss',   file: 'assets/dinosaurs/trex.png'         },
