@@ -65,11 +65,15 @@ class SlashGame {
     this.sprites  = {};
 
     // State
-    this.state     = 'menu';   // menu | stage-select | runner | transition | battle | stage-win | stage-lose | credits
+    this.state     = 'menu';   // menu | stage-select | world-map | runner | transition | battle | stage-win | stage-lose
     this.stageId   = 1;
     this._age      = 0;
     this._transFrames = 0;
     this._transMsg    = '';
+
+    // World map animation
+    this._mapPlayerPos = null;   // { x, y } animated player dot on map
+    this._mapAnim      = 0;      // age for map animations
 
     // Sub-engines (created/destroyed per phase)
     this.runner  = null;
@@ -154,7 +158,7 @@ class SlashGame {
   // ── Menu input (keyboard) ─────────────────────────────────────
   _bindMenuInput() {
     this._menuKd = (e) => {
-      if (this.state === 'stage-select') {
+      if (this.state === 'stage-select' || this.state === 'world-map') {
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
           this._menuSel = Math.min(5, this._menuSel + 1);
         }
@@ -162,9 +166,13 @@ class SlashGame {
           this._menuSel = Math.max(0, this._menuSel - 1);
         }
         if (e.key === 'Enter' || e.key === ' ') this._launchStage(this._menuSel + 1);
+        if (e.key === 'm' || e.key === 'M') {
+          // Toggle between map and list view
+          this.state = this.state === 'world-map' ? 'stage-select' : 'world-map';
+        }
       }
       if (this.state === 'menu' && (e.key === 'Enter' || e.key === ' ')) {
-        this.state = 'stage-select';
+        this.state = 'world-map';
       }
     };
     document.addEventListener('keydown', this._menuKd);
@@ -190,11 +198,10 @@ class SlashGame {
 
   _handleCanvasClick(mx, my) {
     if (this.state === 'menu') {
-      this.state = 'stage-select';
+      this.state = 'world-map';
       return;
     }
     if (this.state === 'stage-select') {
-      // Hit-test stage cards
       const cards = this._stageCardRects || [];
       cards.forEach((r, i) => {
         if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
@@ -206,8 +213,21 @@ class SlashGame {
       });
       return;
     }
+    if (this.state === 'world-map') {
+      const nodes = this._mapNodeRects || [];
+      nodes.forEach((n, i) => {
+        const dx = mx - n.cx;
+        const dy = my - n.cy;
+        if (dx * dx + dy * dy <= n.r * n.r) {
+          if (this.progress.isUnlocked(i + 1)) {
+            this._menuSel = i;
+            this._launchStage(i + 1);
+          }
+        }
+      });
+      return;
+    }
     if (this.state === 'stage-win' || this.state === 'stage-lose') {
-      // Hit-test buttons
       const btns = this._resultBtnRects || [];
       btns.forEach(btn => {
         if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
@@ -283,7 +303,9 @@ class SlashGame {
   // ── STAGE WIN ────────────────────────────────────────────────
   _onStageWin() {
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
-    const score = this.battle ? this.battle.score : 0;
+    const battleScore = this.battle ? this.battle.score : 0;
+    const runnerScore = this._lastRunnerScore || 0;
+    const score = battleScore + runnerScore;
     this.progress.completeStage(this.stageId, score);
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
@@ -326,6 +348,7 @@ class SlashGame {
     switch (this.state) {
       case 'menu':         this._updateMenu();       break;
       case 'stage-select': this._updateStageSelect(); break;
+      case 'world-map':    this._updateWorldMap();   break;
       case 'runner':       this._updateRunner();     break;
       case 'transition':   this._updateTransition(); break;
       case 'battle':       this._updateBattle();     break;
@@ -699,6 +722,237 @@ class SlashGame {
     ctx.textBaseline = 'alphabetic';
   }
 
+  // ── WORLD MAP ────────────────────────────────────────────────
+  _updateWorldMap() {
+    this._mapAnim++;
+    this._drawWorldMap();
+  }
+
+  _drawWorldMap() {
+    const ctx = this.ctx;
+    const W   = this.W;
+    const H   = this.H;
+    const t   = this._mapAnim;
+    ctx.clearRect(0, 0, W, H);
+
+    // ── Scenic world map background ──────────────────────────────
+    // Sky gradient
+    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.65);
+    sky.addColorStop(0,   '#0a1e6e');
+    sky.addColorStop(0.5, '#1a6bb5');
+    sky.addColorStop(1,   '#4eb34e');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // Ground area
+    const gnd = ctx.createLinearGradient(0, H * 0.60, 0, H);
+    gnd.addColorStop(0, '#3d8c2a');
+    gnd.addColorStop(1, '#1b5e20');
+    ctx.fillStyle = gnd;
+    ctx.fillRect(0, H * 0.60, W, H * 0.40);
+
+    // Animated clouds
+    [{ cx: 0.15, cy: 0.12, r: 0.07 }, { cx: 0.50, cy: 0.08, r: 0.09 },
+     { cx: 0.80, cy: 0.14, r: 0.06 }].forEach((c, i) => {
+      const ox = ((t * 0.18 + i * 200) % (W + 120)) - 60;
+      const cx = (c.cx * W + ox) % (W + 80) - 40;
+      ctx.fillStyle = 'rgba(255,255,255,0.28)';
+      ctx.beginPath(); ctx.ellipse(cx, c.cy * H, c.r * W, c.r * H * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx - c.r * W * 0.45, c.cy * H + c.r * H * 0.18, c.r * W * 0.68, c.r * H * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + c.r * W * 0.48, c.cy * H + c.r * H * 0.15, c.r * W * 0.62, c.r * H * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // ── Title ────────────────────────────────────────────────────
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font        = `bold ${Math.min(22, W * 0.052)}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle   = '#FFD700';
+    ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 10;
+    ctx.fillText('🗺 World Map', W / 2, 10);
+    ctx.shadowBlur  = 0;
+
+    // Rice points display
+    ctx.font      = `bold 13px "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFF176';
+    ctx.fillText(`🍚 ${this.progress.getRicePoints()} Rice Points`, W / 2, 38);
+
+    // Map/List view toggle hint
+    ctx.font      = '11px system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('Press M for list view', W / 2, H - 14);
+
+    // ── Compute stage node positions in a winding path ───────────
+    // Arrange 6 nodes in a winding S-curve across the map
+    const margin = 58;
+    const mapTop = 68;
+    const mapBot = H - 40;
+    const mapH   = mapBot - mapTop;
+    // S-curve path: zig-zag across canvas
+    const nodes = [
+      { fx: 0.15, fy: 0.18 },  // Stage 1 — bottom-left
+      { fx: 0.50, fy: 0.30 },  // Stage 2 — center
+      { fx: 0.82, fy: 0.20 },  // Stage 3 — right
+      { fx: 0.65, fy: 0.52 },  // Stage 4 — center-right
+      { fx: 0.30, fy: 0.65 },  // Stage 5 — center-left
+      { fx: 0.72, fy: 0.80 },  // Stage 6 — right (final boss)
+    ].map(n => ({
+      cx: margin + n.fx * (W - margin * 2),
+      cy: mapTop + n.fy * mapH,
+    }));
+
+    const nodeR = Math.max(28, Math.min(36, W * 0.065));
+    this._mapNodeRects = nodes.map(n => ({ cx: n.cx, cy: n.cy, r: nodeR + 6 }));
+
+    // ── Draw connecting path ─────────────────────────────────────
+    ctx.save();
+    ctx.lineCap  = 'round';
+    ctx.lineJoin = 'round';
+
+    for (let i = 0; i < nodes.length - 1; i++) {
+      const a = nodes[i];
+      const b = nodes[i + 1];
+      const unlocked = this.progress.isUnlocked(i + 2); // next node unlocked?
+
+      // Outer path (wide, dark)
+      ctx.strokeStyle = unlocked ? 'rgba(255,215,0,0.35)' : 'rgba(80,80,80,0.4)';
+      ctx.lineWidth   = 14;
+      ctx.beginPath(); ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
+
+      // Inner path (bright)
+      ctx.strokeStyle = unlocked ? '#FFD700' : '#555';
+      ctx.lineWidth   = 6;
+      ctx.setLineDash(unlocked ? [] : [10, 8]);
+      ctx.beginPath(); ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Animated dots travelling along unlocked paths
+      if (unlocked) {
+        const prog  = ((t * 0.012) % 1);
+        const dotX  = a.cx + (b.cx - a.cx) * prog;
+        const dotY  = a.cy + (b.cy - a.cy) * prog;
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.beginPath(); ctx.arc(dotX, dotY, 4, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // ── Draw stage nodes ─────────────────────────────────────────
+    PHONICS_DATA.stageList.forEach((stage, i) => {
+      const n = nodes[i];
+      if (!n) return;
+      const stageId  = i + 1;
+      const summary  = this.progress.getStageSummary(stageId);
+      const unlocked = summary.unlocked;
+      const sel      = this._menuSel === i;
+      const stars    = summary.stars || 0;
+      const bounce   = sel ? Math.sin(t * 0.12) * 5 : 0;
+      const cy       = n.cy + bounce;
+
+      // Drop shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath(); ctx.ellipse(n.cx, cy + nodeR + 4, nodeR * 0.7, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+      // Node circle — glow for selected
+      if (sel) {
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur  = 22;
+      }
+      // Ring
+      ctx.strokeStyle = sel ? '#FFD700' : (unlocked ? 'rgba(255,255,255,0.7)' : 'rgba(80,80,80,0.6)');
+      ctx.lineWidth   = sel ? 4 : 2.5;
+      ctx.fillStyle   = unlocked
+        ? (sel ? `rgba(255,215,0,0.25)` : 'rgba(255,255,255,0.15)')
+        : 'rgba(0,0,0,0.55)';
+      ctx.beginPath(); ctx.arc(n.cx, cy, nodeR, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      if (!unlocked) {
+        ctx.font      = `${Math.round(nodeR * 0.7)}px serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillText('🔒', n.cx, cy);
+      } else {
+        // Stage number
+        ctx.font        = `bold ${Math.round(nodeR * 0.52)}px "Comic Sans MS", system-ui`;
+        ctx.textAlign   = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle   = sel ? '#FFD700' : '#fff';
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+        ctx.fillText(`${stageId}`, n.cx, cy - nodeR * 0.18);
+
+        // Stage emoji icon
+        const icons = ['🌾','🎋','🌸','🏚️','⛰️','🌋'];
+        ctx.font      = `${Math.round(nodeR * 0.4)}px serif`;
+        ctx.fillText(icons[i] || '🗺️', n.cx, cy + nodeR * 0.28);
+        ctx.shadowBlur = 0;
+
+        // Stars below node
+        const starSize = Math.max(10, Math.round(nodeR * 0.35));
+        ctx.font = `${starSize}px serif`;
+        for (let s = 0; s < 3; s++) {
+          ctx.globalAlpha = s < stars ? 1 : 0.2;
+          ctx.fillText('⭐', n.cx - starSize * 1.1 + s * starSize * 1.12, cy + nodeR + 14);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // Stage name label below
+      ctx.font      = `bold ${Math.max(9, Math.round(W * 0.022))}px "Comic Sans MS", system-ui`;
+      ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.3)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
+      const labelY = cy + nodeR + (stars > 0 ? 28 : 18);
+      ctx.fillText(stage.name, n.cx, labelY);
+      ctx.shadowBlur = 0;
+    });
+
+    // ── Animated Riku dot on the map (shows current stage) ───────
+    if (this.stageId <= 6) {
+      const curNode = nodes[this.stageId - 1];
+      if (curNode) {
+        const bob  = Math.sin(t * 0.1) * 4;
+        const rikuSp = this.sprites['riku-idle'] || this.sprites['riku-run'];
+        const rH = nodeR * 1.1;
+        if (rikuSp && rikuSp.complete && rikuSp.naturalWidth > 0) {
+          const ar = rikuSp.naturalWidth / rikuSp.naturalHeight;
+          const rW = rH * ar;
+          ctx.save();
+          ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 14;
+          ctx.drawImage(rikuSp, curNode.cx - rW / 2, curNode.cy - nodeR * 1.8 + bob, rW, rH);
+          ctx.restore();
+        } else {
+          ctx.font = `${Math.round(nodeR * 0.8)}px serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('🍙', curNode.cx, curNode.cy - nodeR * 1.4 + bob);
+        }
+      }
+    }
+
+    // ── Selected stage info panel (bottom) ──────────────────────
+    const selStage = PHONICS_DATA.stageList[this._menuSel];
+    if (selStage && this.progress.isUnlocked(this._menuSel + 1)) {
+      const panW = Math.min(W - 24, 380);
+      const panH = 56;
+      const panX = (W - panW) / 2;
+      const panY = H - panH - 22;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 14); ctx.fill();
+      ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2; ctx.stroke();
+
+      ctx.font      = `bold ${Math.min(14, W * 0.032)}px "Comic Sans MS", system-ui`;
+      ctx.fillStyle = '#FFD700';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(`${selStage.name} — ${selStage.pattern}`, W / 2, panY + 8);
+
+      ctx.font      = `${Math.min(11, W * 0.025)}px system-ui`;
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillText(`Boss: ${selStage.bossName}  ·  Tap node or press Enter to play`, W / 2, panY + 32);
+    }
+
+    ctx.textBaseline = 'alphabetic';
+  }
+
   // ── RUNNER UPDATE ────────────────────────────────────────────
   _updateRunner() {
     if (!this.runner) return;
@@ -709,9 +963,11 @@ class SlashGame {
 
     if (this.runner.outcome === 'flag') {
       const coins = this.runner.getCollectedPhonemes();
+      this._lastRunnerScore = this.runner.score || 0;
       this.progress.recordRunnerComplete(this.stageId, this.runner.getCollectedCount());
+      const scoreMsg = this._lastRunnerScore > 0 ? `\n⭐ Runner Score: ${this._lastRunnerScore.toLocaleString()}` : '';
       this._startTransition(
-        `🦖 ${PHONICS_DATA.stageList[this.stageId - 1].bossName} appears!\n⚔️ Time to BLEND!`,
+        `🦖 ${PHONICS_DATA.stageList[this.stageId - 1].bossName} appears!\n⚔️ Time to BLEND!${scoreMsg}`,
         () => this._startBattle(coins),
         130,
       );
@@ -720,6 +976,7 @@ class SlashGame {
     } else {
       // Timeout: still go to battle with what was collected
       const coins = this.runner.getCollectedPhonemes();
+      this._lastRunnerScore = this.runner.score || 0;
       this.progress.recordRunnerComplete(this.stageId, this.runner.getCollectedCount());
       this._startTransition(
         `⏱ Time's up! Boss battle with ${coins.length} phonemes!`,
@@ -853,12 +1110,12 @@ class SlashGame {
             this.stageId++;
             this._launchStage(this.stageId);
           } else {
-            this.state = 'stage-select';
+            this.state = 'world-map';
           }
         }
       },
-      { label: '🗺 Stage Select', x: W/2 - 80, y: py + 264, w: 160, h: 36,
-        action: () => { this.state = 'stage-select'; }
+      { label: '🗺 World Map', x: W/2 - 80, y: py + 264, w: 160, h: 36,
+        action: () => { this.state = 'world-map'; }
       },
     ];
     this._drawResultButtons(ctx);
@@ -897,8 +1154,8 @@ class SlashGame {
     this._resultBtnRects = [
       { label: '🔄 Try Again',  x: W/2 - 90, y: py + 158, w: 180, h: 42,
         action: () => this._launchStage(this.stageId) },
-      { label: '🗺 Stage Select', x: W/2 - 70, y: py + 214, w: 140, h: 36,
-        action: () => { this.state = 'stage-select'; } },
+      { label: '🗺 World Map', x: W/2 - 70, y: py + 214, w: 140, h: 36,
+        action: () => { this.state = 'world-map'; } },
     ];
     this._drawResultButtons(ctx);
     ctx.textBaseline = 'alphabetic';
@@ -941,8 +1198,8 @@ function launchSlashGame() {
   if (!_slashGameInstance) {
     _slashGameInstance = new SlashGame('slashCanvas', 'battleOverlay');
   } else {
-    // Show menu again if returning
-    _slashGameInstance.state = 'stage-select';
+    // Show world map if returning
+    _slashGameInstance.state = 'world-map';
     _slashGameInstance.overlay.classList.add('hidden');
   }
 }
@@ -964,8 +1221,8 @@ document.addEventListener('keydown', (e) => {
     const slashActive = document.getElementById('slashScreen')?.classList.contains('active');
     if (slashActive && _slashGameInstance) {
       const s = _slashGameInstance.state;
-      if (s === 'menu' || s === 'stage-select') exitSlash();
-      else if (s === 'runner' || s === 'battle') _slashGameInstance.state = 'stage-select';
+      if (s === 'menu' || s === 'stage-select' || s === 'world-map') exitSlash();
+      else if (s === 'runner' || s === 'battle') _slashGameInstance.state = 'world-map';
     }
   }
 });
