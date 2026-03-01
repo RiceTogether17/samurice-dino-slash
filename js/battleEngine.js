@@ -156,11 +156,12 @@ class BattleEngine {
     this._tileEls   = [];
     this._setupDOM();
 
-    this.done    = false;
-    this.outcome = null;  // 'victory' | 'defeat'
+    this.done      = false;
+    this.outcome   = null;  // 'victory' | 'defeat'
+    this._destroyed = false; // guards against orphaned setTimeout callbacks after destroy()
 
     // Kick off first word after a short delay (let canvas settle)
-    setTimeout(() => this._startNextWord(), 400);
+    setTimeout(() => { if (!this._destroyed) { this._startNextWord(); this._startBlendTimer(); } }, 400);
   }
 
   // ── Utility: Fisher-Yates shuffle ───────────────────────────
@@ -411,6 +412,7 @@ class BattleEngine {
     if (this.progress) this.progress.recordBlend(this.stage.id, this._currentWord.word, false);
 
     setTimeout(() => {
+      if (this._destroyed) return;
       if (this.rikuHp <= 0) { this._lose(); return; }
       this.state = 'idle';
       this._startNextWord();
@@ -496,6 +498,7 @@ class BattleEngine {
     if (this.audio)    this.audio.sfxSlash();
     if (this.audio)    this.audio.sfxBossHit();
     setTimeout(() => {
+      if (this._destroyed) return;
       if (this.audio) this.audio.playBlendSequence(wordObj.phonemes, wordObj.word);
     }, 200);
 
@@ -530,6 +533,7 @@ class BattleEngine {
 
     const delay = this._combo >= 5 ? 2000 : 1400;
     setTimeout(() => {
+      if (this._destroyed) return;
       if (this.bossHp <= 0) {
         this._win();
       } else {
@@ -584,6 +588,7 @@ class BattleEngine {
     // Phase 3: shorter recovery so boss feels relentless
     const recoverDelay = this._bossPhase === 3 ? 900 : this._bossPhase === 2 ? 1050 : 1200;
     setTimeout(() => {
+      if (this._destroyed) return;
       if (this.rikuHp <= 0) { this._lose(); return; }
       this.state = 'idle';
       this._startNextWord();
@@ -1064,6 +1069,7 @@ class BattleEngine {
 
   // ── Cleanup ──────────────────────────────────────────────────
   destroy() {
+    this._destroyed = true;
     this._stopBlendTimer();
     this.overlay.innerHTML = '';
   }

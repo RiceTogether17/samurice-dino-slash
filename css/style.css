@@ -873,6 +873,7 @@ body {
     cursor: default;
     transform: none !important;
     opacity: 0.55;
+    pointer-events: none;
 }
 /* Hint tile — pulses gold to mark the first correct phoneme on the last attempt */
 @keyframes tileHintPulse {
