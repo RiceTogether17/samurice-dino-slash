@@ -874,6 +874,18 @@ body {
     transform: none !important;
     opacity: 0.55;
 }
+/* Hint tile — pulses gold to mark the first correct phoneme on the last attempt */
+@keyframes tileHintPulse {
+    0%, 100% { box-shadow: 0 3px 0 #7f5700, 0 0  8px 2px rgba(255,215,0,0.45); }
+    50%       { box-shadow: 0 3px 0 #c07000, 0 0 22px 8px rgba(255,143,0,0.75); }
+}
+.be-tile-hint:not(.be-tile-used) {
+    animation: tileEntrance 0.22s cubic-bezier(0.34,1.56,0.64,1) both,
+               tileHintPulse 0.75s ease-in-out infinite 0.22s;
+    background: linear-gradient(160deg, #FFEE58, #FFD600);
+    border-color: #FF8F00;
+    color: #3E2723;
+}
 /* Entrance pop animation when a new tile set is rendered */
 @keyframes tileEntrance {
     0%   { transform: scale(0.6) translateY(10px); opacity: 0; }
