@@ -123,7 +123,7 @@ class BattleEngine {
     this._wordQueue     = this._shuffleArray([...stageData.words]);
     this._wordQueueIdx  = 0;
     this._currentWord   = null;
-    this._shuffledPh    = [];   // stable shuffled phonemes for current word
+    this._shuffledPh    = [];   // shuffled phoneme tiles for current word
     this._usedTileIdx   = new Set();  // which tile positions have been clicked
 
     // Battle state
@@ -147,6 +147,10 @@ class BattleEngine {
     this._blendTimer     = null;
     this._currentBuilt   = [];   // phonemes selected so far
     this._wrongAttempts  = 0;    // wrong-order attempts for current word
+    this._showFirstHint  = false; // highlight first phoneme tile on penultimate attempt
+
+    // Pause
+    this._paused = false;
 
     // DOM refs (created by _setupDOM)
     this._tileEls   = [];
@@ -246,10 +250,11 @@ class BattleEngine {
       this._wordQueueIdx = 0;
     }
     this._currentWord   = this._wordQueue[this._wordQueueIdx++];
-    this._shuffledPh    = [...this._currentWord.phonemes];  // in correct order per user request
+    this._shuffledPh    = this._shuffleArray([...this._currentWord.phonemes]); // randomise tile order
     this._wrongAttempts = 0;
     this._currentBuilt  = [];
     this._usedTileIdx   = new Set();
+    this._showFirstHint = false;
 
     this._renderTargetHint();
     this._renderCurrentWordTiles();
@@ -284,11 +289,18 @@ class BattleEngine {
   _renderCurrentWordTiles() {
     this._poolEl.innerHTML = '';
     this._tileEls = [];
+    // Track if we've already applied the hint to one tile (avoid double-hint for repeated phonemes)
+    let hintApplied = false;
 
     this._shuffledPh.forEach((ph, idx) => {
       const isUsed = this._usedTileIdx.has(idx);
+      // Hint: highlight the tile matching the first needed phoneme on penultimate attempt
+      const isHint = this._showFirstHint && !isUsed && !hintApplied &&
+                     ph === this._currentWord.phonemes[this._currentBuilt.length];
+      if (isHint) hintApplied = true;
+
       const tile   = document.createElement('button');
-      tile.className        = 'be-tile' + (isUsed ? ' be-tile-used' : '');
+      tile.className        = 'be-tile' + (isUsed ? ' be-tile-used' : '') + (isHint ? ' be-tile-hint' : '');
       tile.textContent      = ph.toUpperCase();
       tile.dataset.phoneme  = ph;
       tile.dataset.idx      = idx;
@@ -360,10 +372,14 @@ class BattleEngine {
     if (this.audio) this.audio.sfxWrongBlend();
 
     const triesLeft = MAX_WRONGS - this._wrongAttempts;
-    this._setFeedback(`❌ Not quite! ${triesLeft} ${triesLeft === 1 ? 'try' : 'tries'} left`, '#FF5252');
+    const hintMsg = triesLeft === 1 ? ' 💡 Hint: first tile is glowing!' : '';
+    this._setFeedback(`❌ Not quite! ${triesLeft} ${triesLeft === 1 ? 'try' : 'tries'} left${hintMsg}`, '#FF5252');
 
     const _fy = Math.round(this.H * 0.58);
     this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy * 0.50), `-${dmg}`, '#FF5252'));
+
+    // On penultimate attempt, hint the first correct tile
+    this._showFirstHint = (this._wrongAttempts >= MAX_WRONGS - 1);
 
     // Reset build and re-render tiles in the same shuffled order
     this._currentBuilt = [];
@@ -463,9 +479,9 @@ class BattleEngine {
 
     const timeBonus = this._blendTimeLeft / BLEND_TIME;
     const comboMult = 1 + Math.min(this._combo, 4) * 0.25;
-    // Phase damage multiplier
-    const phaseMult = this._bossPhase === 3 ? 1.0 :
-                      this._bossPhase === 2 ? 1.0 : 1.0;  // player damage stays fair
+    // Phase damage multiplier — reward surviving to later boss phases
+    const phaseMult = this._bossPhase === 3 ? 1.2 :
+                      this._bossPhase === 2 ? 1.1 : 1.0;
     const damage    = Math.floor(wordObj.damage * comboMult * (0.7 + timeBonus * 0.3) * phaseMult);
 
     this._combo++;
@@ -610,6 +626,7 @@ class BattleEngine {
   // ── Update ───────────────────────────────────────────────────
   update() {
     if (this.done) return;
+    if (this._paused) return;
     this._age++;
     if (this._bossShake  > 0) this._bossShake--;
     if (this._rikuShake  > 0) this._rikuShake--;
@@ -705,6 +722,68 @@ class BattleEngine {
       ctx.fillText(phaseLabel, Math.round(this.W * 0.72), Math.round(this.H * 0.04));
       ctx.restore();
     }
+
+    // ── Pause overlay ────────────────────────────────────────────
+    if (this._paused) this._drawPauseOverlay(ctx);
+  }
+
+  // ── Pause helpers ─────────────────────────────────────────────
+  _togglePause() {
+    this._paused = !this._paused;
+    if (this._paused) {
+      this._stopBlendTimer();
+    } else {
+      // Resume the blend timer from where it left off
+      if ((this.state === 'idle' || this.state === 'blending') && this._blendTimeLeft > 0) {
+        this._resumeBlendTimer();
+      }
+    }
+  }
+
+  // Restart blend-timer interval without resetting _blendTimeLeft
+  _resumeBlendTimer() {
+    this._stopBlendTimer();
+    this._blendTimer = setInterval(() => {
+      this._blendTimeLeft -= 0.1;
+      const pct = Math.max(0, this._blendTimeLeft / BLEND_TIME);
+      this._timerBar.style.width  = (pct * 100) + '%';
+      this._timerBar.className = 'be-timer-fill' +
+        (pct < 0.25 ? ' be-timer-urgent' : pct < 0.5 ? ' be-timer-warn' : '');
+      if (this._blendTimeLeft <= 0) {
+        this._stopBlendTimer();
+        this._bossAutoAttack();
+      }
+    }, 100);
+  }
+
+  _drawPauseOverlay(ctx) {
+    const cx = this.W / 2;
+    const cy = Math.round(this.H * 0.30); // centre in upper canvas (battle UI below)
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.52)';
+    ctx.fillRect(0, 0, this.W, this.H * 0.60);
+    // Panel
+    const pw = Math.min(300, this.W * 0.72);
+    const ph = 145;
+    ctx.fillStyle   = 'rgba(10,10,30,0.88)';
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth   = 2.5;
+    ctx.beginPath(); ctx.roundRect(cx - pw / 2, cy - ph / 2, pw, ph, 18); ctx.fill(); ctx.stroke();
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle    = '#FFD700';
+    ctx.shadowColor  = '#FF6F00';
+    ctx.shadowBlur   = 14;
+    ctx.fillText('⏸ PAUSED', cx, cy - 32);
+    ctx.shadowBlur   = 0;
+    ctx.font      = `${Math.round(this.W * 0.034)}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#fff';
+    ctx.fillText('P or ESC to resume', cx, cy + 8);
+    ctx.fillStyle = '#FF9800';
+    ctx.font      = `${Math.round(this.W * 0.031)}px "Comic Sans MS", system-ui`;
+    ctx.fillText('Q — quit to map', cx, cy + 42);
+    ctx.restore();
   }
 
   _drawBackground(ctx) {

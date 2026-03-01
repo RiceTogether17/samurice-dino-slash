@@ -1220,17 +1220,36 @@ function exitSlash() {
   document.getElementById('modeChooser').classList.add('active');
 }
 
-// Escape key → back to mode chooser from slash menus
+// Escape / P → pause/resume during gameplay; Q → quit-to-map while paused
 document.addEventListener('keydown', (e) => {
+  const slashActive = document.getElementById('slashScreen')?.classList.contains('active');
+  if (!slashActive || !_slashGameInstance) return;
+
+  const s = _slashGameInstance.state;
+
   if (e.key === 'Escape') {
-    const slashActive = document.getElementById('slashScreen')?.classList.contains('active');
-    if (slashActive && _slashGameInstance) {
-      const s = _slashGameInstance.state;
-      if (s === 'menu' || s === 'stage-select' || s === 'world-map') exitSlash();
-      else if (s === 'runner' || s === 'battle') {
-        _slashGameInstance.audio.stopMusic();
-        _slashGameInstance.state = 'world-map';
-      }
+    if (s === 'menu' || s === 'stage-select' || s === 'world-map') {
+      exitSlash();
+    } else if (s === 'runner' && _slashGameInstance.runner) {
+      _slashGameInstance.runner._togglePause();
+    } else if (s === 'battle' && _slashGameInstance.battle) {
+      _slashGameInstance.battle._togglePause();
+    }
+  }
+
+  // Q while paused → quit to world map
+  if (e.key === 'q' || e.key === 'Q') {
+    if (s === 'runner' && _slashGameInstance.runner?._paused) {
+      _slashGameInstance.runner._paused = false;
+      _slashGameInstance.audio.stopMusic();
+      _slashGameInstance.runner = null;
+      _slashGameInstance.state  = 'world-map';
+    } else if (s === 'battle' && _slashGameInstance.battle?._paused) {
+      _slashGameInstance.battle._stopBlendTimer();
+      _slashGameInstance.battle._paused = false;
+      _slashGameInstance.audio.stopMusic();
+      _slashGameInstance.battle = null;
+      _slashGameInstance.state  = 'world-map';
     }
   }
 });

@@ -69,6 +69,7 @@ class RunnerPlayer {
     this.groundPounding     = false;
     this._groundPoundLanded = false;
     this._starTimer         = 0;   // frames of star-power remaining
+    this._landSquash        = 0;   // frames of landing squash animation
     // Score & lives tracked externally by RunnerEngine
   }
 
@@ -133,6 +134,7 @@ class RunnerPlayer {
   update(groundY, platforms) {
     if (this.boostFrames > 0) this.boostFrames--;
     if (this.invincible > 0)  this.invincible--;
+    if (this._landSquash > 0) this._landSquash--;
     if (this._powerUpTimer > 0) this._powerUpTimer--;
     if (this._powerUpTimer === 0 && this.powerUp === 'chili') { this.powerUp = null; }
     if (this._starTimer > 0)   { this._starTimer--;   if (this._starTimer === 0 && this.powerUp === 'star') this.powerUp = null; }
@@ -181,6 +183,7 @@ class RunnerPlayer {
 
     // ── Landing events ───────────────────────────────────────
     if (this.onGround && !_wasOnGround) {
+      this._landSquash = 10; // trigger squash-and-stretch on any landing
       if (this.groundPounding) {
         this.groundPounding      = false;
         this._groundPoundLanded  = true;
@@ -297,8 +300,10 @@ class RunnerPlayer {
         normW = this.w;
         normH = this.h;
       }
-      const dw = normW * sqX;
-      const dh = normH * sqY;
+      // Landing squash-and-stretch: flattens on impact, bounces back
+      const landAmt = this._landSquash > 0 ? Math.sin((this._landSquash / 10) * Math.PI) * 0.18 : 0;
+      const dw = normW * sqX * (1 + landAmt);
+      const dh = normH * sqY * (1 - landAmt * 0.85);
       // Centre horizontally; anchor at feet (sprite bottom = y + this.h)
       ctx.drawImage(sp, dx + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
     } else {
@@ -1277,6 +1282,37 @@ class RunnerParticle {
 }
 
 // ─────────────────────────────────────────────────────────────
+// DUST PARTICLE — running puffs and landing cloud
+// ─────────────────────────────────────────────────────────────
+class DustParticle {
+  constructor(x, y) {
+    this.x    = x + (Math.random() - 0.5) * 16;
+    this.y    = y;
+    this.vx   = (Math.random() - 0.5) * 2.2;
+    this.vy   = -Math.random() * 1.4 - 0.4;
+    this.r    = Math.random() * 4 + 2;
+    this.life = 0.65 + Math.random() * 0.35;
+  }
+  update() {
+    this.x    += this.vx;
+    this.y    += this.vy;
+    this.vy   += 0.1;
+    this.life -= 0.055;
+    this.r    *= 0.93;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.life) * 0.5;
+    ctx.fillStyle   = '#d4b483';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, Math.max(0.5, this.r), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  isDead() { return this.life <= 0; }
+}
+
+// ─────────────────────────────────────────────────────────────
 // LEVEL GENERATOR
 // Produces platform, coin, minion, flag, moving platforms,
 // question blocks, power-ups, and flying enemies for a stage.
@@ -1434,6 +1470,8 @@ class RunnerEngine {
 
     this.done    = false;
     this.outcome = null;
+    this._paused = false;
+    this.dustParticles = [];
   }
 
   // ── Bind D-pad button elements (called by SlashGame after creating runner) ──
@@ -1464,6 +1502,8 @@ class RunnerEngine {
   _bindInput() {
     const isJump = (e) => e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW';
     this._kd = (e) => {
+      if (e.code === 'KeyP') { e.preventDefault(); this._togglePause(); return; }
+      if (this._paused) return; // swallow all other input while paused
       if (isJump(e)) { e.preventDefault(); this.player.jump(this.audio); }
       if (e.code === 'ArrowDown'  || e.code === 'KeyS') { e.preventDefault(); this.player.groundPound(); }
       if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.keys.right = true; }
@@ -1486,6 +1526,7 @@ class RunnerEngine {
   // ── Update ───────────────────────────────────────────────────
   update() {
     if (this.done) return;
+    if (this._paused) return;
     this._age++;
 
     // Screen shake decay
@@ -1518,6 +1559,21 @@ class RunnerEngine {
     const allPlat = [...this.platforms, ...this.movingPlatforms];
     const visPlat = allPlat.filter(p => p.isVisible(this.W));
     this.player.update(this.groundY, visPlat);
+
+    // ── Dust particles ────────────────────────────────────────
+    const pFeet = this.player.y + this.player.h;
+    // Landing cloud puff (landSquash set to 10 exactly this frame)
+    if (this.player._landSquash === 10) {
+      for (let i = 0; i < 6; i++) {
+        this.dustParticles.push(new DustParticle(
+          this.player.screenX + this.player.w / 2, pFeet));
+      }
+    }
+    // Running trail every 5 frames when moving fast enough
+    if (this.player.onGround && Math.abs(this.player.vx) > 1.8 && this._age % 5 === 0) {
+      this.dustParticles.push(new DustParticle(
+        this.player.screenX + this.player.w / 2, pFeet));
+    }
 
     if (!this.player.alive) {
       this._screenShake = 20;
@@ -1687,6 +1743,10 @@ class RunnerEngine {
     // Particles
     this.particles.forEach(p => p.update());
     this.particles = this.particles.filter(p => !p.isDead());
+
+    // Dust particles
+    this.dustParticles.forEach(p => p.update());
+    this.dustParticles = this.dustParticles.filter(p => !p.isDead());
   }
 
   // ── Stomp an enemy (shared for ground + flying) ──────────────
@@ -1850,6 +1910,9 @@ class RunnerEngine {
     if (this.flag.sx < this.W + 100 && this.flag.sx > -100) {
       this.flag.draw(ctx, this.groundY);
     }
+
+    // Dust particles (at player feet, behind player)
+    this.dustParticles.forEach(p => p.draw(ctx));
 
     // Player (on top of everything)
     this.player.draw(ctx, this.sprites);
@@ -2042,6 +2105,9 @@ class RunnerEngine {
     ctx.shadowBlur  = 0;
     ctx.restore();
 
+    // ── Pause overlay (drawn after HUD so it covers everything)
+    if (this._paused) { this._drawPauseOverlay(ctx); }
+
     // ── Boost bar (center-bottom when active)
     if (p.boostFrames > 0) {
       const pct = p.boostFrames / R_BOOST_DUR;
@@ -2087,6 +2153,44 @@ class RunnerEngine {
 
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign    = 'left';
+  }
+
+  // ── Pause ─────────────────────────────────────────────────────
+  _togglePause() {
+    this._paused = !this._paused;
+  }
+
+  _drawPauseOverlay(ctx) {
+    const cx = this.W / 2;
+    const cy = this.H / 2;
+    ctx.save();
+    // Dim the entire screen
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, this.W, this.H);
+    // Panel
+    const pw = Math.min(300, this.W * 0.7);
+    const ph = 150;
+    ctx.fillStyle   = 'rgba(10,10,30,0.88)';
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth   = 2.5;
+    ctx.beginPath(); ctx.roundRect(cx - pw / 2, cy - ph / 2, pw, ph, 18); ctx.fill(); ctx.stroke();
+    // Title
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle    = '#FFD700';
+    ctx.shadowColor  = '#FF6F00';
+    ctx.shadowBlur   = 14;
+    ctx.fillText('⏸ PAUSED', cx, cy - 34);
+    ctx.shadowBlur   = 0;
+    // Hints
+    ctx.font      = `${Math.round(this.W * 0.034)}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#fff';
+    ctx.fillText('P or ESC to resume', cx, cy + 6);
+    ctx.fillStyle = '#FF9800';
+    ctx.font      = `${Math.round(this.W * 0.031)}px "Comic Sans MS", system-ui`;
+    ctx.fillText('Q — quit to map', cx, cy + 42);
+    ctx.restore();
   }
 
   // ── Public getters for battle phase ─────────────────────────
