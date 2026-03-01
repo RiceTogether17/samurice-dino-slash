@@ -245,6 +245,13 @@ class SlashGame {
       return;
     }
     if (this.state === 'world-map') {
+      // PLAY button in info panel
+      const pb = this._mapPlayBtnRect;
+      if (pb && mx >= pb.x && mx <= pb.x + pb.w && my >= pb.y && my <= pb.y + pb.h) {
+        this._launchStage(this._menuSel + 1);
+        return;
+      }
+      // Stage nodes on map
       const nodes = this._mapNodeRects || [];
       nodes.forEach((n, i) => {
         const dx = mx - n.cx;
@@ -292,16 +299,19 @@ class SlashGame {
     if (this.runner) { this.runner.destroy(); this.runner = null; }
     if (this.battle) { this.battle.destroy(); this.battle = null; }
 
+    this.overlay.classList.remove('active');
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
 
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
     this.runner = new RunnerEngine(this.canvas, stage, this.sprites, this.audio, this.W, this.H);
 
-    // Wire D-pad buttons
+    // Wire D-pad buttons — also restore L/R visibility in case endless mode hid them
     const dL = document.getElementById('dpadLeft');
     const dR = document.getElementById('dpadRight');
     const dJ = document.getElementById('dpadJump');
+    const dpadMove = document.getElementById('runnerControls')?.querySelector('.dpad-move');
+    if (dpadMove) dpadMove.style.visibility = '';
     if (dL && dR && dJ) this.runner.bindDpad(dL, dR, dJ);
     this._showDpad();
 
@@ -325,6 +335,7 @@ class SlashGame {
     this.audio.stopMusic();
 
     this.overlay.classList.remove('hidden');
+    this.overlay.classList.add('active');
     this.overlay.innerHTML = '';
 
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
@@ -342,6 +353,7 @@ class SlashGame {
     const runnerScore = this._lastRunnerScore || 0;
     const score = battleScore + runnerScore;
     this.progress.completeStage(this.stageId, score);
+    this.overlay.classList.remove('active');
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
     if (this.battle) { this.battle.destroy(); this.battle = null; }
@@ -352,6 +364,7 @@ class SlashGame {
 
   // ── STAGE LOSE ───────────────────────────────────────────────
   _onStageLose() {
+    this.overlay.classList.remove('active');
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
     if (this.battle) { this.battle.destroy(); this.battle = null; }
@@ -365,6 +378,7 @@ class SlashGame {
     if (this.battle)  { this.battle.destroy();  this.battle  = null; }
     this.audio.stopMusic();
     this._hideDpad();
+    this.overlay.classList.remove('active');
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
     document.removeEventListener('keydown', this._menuKd);
@@ -979,15 +993,18 @@ class SlashGame {
       }
     }
 
-    // ── Selected stage info panel (bottom) ──────────────────────
+    // ── Selected stage info panel + PLAY button (bottom) ────────
     const selStage = PHONICS_DATA.stageList[this._menuSel];
+    this._mapPlayBtnRect = null;
     if (selStage && this.progress.isUnlocked(this._menuSel + 1)) {
+      const playBtnW = Math.min(120, W * 0.28);
+      const playBtnH = Math.round(H * 0.068);
       const panW = Math.min(W - 24, 380);
-      const panH = 56;
+      const panH = 56 + playBtnH + 12;
       const panX = (W - panW) / 2;
-      const panY = H - panH - 22;
+      const panY = H - panH - 14;
 
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fillStyle = 'rgba(0,0,0,0.78)';
       ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 14); ctx.fill();
       ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2; ctx.stroke();
 
@@ -997,8 +1014,26 @@ class SlashGame {
       ctx.fillText(`${selStage.name} — ${selStage.pattern}`, W / 2, panY + 8);
 
       ctx.font      = `${Math.min(11, W * 0.025)}px system-ui`;
-      ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      ctx.fillText(`Boss: ${selStage.bossName}  ·  Tap node or press Enter to play`, W / 2, panY + 32);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText(`Boss: ${selStage.bossName}`, W / 2, panY + 30);
+
+      // ▶ PLAY button
+      const btnX = W / 2 - playBtnW / 2;
+      const btnY = panY + 46;
+      const tapPulse = 0.75 + 0.25 * Math.sin(t * 0.09);
+      ctx.shadowColor = '#00FF88'; ctx.shadowBlur = 14 * tapPulse;
+      const btnG = ctx.createLinearGradient(btnX, btnY, btnX, btnY + playBtnH);
+      btnG.addColorStop(0, `rgba(0,210,100,${0.85 + 0.15 * tapPulse})`);
+      btnG.addColorStop(1, `rgba(0,140,55,${0.9 + 0.1 * tapPulse})`);
+      ctx.fillStyle = btnG;
+      ctx.beginPath(); ctx.roundRect(btnX, btnY, playBtnW, playBtnH, playBtnH / 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.font = `bold ${Math.min(16, W * 0.038)}px "Comic Sans MS", system-ui`;
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('▶ PLAY', W / 2, btnY + playBtnH / 2);
+      this._mapPlayBtnRect = { x: btnX, y: btnY, w: playBtnW, h: playBtnH };
     }
 
     ctx.textBaseline = 'alphabetic';

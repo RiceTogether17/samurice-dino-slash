@@ -53,9 +53,22 @@ body {
 }
 
 .mc-hero {
-    padding: 32px 20px 14px;
+    padding: 20px 20px 10px;
     text-align: center;
     position: relative;
+}
+
+.mc-mascot {
+    height: clamp(72px, 16vh, 130px);
+    object-fit: contain;
+    filter: drop-shadow(0 4px 14px rgba(0,0,0,0.45));
+    animation: mascotBounce 2.2s ease-in-out infinite;
+    display: block;
+    margin: 0 auto 6px;
+}
+@keyframes mascotBounce {
+    0%, 100% { transform: translateY(0) rotate(-2deg); }
+    50%       { transform: translateY(-10px) rotate(2deg); }
 }
 
 .mc-title {
