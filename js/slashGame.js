@@ -65,7 +65,7 @@ class SlashGame {
     this.sprites  = {};
 
     // State
-    this.state     = 'menu';   // menu | stage-select | world-map | runner | transition | battle | stage-win | stage-lose
+    this.state     = 'title';  // title | mode-select | menu | stage-select | world-map | runner | transition | battle | stage-win | stage-lose | endless-runner | endless-battle | endless-gameover | shop | daily | achievements | leaderboard
     this.stageId   = 1;
     this._age      = 0;
     this._transFrames = 0;
@@ -171,6 +171,9 @@ class SlashGame {
           this.state = this.state === 'world-map' ? 'stage-select' : 'world-map';
         }
       }
+      if (this.state === 'title' && (e.key === 'Enter' || e.key === ' ')) {
+        this.state = 'mode-select';
+      }
       if (this.state === 'menu' && (e.key === 'Enter' || e.key === ' ')) {
         this.state = 'world-map';
       }
@@ -197,6 +200,34 @@ class SlashGame {
   }
 
   _handleCanvasClick(mx, my) {
+    // Title screen: any click advances
+    if (this.state === 'title') {
+      this.state = 'mode-select'; return;
+    }
+    // Mode select: handled by _clickModeSelect
+    if (this.state === 'mode-select') {
+      this._clickModeSelect(mx, my); return;
+    }
+    // Endless game over
+    if (this.state === 'endless-gameover') {
+      this._clickEndlessGameover(mx, my); return;
+    }
+    // Shop
+    if (this.state === 'shop') {
+      this._clickShop(mx, my); return;
+    }
+    // Daily
+    if (this.state === 'daily') {
+      this._clickDaily(mx, my); return;
+    }
+    // Achievements
+    if (this.state === 'achievements') {
+      this._clickAchievements(mx, my); return;
+    }
+    // Leaderboard
+    if (this.state === 'leaderboard') {
+      this.state = 'mode-select'; return;
+    }
     if (this.state === 'menu') {
       this.state = 'world-map';
       return;
@@ -350,16 +381,31 @@ class SlashGame {
     // Block all states until sprites are ready; show loading screen instead
     if (!this._spritesReady) { this._drawLoading(); return; }
 
+    // Tick achievement popup
+    this._tickAchievementPopup();
+
     switch (this.state) {
-      case 'menu':         this._updateMenu();       break;
-      case 'stage-select': this._updateStageSelect(); break;
-      case 'world-map':    this._updateWorldMap();   break;
-      case 'runner':       this._updateRunner();     break;
-      case 'transition':   this._updateTransition(); break;
-      case 'battle':       this._updateBattle();     break;
-      case 'stage-win':    this._drawStageWin();     break;
-      case 'stage-lose':   this._drawStageLose();    break;
+      case 'title':            this._updateTitle();          break;
+      case 'mode-select':      this._updateModeSelect();     break;
+      case 'menu':             this._updateMenu();            break;
+      case 'stage-select':     this._updateStageSelect();    break;
+      case 'world-map':        this._updateWorldMap();       break;
+      case 'runner':           this._updateRunner();         break;
+      case 'transition':       this._updateTransition();     break;
+      case 'battle':           this._updateBattle();         break;
+      case 'stage-win':        this._drawStageWin();         break;
+      case 'stage-lose':       this._drawStageLose();        break;
+      case 'endless-runner':   this._updateEndlessRunner();  break;
+      case 'endless-battle':   this._updateEndlessBattle();  break;
+      case 'endless-gameover': this._drawEndlessGameover();  break;
+      case 'shop':             this._updateShop();           break;
+      case 'daily':            this._updateDaily();          break;
+      case 'achievements':     this._updateAchievements();   break;
+      case 'leaderboard':      this._updateLeaderboard();    break;
     }
+
+    // Achievement popup on top of everything
+    this._drawAchievementPopup();
   }
 
   // ── MENU STATE ───────────────────────────────────────────────
@@ -1184,6 +1230,1033 @@ class SlashGame {
       ctx.textBaseline = 'top';
     });
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // NEW STATE METHODS — Title, Mode Select, Endless, Shop, Daily,
+  //                     Achievements, Leaderboard, Achievement Popups
+  // ══════════════════════════════════════════════════════════════
+
+  // ── TITLE SCREEN ─────────────────────────────────────────────
+  _updateTitle() { this._drawTitle(); }
+  _drawTitle() {
+    const ctx = this.ctx, W = this.W, H = this.H, t = this._age;
+    ctx.clearRect(0, 0, W, H);
+
+    // Animated gradient background
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, `hsl(${220 + Math.sin(t*0.01)*15},70%,${15 + Math.sin(t*0.008)*5}%)`);
+    sky.addColorStop(0.6, `hsl(${200 + Math.sin(t*0.012)*10},60%,${35 + Math.sin(t*0.01)*5}%)`);
+    sky.addColorStop(1, `hsl(${130 + Math.sin(t*0.015)*10},50%,${20 + Math.sin(t*0.009)*3}%)`);
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+    // Stars
+    for (let i = 0; i < 20; i++) {
+      const sx = ((i * 137 + t * 0.05) % 1) * W;
+      const sy = ((i * 89  + 0.1) % 0.5) * H;
+      const sa = 0.5 + 0.5 * Math.sin(t * 0.08 + i * 1.3);
+      ctx.globalAlpha = sa * 0.8;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(sx, sy, 1.5, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Ground strip
+    ctx.fillStyle = '#2a5a18';
+    ctx.fillRect(0, H * 0.78, W, H * 0.22);
+    ctx.fillStyle = '#3d7a2a';
+    ctx.fillRect(0, H * 0.78, W, 8);
+
+    // Animated dinos running in background
+    const dinoEmojis = ['🦖','🦕','🦴'];
+    for (let d = 0; d < 3; d++) {
+      const dx = ((t * (1.2 + d*0.4) + d * W/3) % (W + 80)) - 80;
+      ctx.font = `${H*0.06}px serif`;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(dinoEmojis[d % dinoEmojis.length], dx, H * 0.83);
+    }
+
+    // ── Title logo ────────────────────────────────────────────
+    const titleY = H * 0.12;
+    const titleSize = Math.min(W * 0.09, 42);
+
+    // Shimmer effect
+    ctx.save();
+    const shimmer = ctx.createLinearGradient(0, titleY, W, titleY + 80);
+    shimmer.addColorStop(0,   '#FFD700');
+    shimmer.addColorStop(0.4, '#FFF8DC');
+    shimmer.addColorStop(((t * 0.015) % 1), '#ffffff');
+    shimmer.addColorStop(Math.min(1, ((t * 0.015) % 1) + 0.15), '#FFD700');
+    shimmer.addColorStop(1,   '#FF8C00');
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const bounce = Math.sin(t * 0.04) * 4;
+
+    // Shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
+
+    // ⚔️ SAMURICE
+    ctx.font = `bold ${titleSize * 1.15}px Arial Black, 'Comic Sans MS', sans-serif`;
+    ctx.fillStyle = shimmer;
+    ctx.strokeStyle = '#7f3000'; ctx.lineWidth = Math.max(3, titleSize * 0.15);
+    ctx.strokeText('⚔️ SAMURICE', W/2, titleY + bounce);
+    ctx.fillText('⚔️ SAMURICE', W/2, titleY + bounce);
+
+    // DINO SLASH
+    ctx.font = `bold ${titleSize}px Arial Black, 'Comic Sans MS', sans-serif`;
+    ctx.fillStyle = '#FF6B35';
+    ctx.strokeStyle = '#7f1500';
+    ctx.strokeText('DINO SLASH 🦖', W/2, titleY + titleSize * 1.4 + bounce);
+    ctx.fillText('DINO SLASH 🦖', W/2, titleY + titleSize * 1.4 + bounce);
+    ctx.restore();
+
+    // Subtitle: Phonics Power!
+    ctx.textAlign = 'center'; ctx.font = `bold ${Math.min(16, W*0.038)}px Arial, sans-serif`;
+    ctx.fillStyle = '#4ECDC4';
+    ctx.fillText('PHONICS POWER · SLASH DINOS · SAVE THE RICE PADDY', W/2, titleY + titleSize * 2.6 + bounce);
+
+    // ── Riku character (procedural) ─────────────────────────────
+    const rikuX = W * 0.5, rikuY = H * 0.47;
+    const rikuBounce = Math.sin(t * 0.06) * 6;
+    const rikuSize  = Math.min(W * 0.25, 110);
+    this._drawRikuIdle(ctx, rikuX, rikuY + rikuBounce, rikuSize, t);
+
+    // ── "TAP TO PLAY" blinking prompt ─────────────────────────
+    const blinkAlpha = 0.5 + 0.5 * Math.sin(t * 0.08);
+    ctx.globalAlpha = blinkAlpha;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `bold ${Math.min(20, W*0.05)}px Arial Black, sans-serif`;
+    ctx.fillStyle = '#FFD700';
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+    ctx.strokeText('TAP TO PLAY!', W/2, H * 0.73);
+    ctx.fillText('TAP TO PLAY!', W/2, H * 0.73);
+    ctx.globalAlpha = 1;
+
+    // ── Rice grains / login streak info bottom ────────────────
+    const g = this.progress.getRiceGrains();
+    const streak = this.progress.getLoginStreak();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.font = `bold ${Math.min(15,W*0.036)}px Arial, sans-serif`;
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(`🌾 ${g}`, 12, H - 10);
+    if (streak > 1) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#FF8C00';
+      ctx.fillText(`🔥 ${streak} day streak!`, W - 12, H - 10);
+    }
+
+    // ── New achievement badge ──────────────────────────────────
+    const newAch = this.progress.getNewAchievements();
+    if (newAch.length > 0) {
+      ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.fillStyle = '#FF4444';
+      ctx.beginPath(); ctx.arc(W - 20, 20, 10, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Arial, sans-serif';
+      ctx.fillText(newAch.length, W - 20, 14);
+    }
+
+    // Login reward prompt
+    if (this.progress.canClaimLoginReward() && !this._loginRewardShown) {
+      this._loginRewardShown = true;
+      const reward = this.progress.claimLoginReward();
+      this._queueAchievementPopup({ emoji:'🎁', name:`Day ${streak} Reward!`, desc:`+${reward} Rice Grains!` });
+    }
+  }
+
+  _drawRikuIdle(ctx, cx, cy, size, t) {
+    const W = size * 0.7, H = size;
+    ctx.save();
+    ctx.translate(cx - W/2, cy - H/2);
+    // Body
+    ctx.fillStyle = '#F5F5DC';
+    ctx.beginPath(); ctx.ellipse(W/2, H*0.55, W*0.42, H*0.38, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2; ctx.stroke();
+    // Helmet
+    ctx.fillStyle = '#CC0000';
+    ctx.beginPath(); ctx.ellipse(W/2, H*0.22, W*0.36, H*0.18, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#AA0000'; ctx.fillRect(W*0.14, H*0.27, W*0.72, H*0.07);
+    // Eyes
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.ellipse(W*0.38, H*0.48, W*0.055, H*0.055, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(W*0.62, H*0.48, W*0.055, H*0.055, 0, 0, Math.PI*2); ctx.fill();
+    // Smile
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(W/2, H*0.54, W*0.12, 0.1, Math.PI - 0.1); ctx.stroke();
+    // Sword (swinging)
+    const swingA = Math.sin(t * 0.08) * 0.4;
+    ctx.save(); ctx.translate(W*0.85, H*0.55); ctx.rotate(swingA);
+    ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -H*0.55); ctx.stroke();
+    ctx.fillStyle = '#888'; ctx.fillRect(-W*0.12, -H*0.06, W*0.24, H*0.06);
+    ctx.restore();
+    // Sparkle effects
+    const sparkA = (t * 0.1) % (Math.PI * 2);
+    for (let i = 0; i < 3; i++) {
+      const sa = sparkA + i * Math.PI * 2 / 3;
+      const sr = W * 0.55;
+      const salpha = 0.4 + 0.3 * Math.sin(t * 0.15 + i);
+      ctx.globalAlpha = salpha;
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath(); ctx.arc(W/2 + Math.cos(sa) * sr, H*0.55 + Math.sin(sa) * sr * 0.6, 3, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ── MODE SELECT SCREEN ───────────────────────────────────────
+  _updateModeSelect() { this._drawModeSelect(); }
+  _drawModeSelect() {
+    const ctx = this.ctx, W = this.W, H = this.H, t = this._age;
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0a1e3e'); bg.addColorStop(1, '#1a3a1a');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    // Header
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `bold ${Math.min(28, W*0.065)}px Arial Black, sans-serif`;
+    ctx.fillStyle = '#FFD700';
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
+    ctx.strokeText('CHOOSE YOUR ADVENTURE', W/2, 20);
+    ctx.fillText('CHOOSE YOUR ADVENTURE', W/2, 20);
+
+    // Currency display
+    ctx.textAlign = 'right'; ctx.font = `bold 16px Arial, sans-serif`;
+    ctx.fillStyle = '#FFD700'; ctx.fillText(`🌾 ${this.progress.getRiceGrains()}`, W - 12, 22);
+
+    // Mode buttons
+    const modes = [
+      { label:'🏃 ENDLESS RUN', sub:'How far can you go?', col:'#FF6B35', action:'endless', hot:true },
+      { label:'🗺️ CAMPAIGN',    sub:'6 stages to conquer', col:'#4ECDC4', action:'campaign' },
+      { label:'📅 DAILY',       sub:this.progress.getDailyCompleted() ? '✅ Done today!' : 'Fresh challenge!', col:'#FFD700', action:'daily' },
+      { label:'🏪 SHOP',        sub:'Spend your rice grains', col:'#FF80FF', action:'shop' },
+      { label:'🏆 LEADERBOARD', sub:'Challenge the world', col:'#FF8C00', action:'leaderboard' },
+      { label:'🥇 ACHIEVEMENTS', sub:`${this.progress.data.achievements.length}/${ACHIEVEMENTS.length} unlocked`, col:'#00CCFF', action:'achievements' },
+    ];
+
+    const btnH = Math.min(62, (H - 120) / (modes.length + 0.5));
+    const btnW = Math.min(W - 40, 400);
+    const startX = (W - btnW) / 2;
+    let startY = 70;
+
+    this._modeSelectRects = [];
+    for (const m of modes) {
+      const isHot = m.hot && !this.progress.getDailyCompleted();
+      // Button background
+      const grad = ctx.createLinearGradient(startX, startY, startX + btnW, startY + btnH);
+      grad.addColorStop(0, m.col + 'aa');
+      grad.addColorStop(1, m.col + '44');
+      ctx.fillStyle = grad;
+      ctx.strokeStyle = m.col;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      const r = 12;
+      ctx.roundRect(startX, startY, btnW, btnH, r);
+      ctx.fill(); ctx.stroke();
+
+      // Pulse on hot item
+      if (isHot) {
+        ctx.strokeStyle = m.col;
+        ctx.lineWidth = 2 + Math.sin(t * 0.1) * 1.5;
+        ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 0.1);
+        ctx.beginPath(); ctx.roundRect(startX - 3, startY - 3, btnW + 6, btnH + 6, r + 3); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      // Label
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = `bold ${Math.min(18, W*0.044)}px Arial Black, sans-serif`;
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 3;
+      ctx.strokeText(m.label, startX + 16, startY + btnH * 0.38);
+      ctx.fillText(m.label, startX + 16, startY + btnH * 0.38);
+
+      ctx.font = `${Math.min(13, W*0.032)}px Arial, sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText(m.sub, startX + 16, startY + btnH * 0.7);
+
+      // Chevron
+      ctx.textAlign = 'right'; ctx.font = `bold 18px Arial, sans-serif`;
+      ctx.fillStyle = m.col; ctx.fillText('▶', startX + btnW - 14, startY + btnH * 0.5);
+
+      this._modeSelectRects.push({ x:startX, y:startY, w:btnW, h:btnH, action:m.action });
+      startY += btnH + 8;
+    }
+
+    // Back button
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.font = `bold 14px Arial, sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('← BACK', W/2, H - 8);
+    this._modeSelectRects.push({ x:W/2-50, y:H-30, w:100, h:25, action:'back' });
+  }
+
+  _clickModeSelect(mx, my) {
+    const rects = this._modeSelectRects || [];
+    for (const r of rects) {
+      if (mx >= r.x && mx <= r.x+r.w && my >= r.y && my <= r.y+r.h) {
+        if (r.action === 'endless')      { this._startEndlessRunner(); }
+        if (r.action === 'campaign')     { this.state = 'world-map'; }
+        if (r.action === 'daily')        { this._startDaily(); }
+        if (r.action === 'shop')         { this._startShop(); }
+        if (r.action === 'leaderboard')  { this.state = 'leaderboard'; }
+        if (r.action === 'achievements') { this.state = 'achievements'; }
+        if (r.action === 'back')         { this.state = 'title'; }
+        return;
+      }
+    }
+  }
+
+  // ── ENDLESS RUNNER ────────────────────────────────────────────
+  _startEndlessRunner() {
+    // Show controls; hide left/right for endless mode (auto-run)
+    const rc = document.getElementById('runnerControls');
+    if (rc) rc.classList.remove('hidden');
+    const dpadMove = rc?.querySelector('.dpad-move');
+    if (dpadMove) dpadMove.style.visibility = 'hidden'; // hide L/R, keep layout
+    this.endlessRunner = new EndlessRunnerEngine(
+      this.canvas, this.sprites, this.audio, this.progress,
+      this.W, this.H
+    );
+    // Bind jump-only d-pad
+    const l = document.getElementById('dpadLeft');
+    const r = document.getElementById('dpadRight');
+    const j = document.getElementById('dpadJump');
+    if (l && r && j) this.endlessRunner.bindDpad(l, r, j);
+    this.state = 'endless-runner';
+    if (this.audio) this.audio.startEndlessMusic();
+  }
+
+  _stopEndlessRunner() {
+    // Restore left/right visibility for campaign mode
+    const rc = document.getElementById('runnerControls');
+    if (rc) rc.classList.add('hidden');
+    const dpadMove = rc?.querySelector('.dpad-move');
+    if (dpadMove) dpadMove.style.visibility = '';
+    this.endlessRunner?.destroy();
+    this.endlessRunner = null;
+  }
+
+  _updateEndlessRunner() {
+    const runner = this.endlessRunner;
+    if (!runner) { this.state = 'mode-select'; return; }
+
+    runner.update();
+
+    if (runner.done) {
+      if (runner.outcome === 'gate' && runner.hasPendingGate()) {
+        this._startEndlessBattle();
+      } else if (runner.outcome === 'dead') {
+        this._endEndlessRun();
+      }
+    } else {
+      runner.draw();
+    }
+
+    // Speed up music proportional to distance
+    if (this.audio && runner._distM > 0) {
+      const speedMult = 1 + Math.min(runner._distM / 3000, 0.8);
+      this.audio.speedUpMusic(speedMult);
+    }
+  }
+
+  _startEndlessBattle() {
+    const runner = this.endlessRunner;
+    const gateData = runner.getPendingGate();
+    if (!gateData || !gateData.word) {
+      runner.done = false; runner.outcome = null; runner._inBattle = false;
+      this.state = 'endless-runner'; return;
+    }
+    document.getElementById('runnerControls')?.classList.add('hidden');
+    this.endlessBattle = new EndlessBattleEngine(
+      this.canvas, document.getElementById('battleOverlay'),
+      gateData.word, this.sprites, this.audio, this.W, this.H,
+      (result, timeUsed) => this._onEndlessBattleDone(result, timeUsed),
+      gateData.autoBlend
+    );
+    this.state = 'endless-battle';
+    // Draw a static frame of the runner in background
+    if (runner) runner.draw();
+  }
+
+  _updateEndlessBattle() {
+    const battle = this.endlessBattle;
+    if (!battle) { this.state = 'mode-select'; return; }
+
+    const dt = 1/60;
+    battle.update(dt);
+    // Draw runner background + battle FX on canvas
+    if (this.endlessRunner) this.endlessRunner.draw();
+    battle.drawFX();
+
+    if (battle.isDone()) {
+      // Will have called onDone callback already
+    }
+  }
+
+  _onEndlessBattleDone(result, timeUsed) {
+    const runner = this.endlessRunner;
+    const word   = this.endlessBattle?.word;
+    const isPerfect = result === 'perfect';
+    const success   = result === 'perfect' || result === 'good';
+
+    // Record blend in progress
+    if (word) this.progress.recordBlend(null, word.word, success, isPerfect);
+
+    // Update combo in runner
+    if (runner && success) {
+      runner.addCombo(isPerfect, word?.word);
+    } else if (runner && !success) {
+      runner.breakCombo();
+    }
+
+    // Check perfect run count for achievements
+    if (runner) this.progress.recordPerfectBlends(runner._perfectBlends);
+
+    // Resume runner
+    this.endlessBattle = null;
+    if (runner) {
+      runner.done    = false;
+      runner.outcome = null;
+      runner._inBattle = false;
+      runner.resumeAfterBattle(success);
+    }
+    document.getElementById('runnerControls')?.classList.remove('hidden');
+    this.state = 'endless-runner';
+  }
+
+  _endEndlessRun() {
+    const runner = this.endlessRunner;
+    if (!runner) { this.state = 'mode-select'; return; }
+    this.audio?.stopMusic();
+    if (this.audio) this.audio.sfxGameOver();
+
+    const score = runner.getScore();
+    const dist  = runner.getDist();
+    const grains= runner.getGrains();
+    const combo  = runner.getMaxCombo();
+    const perfects = runner.getPerfects();
+
+    this.progress.addRiceGrains(grains);
+    this.progress.recordEndlessRun(score, dist, combo);
+    this.progress.recordPerfectBlends(perfects);
+
+    // Store for display
+    this._lastEndlessResult = { score, dist, grains, combo, perfects };
+    this._endlessGameoverAge = 0;
+
+    this.state = 'endless-gameover';
+  }
+
+  _drawEndlessGameover() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    const t = this._endlessGameoverAge || 0;
+    this._endlessGameoverAge = (this._endlessGameoverAge || 0) + 1;
+
+    const r = this._lastEndlessResult || {};
+
+    // Dark overlay
+    ctx.clearRect(0, 0, W, H);
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0d0d1a'); bg.addColorStop(1, '#1a0d0d');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    // Sad Riku (procedural)
+    this._drawRikuIdle(ctx, W/2, H * 0.18, Math.min(W*0.18, 80), t);
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+
+    // GAME OVER
+    const goSize = Math.min(W*0.1, 44);
+    ctx.font = `bold ${goSize}px Arial Black, sans-serif`;
+    ctx.fillStyle = '#FF4444';
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 6;
+    const goY = H * 0.3;
+    const slideIn = Math.min(1, t / 30);
+    ctx.strokeText('GAME OVER', W/2, goY - (1-slideIn)*40);
+    ctx.fillText('GAME OVER', W/2, goY - (1-slideIn)*40);
+
+    const hs = this.progress.getEndlessHighScore();
+    const newHS = r.score >= hs;
+
+    // Score
+    const statY = H * 0.42;
+    const stats = [
+      { label:'SCORE',    value: r.score?.toLocaleString() || '0', emoji:'⭐', hl: newHS },
+      { label:'DISTANCE', value: `${r.dist || 0}m`,               emoji:'🏃' },
+      { label:'🌾 GRAINS', value: `+${r.grains || 0}`,            emoji:'🌾' },
+      { label:'MAX COMBO', value: `${r.combo || 0}x`,             emoji:'🔥' },
+    ];
+
+    const statH = Math.min(42, (H * 0.3) / stats.length);
+    stats.forEach((s, i) => {
+      const sy = statY + i * (statH + 4);
+      ctx.fillStyle = s.hl ? 'rgba(255,215,0,0.2)' : 'rgba(255,255,255,0.08)';
+      ctx.beginPath(); ctx.roundRect(W*0.1, sy, W*0.8, statH, 8); ctx.fill();
+      ctx.textAlign = 'left'; ctx.font = `bold ${Math.min(14,W*0.034)}px Arial, sans-serif`;
+      ctx.fillStyle = s.hl ? '#FFD700' : '#aaa';
+      ctx.fillText(`${s.emoji} ${s.label}`, W*0.14, sy + statH/2);
+      ctx.textAlign = 'right'; ctx.font = `bold ${Math.min(16,W*0.038)}px Arial Black, sans-serif`;
+      ctx.fillStyle = s.hl ? '#FFD700' : '#fff';
+      ctx.fillText(s.value + (s.hl ? ' ★NEW' : ''), W*0.9, sy + statH/2);
+    });
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+    // High score line
+    if (!newHS) {
+      ctx.font = `${Math.min(13,W*0.032)}px Arial, sans-serif`;
+      ctx.fillStyle = '#888';
+      ctx.fillText(`Best: ${hs?.toLocaleString() || 0} · Streak: #${this.progress.getBestCombo()}x`, W/2, statY + stats.length * (statH+4) + 16);
+    }
+
+    // Buttons
+    const btnY = H * 0.78;
+    const btnW2 = Math.min(W * 0.38, 150);
+    const btnH2 = Math.min(46, H * 0.07);
+    const gap = 12;
+
+    const btns = [
+      { label:'▶ PLAY AGAIN', col:'#FF6B35', x: W/2 - btnW2 - gap/2 },
+      { label:'🏪 SHOP',      col:'#FF80FF', x: W/2 + gap/2 },
+    ];
+
+    this._endlessGameoverRects = [];
+    for (const b of btns) {
+      const grad = ctx.createLinearGradient(b.x, btnY, b.x + btnW2, btnY + btnH2);
+      grad.addColorStop(0, b.col); grad.addColorStop(1, b.col + 'aa');
+      ctx.fillStyle = grad;
+      ctx.strokeStyle = b.col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(b.x, btnY, btnW2, btnH2, 10); ctx.fill(); ctx.stroke();
+      ctx.font = `bold ${Math.min(15,W*0.037)}px Arial Black, sans-serif`;
+      ctx.fillStyle = '#fff';
+      ctx.fillText(b.label, b.x + btnW2/2, btnY + btnH2/2);
+      this._endlessGameoverRects.push({ x:b.x, y:btnY, w:btnW2, h:btnH2, label:b.label });
+    }
+
+    // Back to menu
+    ctx.font = `${Math.min(13,W*0.032)}px Arial, sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillText('← MENU', W/2, H - 18);
+    this._endlessGameoverRects.push({ x:W/2-40, y:H-30, w:80, h:24, label:'MENU' });
+  }
+
+  _clickEndlessGameover(mx, my) {
+    const rects = this._endlessGameoverRects || [];
+    for (const r of rects) {
+      if (mx >= r.x && mx <= r.x+r.w && my >= r.y && my <= r.y+r.h) {
+        if (r.label.includes('PLAY AGAIN')) {
+          this._stopEndlessRunner();
+          this._startEndlessRunner();
+        } else if (r.label.includes('SHOP')) {
+          this._preShopState = 'endless-gameover';
+          this._startShop();
+        } else {
+          this._stopEndlessRunner();
+          this.state = 'mode-select';
+        }
+        return;
+      }
+    }
+    // Default: menu
+    this._stopEndlessRunner();
+    this.state = 'mode-select';
+  }
+
+  // ── SHOP ──────────────────────────────────────────────────────
+  _startShop() {
+    this._shopTab = 'swords';
+    this._shopScroll = 0;
+    this.state = 'shop';
+  }
+
+  _updateShop() { this._drawShop(); }
+  _drawShop() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    ctx.clearRect(0, 0, W, H);
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#1a0d2e'); bg.addColorStop(1, '#0d1a1a');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    // Header
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `bold ${Math.min(26, W*0.06)}px Arial Black, sans-serif`;
+    ctx.fillStyle = '#FFD700';
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
+    ctx.strokeText('🏪 RICE GRAIN SHOP', W/2, 14);
+    ctx.fillText('🏪 RICE GRAIN SHOP', W/2, 14);
+
+    // Grain count
+    ctx.textAlign = 'right'; ctx.font = `bold 16px Arial, sans-serif`;
+    ctx.fillStyle = '#FFD700'; ctx.fillText(`🌾 ${this.progress.getRiceGrains()}`, W-10, 16);
+
+    // Tabs
+    const tabs = ['swords','hats','companions','powerups'];
+    const tabLabels = { swords:'⚔️ Swords', hats:'🎩 Hats', companions:'🐾 Pals', powerups:'💊 Power' };
+    const tabW = W / tabs.length;
+    this._shopTabRects = [];
+    tabs.forEach((tab, i) => {
+      const tx = i * tabW, ty = 50, tw = tabW - 2, th = 36;
+      const isActive = this._shopTab === tab;
+      ctx.fillStyle = isActive ? '#FFD700' : 'rgba(255,255,255,0.1)';
+      ctx.beginPath(); ctx.roundRect(tx+1, ty, tw, th, 6); ctx.fill();
+      ctx.strokeStyle = isActive ? '#FFD700' : 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `bold ${Math.min(13,W*0.032)}px Arial, sans-serif`;
+      ctx.fillStyle = isActive ? '#000' : '#fff';
+      ctx.fillText(tabLabels[tab], tx + tw/2, ty + th/2);
+      this._shopTabRects.push({ x:tx, y:ty, w:tw, h:th, tab });
+    });
+
+    // Items grid
+    const items = SHOP_ITEMS[this._shopTab] || [];
+    const cols = 2;
+    const itemW = (W - 24) / cols;
+    const itemH = Math.min(110, (H - 120) / 3);
+    const startY = 96;
+    this._shopItemRects = [];
+
+    items.forEach((item, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const ix = 8 + col * (itemW + 8);
+      const iy = startY + row * (itemH + 8) - this._shopScroll;
+      if (iy + itemH < 90 || iy > H - 20) return;
+
+      const owned    = this.progress.ownsItem(item.id);
+      const equipped = this.progress.getEquipped();
+      const isEquip  = Object.values(equipped).includes(item.id);
+      const pcount   = this.progress.getPowerupCount(item.id);
+
+      // Background
+      ctx.fillStyle = isEquip ? 'rgba(255,215,0,0.15)' : owned ? 'rgba(255,255,255,0.08)' : 'rgba(100,100,100,0.1)';
+      ctx.strokeStyle = isEquip ? '#FFD700' : owned ? '#888' : '#444';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(ix, iy, itemW, itemH, 10); ctx.fill(); ctx.stroke();
+
+      // Emoji
+      ctx.font = `${Math.min(32, itemH*0.35)}px serif`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(item.emoji, ix + 10, iy + itemH*0.35);
+      if (pcount > 0) {
+        ctx.font = `bold 12px Arial, sans-serif`; ctx.fillStyle = '#FFD700';
+        ctx.fillText(`×${pcount}`, ix + 44, iy + 10);
+      }
+
+      // Name
+      ctx.font = `bold ${Math.min(13,W*0.032)}px Arial, sans-serif`;
+      ctx.fillStyle = isEquip ? '#FFD700' : '#fff';
+      ctx.fillText(item.name, ix + 52, iy + itemH*0.28);
+      // Desc
+      ctx.font = `${Math.min(11,W*0.027)}px Arial, sans-serif`;
+      ctx.fillStyle = '#aaa';
+      ctx.fillText(item.desc, ix + 52, iy + itemH*0.52);
+
+      // Button
+      const bx = ix + itemW - 70, by = iy + itemH - 30, bw = 62, bh = 24;
+      let btnLabel = '', btnCol = '#aaa';
+      if (isEquip) { btnLabel = '✓ ON'; btnCol = '#FFD700'; }
+      else if (item.consumable && owned && pcount > 0) { btnLabel = 'BUY MORE'; btnCol = '#FF80FF'; }
+      else if (owned) { btnLabel = 'EQUIP'; btnCol = '#00CCFF'; }
+      else if (item.price === 0) { btnLabel = 'FREE'; btnCol = '#00FF88'; }
+      else { btnLabel = `🌾 ${item.price}`; btnCol = this.progress.canAfford(item.price) ? '#FF6B35' : '#555'; }
+
+      ctx.fillStyle = btnCol + '33'; ctx.strokeStyle = btnCol; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 6); ctx.fill(); ctx.stroke();
+      ctx.font = `bold ${Math.min(12,W*0.029)}px Arial, sans-serif`;
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(btnLabel, bx + bw/2, by + bh/2);
+
+      this._shopItemRects.push({ x:ix, y:iy, w:itemW, h:itemH, item, bx, by, bw, bh });
+    });
+
+    // Back button
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.font = `bold 14px Arial, sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('← BACK', W/2, H - 6);
+  }
+
+  _clickShop(mx, my) {
+    // Tab clicks
+    for (const r of (this._shopTabRects || [])) {
+      if (mx >= r.x && mx <= r.x+r.w && my >= r.y && my <= r.y+r.h) {
+        this._shopTab = r.tab; this._shopScroll = 0; return;
+      }
+    }
+    // Item button clicks
+    for (const r of (this._shopItemRects || [])) {
+      if (mx >= r.bx && mx <= r.bx+r.bw && my >= r.by && my <= r.by+r.bh) {
+        const item = r.item;
+        const owned = this.progress.ownsItem(item.id);
+        const equipped = this.progress.getEquipped();
+        const isEquip = Object.values(equipped).includes(item.id);
+        if (isEquip) return; // already on
+        if (owned && !item.consumable) {
+          // Equip
+          const cat = SHOP_ITEMS.swords.find(i=>i.id===item.id) ? 'sword' :
+                      SHOP_ITEMS.hats.find(i=>i.id===item.id)   ? 'hat'   : 'comp';
+          this.progress.equip(cat, item.id);
+          this._queueAchievementPopup({ emoji:item.emoji, name:'Equipped!', desc:item.name });
+        } else {
+          // Buy
+          if (this.progress.buyItem(item.id)) {
+            this._queueAchievementPopup({ emoji:'🌾', name:'Purchased!', desc:`${item.name} for 🌾${item.price}` });
+            if (!item.consumable) {
+              const cat = SHOP_ITEMS.swords.find(i=>i.id===item.id) ? 'sword' :
+                          SHOP_ITEMS.hats.find(i=>i.id===item.id)   ? 'hat'   : 'comp';
+              this.progress.equip(cat, item.id);
+            }
+          } else {
+            this._queueAchievementPopup({ emoji:'😅', name:'Not enough!', desc:`Need 🌾${item.price} grains` });
+          }
+        }
+        return;
+      }
+    }
+    // Back
+    const prevState = this._preShopState || 'mode-select';
+    this.state = prevState;
+  }
+
+  // ── DAILY CHALLENGE ───────────────────────────────────────────
+  _startDaily() {
+    const set = PHONICS_DATA.getDailySet();
+    this._dailySet    = set;
+    this._dailyWords  = set.wordObjs || [];
+    this._dailyIdx    = 0;
+    this._dailyBlended= 0;
+    this._dailyBattle = null;
+    this.state = 'daily';
+  }
+
+  _updateDaily() {
+    if (this._dailyBattle) {
+      const dt = 1/60;
+      this._dailyBattle.update(dt);
+      this._drawDailyBg();
+      this._dailyBattle.drawFX();
+      if (this._dailyBattle.isDone()) { /* handled by callback */ }
+    } else {
+      this._drawDaily();
+    }
+  }
+
+  _drawDailyBg() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    ctx.clearRect(0, 0, W, H);
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0d2040'); bg.addColorStop(1, '#401010');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  }
+
+  _drawDaily() {
+    const ctx = this.ctx, W = this.W, H = this.H, t = this._age;
+    ctx.clearRect(0, 0, W, H);
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0d2040'); bg.addColorStop(1, '#1a3a1a');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    // Header
+    ctx.font = `bold ${Math.min(24,W*0.058)}px Arial Black, sans-serif`;
+    ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
+    ctx.strokeText('📅 DAILY CHALLENGE', W/2, 12);
+    ctx.fillText('📅 DAILY CHALLENGE', W/2, 12);
+
+    const set = this._dailySet;
+    if (!set) { this.state = 'mode-select'; return; }
+
+    // Theme
+    ctx.font = `bold ${Math.min(18,W*0.044)}px Arial, sans-serif`;
+    ctx.fillStyle = '#4ECDC4';
+    ctx.fillText(`${set.emoji || '📖'} Today: ${set.theme}`, W/2, 46);
+
+    // Progress bar
+    const prog = this.progress.getDailyCompleted() ? this._dailyWords.length
+                 : Math.min(this._dailyBlended, this._dailyWords.length);
+    const pct = this._dailyWords.length > 0 ? prog / this._dailyWords.length : 0;
+    const barW = W * 0.75, barH = 18, barX = (W - barW)/2, barY = 75;
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, barH/2); ctx.fill();
+    const fillGrad = ctx.createLinearGradient(barX, 0, barX + barW * pct, 0);
+    fillGrad.addColorStop(0, '#00FF88'); fillGrad.addColorStop(1, '#FFD700');
+    ctx.fillStyle = fillGrad;
+    ctx.beginPath(); ctx.roundRect(barX, barY, barW * pct, barH, barH/2); ctx.fill();
+    ctx.font = `bold 13px Arial, sans-serif`; ctx.fillStyle = '#fff';
+    ctx.fillText(`${prog}/${this._dailyWords.length}`, W/2, barY + barH/2);
+
+    // Words list
+    const listY = 108;
+    const wordH = Math.min(40, (H * 0.48) / this._dailyWords.length);
+    this._dailyWords.forEach((w, i) => {
+      const wy = listY + i * wordH;
+      const done = i < this._dailyBlended || this.progress.getDailyCompleted();
+      const current = i === this._dailyIdx && !done;
+      ctx.fillStyle = done ? 'rgba(0,255,136,0.15)' : current ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.05)';
+      ctx.strokeStyle = done ? '#00FF88' : current ? '#FFD700' : '#333';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(W*0.08, wy, W*0.84, wordH - 3, 8); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = `bold ${Math.min(16,W*0.038)}px Arial Black, sans-serif`;
+      ctx.fillStyle = done ? '#00FF88' : current ? '#FFD700' : '#888';
+      ctx.fillText(`${done ? '✅' : current ? '▶' : '○'} ${w.word?.toUpperCase() || '?'}`, W*0.12, wy + wordH/2);
+      ctx.textAlign = 'right';
+      ctx.font = `${Math.min(14,W*0.034)}px serif`;
+      ctx.fillText(w.hint || '?', W*0.9, wy + wordH/2);
+    });
+
+    // Action button
+    const completed = this.progress.getDailyCompleted() || this._dailyBlended >= this._dailyWords.length;
+    const btnY = H * 0.79, btnW = Math.min(W*0.6, 240), btnH = 48;
+    const btnX = (W - btnW) / 2;
+
+    if (completed) {
+      ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#FF8C00'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `bold ${Math.min(18,W*0.044)}px Arial Black, sans-serif`;
+      ctx.fillStyle = '#000'; ctx.fillText('🏆 COMPLETED! Claim Reward', btnX + btnW/2, btnY + btnH/2);
+    } else {
+      ctx.fillStyle = '#FF6B35'; ctx.strokeStyle = '#FF4400'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `bold ${Math.min(18,W*0.044)}px Arial Black, sans-serif`;
+      ctx.fillStyle = '#fff';
+      ctx.fillText(this._dailyIdx < this._dailyWords.length ? '⚔️ BLEND NEXT WORD' : '✅ All Done!', btnX + btnW/2, btnY + btnH/2);
+    }
+    this._dailyActionRect = { x:btnX, y:btnY, w:btnW, h:btnH, completed };
+
+    // Streak display
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.font = `bold 14px Arial, sans-serif`;
+    ctx.fillStyle = '#FF8C00';
+    ctx.fillText(`🔥 ${this.progress.getDailyStreak()} day streak · 🌾 Reward: ${150 + this.progress.getDailyStreak()*25}`, W/2, btnY - 8);
+
+    // Back
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillText('← BACK', W/2, H - 6);
+    this._dailyBackRect = { x:W/2-50, y:H-28, w:100, h:22 };
+  }
+
+  _clickDaily(mx, my) {
+    if (this._dailyBackRect) {
+      const r = this._dailyBackRect;
+      if (mx >= r.x && mx <= r.x+r.w && my >= r.y && my <= r.y+r.h) {
+        this.state = 'mode-select'; return;
+      }
+    }
+    if (!this._dailyActionRect) return;
+    const r = this._dailyActionRect;
+    if (mx < r.x || mx > r.x+r.w || my < r.y || my > r.y+r.h) return;
+
+    if (r.completed) {
+      const earned = this.progress.completeDaily();
+      if (earned > 0) this._queueAchievementPopup({ emoji:'🏆', name:'Daily Complete!', desc:`+${earned} Rice Grains!` });
+      this.state = 'mode-select';
+    } else if (this._dailyIdx < (this._dailyWords || []).length) {
+      const word = this._dailyWords[this._dailyIdx];
+      if (!word) return;
+      this._dailyBattle = new EndlessBattleEngine(
+        this.canvas, document.getElementById('battleOverlay'),
+        word, this.sprites, this.audio, this.W, this.H,
+        (result) => {
+          const success = result === 'perfect' || result === 'good';
+          this.progress.recordBlend(null, word.word, success, result === 'perfect');
+          if (success) { this._dailyBlended++; this.progress.recordDailyWord(); }
+          this._dailyIdx++;
+          this._dailyBattle = null;
+          if (this._dailyBlended >= this._dailyWords.length) {
+            this.progress.completeDaily();
+          }
+        }
+      );
+    }
+  }
+
+  // ── ACHIEVEMENTS ──────────────────────────────────────────────
+  _updateAchievements() { this._drawAchievements(); }
+  _drawAchievements() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    ctx.clearRect(0, 0, W, H);
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0d1a2e'); bg.addColorStop(1, '#1a2e0d');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `bold ${Math.min(24,W*0.058)}px Arial Black, sans-serif`;
+    ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
+    ctx.strokeText('🥇 ACHIEVEMENTS', W/2, 12); ctx.fillText('🥇 ACHIEVEMENTS', W/2, 12);
+
+    const unlocked = this.progress.data.achievements || [];
+    ctx.font = `13px Arial, sans-serif`; ctx.fillStyle = '#aaa';
+    ctx.fillText(`${unlocked.length} / ${ACHIEVEMENTS.length} unlocked`, W/2, 44);
+
+    const cols = 2, rows = Math.ceil(ACHIEVEMENTS.length / cols);
+    const cellW = (W - 24) / cols, cellH = Math.min(64, (H - 90) / 4.5);
+    const startY = 62;
+    const scroll = this._achScroll || 0;
+
+    ACHIEVEMENTS.forEach((ach, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const ax = 8 + col * (cellW + 8), ay = startY + row * (cellH + 6) - scroll;
+      if (ay + cellH < 60 || ay > H) return;
+      const isUnlocked = unlocked.includes(ach.id);
+      const isNew = this.progress.data.newAchievements?.includes(ach.id);
+      ctx.fillStyle = isNew ? 'rgba(255,215,0,0.18)' : isUnlocked ? 'rgba(255,255,255,0.1)' : 'rgba(50,50,50,0.5)';
+      ctx.strokeStyle = isNew ? '#FFD700' : isUnlocked ? '#888' : '#333';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(ax, ay, cellW - 4, cellH, 8); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = isUnlocked ? 1 : 0.3;
+      ctx.font = `${Math.min(22, cellH*0.38)}px serif`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(ach.emoji, ax + 8, ay + cellH/2);
+      ctx.font = `bold ${Math.min(12,W*0.030)}px Arial, sans-serif`;
+      ctx.fillStyle = isNew ? '#FFD700' : isUnlocked ? '#fff' : '#666';
+      ctx.fillText(ach.name, ax + 36, ay + cellH*0.35);
+      ctx.font = `${Math.min(10,W*0.025)}px Arial, sans-serif`;
+      ctx.fillStyle = '#aaa';
+      ctx.fillText(ach.desc, ax + 36, ay + cellH*0.65);
+      ctx.globalAlpha = 1;
+    });
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.font = `bold 14px Arial, sans-serif`; ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillText('← BACK', W/2, H - 6);
+    this._achBackRect = { x:W/2-50, y:H-28, w:100, h:22 };
+  }
+
+  _clickAchievements(mx, my) {
+    if (this._achBackRect) {
+      const r = this._achBackRect;
+      if (mx >= r.x && mx <= r.x+r.w && my >= r.y && my <= r.y+r.h) {
+        this.progress.clearNewAchievements();
+        this.state = 'mode-select';
+      }
+    }
+  }
+
+  // ── LEADERBOARD ──────────────────────────────────────────────
+  _updateLeaderboard() { this._drawLeaderboard(); }
+  _drawLeaderboard() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    ctx.clearRect(0, 0, W, H);
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0d0d2e'); bg.addColorStop(1, '#2e0d0d');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `bold ${Math.min(24,W*0.058)}px Arial Black, sans-serif`;
+    ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
+    ctx.strokeText('🏆 LEADERBOARD', W/2, 12); ctx.fillText('🏆 LEADERBOARD', W/2, 12);
+    ctx.font = `13px Arial, sans-serif`; ctx.fillStyle = '#888';
+    ctx.fillText('Endless Run · Best Score', W/2, 44);
+
+    const leaders = this.progress.getLeaderboard();
+    const rowH = Math.min(40, (H - 110) / 11);
+    const medals = ['🥇','🥈','🥉'];
+
+    leaders.forEach((l, i) => {
+      const ry = 64 + i * (rowH + 4);
+      const isMe = l.isMe;
+      ctx.fillStyle = isMe ? 'rgba(255,215,0,0.18)' : i < 3 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)';
+      ctx.strokeStyle = isMe ? '#FFD700' : '#333'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(10, ry, W-20, rowH, 8); ctx.fill(); ctx.stroke();
+
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = `${Math.min(16,W*0.038)}px serif`;
+      ctx.fillText(i < 3 ? medals[i] : `${i+1}.`, 16, ry + rowH/2);
+
+      ctx.font = `bold ${Math.min(14,W*0.034)}px Arial, sans-serif`;
+      ctx.fillStyle = isMe ? '#FFD700' : '#fff';
+      ctx.fillText(l.name, 46, ry + rowH/2);
+
+      ctx.textAlign = 'right';
+      ctx.font = `bold ${Math.min(14,W*0.034)}px Arial, sans-serif`;
+      ctx.fillStyle = isMe ? '#FFD700' : '#aaa';
+      ctx.fillText(l.score.toLocaleString(), W - 14, ry + rowH/2 - 8);
+      ctx.font = `11px Arial, sans-serif`; ctx.fillStyle = '#666';
+      ctx.fillText(`${l.dist}m`, W - 14, ry + rowH/2 + 7);
+    });
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.font = `bold 14px Arial, sans-serif`; ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillText('← BACK', W/2, H - 6);
+  }
+
+  // ── ACHIEVEMENT POPUP SYSTEM ──────────────────────────────────
+  _tickAchievementPopup() {
+    if (!this._achPopupQueue) this._achPopupQueue = [];
+    if (this._achPopup) {
+      this._achPopup.life -= 0.018;
+      if (this._achPopup.life <= 0) {
+        this._achPopup = null;
+        // Show next in queue
+        if (this._achPopupQueue.length > 0) this._showNextPopup();
+      }
+    } else if (this._achPopupQueue.length > 0) {
+      // Check for new achievements from progress tracker
+      const newIds = this.progress.getNewAchievements();
+      if (newIds.length > 0) {
+        this.progress.clearNewAchievements();
+        for (const id of newIds) {
+          const ach = ACHIEVEMENTS.find(a => a.id === id);
+          if (ach) this._queueAchievementPopup(ach);
+        }
+      }
+      this._showNextPopup();
+    }
+  }
+
+  _queueAchievementPopup(ach) {
+    if (!this._achPopupQueue) this._achPopupQueue = [];
+    this._achPopupQueue.push({ ...ach, life: 1 });
+    if (!this._achPopup) this._showNextPopup();
+  }
+
+  _showNextPopup() {
+    if (!this._achPopupQueue || this._achPopupQueue.length === 0) return;
+    this._achPopup = this._achPopupQueue.shift();
+    this._achPopup.life = 1;
+    if (this.audio) this.audio.sfxAchievement();
+  }
+
+  _drawAchievementPopup() {
+    if (!this._achPopup) return;
+    const p = this._achPopup;
+    const ctx = this.ctx, W = this.W;
+    const alpha = Math.min(1, p.life > 0.8 ? (1-p.life)*5 : p.life < 0.3 ? p.life/0.3 : 1);
+    const slideY = p.life > 0.8 ? (1-p.life)*5*60 - 60 : 0;
+    const popW = Math.min(W * 0.85, 320), popH = 60;
+    const popX = (W - popW) / 2, popY = 10 + slideY;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    // Card
+    const grad = ctx.createLinearGradient(popX, popY, popX + popW, popY);
+    grad.addColorStop(0, '#2a1a4a'); grad.addColorStop(1, '#1a2a4a');
+    ctx.fillStyle = grad;
+    ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 12;
+    ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(popX, popY, popW, popH, 10); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // Emoji
+    ctx.font = '26px serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.emoji || '🏆', popX + 10, popY + popH/2);
+    // Labels
+    ctx.font = `bold ${Math.min(13,W*0.032)}px Arial Black, sans-serif`;
+    ctx.fillStyle = '#FFD700'; ctx.textAlign = 'left';
+    ctx.fillText(p.name || 'Achievement!', popX + 46, popY + popH*0.33);
+    ctx.font = `${Math.min(11,W*0.027)}px Arial, sans-serif`;
+    ctx.fillStyle = '#bbb';
+    ctx.fillText(p.desc || '', popX + 46, popY + popH*0.65);
+    // ★ ACHIEVEMENT badge
+    ctx.textAlign = 'right'; ctx.font = `bold 11px Arial, sans-serif`;
+    ctx.fillStyle = '#888';
+    ctx.fillText('★ ACHIEVEMENT', popX + popW - 8, popY + 12);
+    ctx.restore();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1203,9 +2276,10 @@ function launchSlashGame() {
   if (!_slashGameInstance) {
     _slashGameInstance = new SlashGame('slashCanvas', 'battleOverlay');
   } else {
-    // Show world map if returning
-    _slashGameInstance.state = 'world-map';
+    // Return to title (mode-select)
+    _slashGameInstance.state = 'mode-select';
     _slashGameInstance.overlay.classList.add('hidden');
+    _slashGameInstance.overlay.innerHTML = '';
   }
 }
 
