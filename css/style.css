@@ -1024,3 +1024,224 @@ body {
     .mc-btn     { padding: 14px 18px; border-radius: 16px; }
     .mc-icon    { font-size: 2rem; }
 }
+
+/* ============================================================
+   ENDLESS BATTLE ENGINE OVERLAY
+   Compact phonics challenge that slides up from bottom.
+============================================================ */
+.endless-battle-overlay {
+    display: none;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    background: linear-gradient(160deg, rgba(10,20,40,0.96) 0%, rgba(20,40,10,0.96) 100%);
+    border-top: 3px solid rgba(255,215,0,0.5);
+    border-radius: 18px 18px 0 0;
+    padding: 14px 16px 20px;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    backdrop-filter: blur(8px);
+    animation: ebeSlideUp 0.25s cubic-bezier(0.34,1.56,0.64,1) both;
+    pointer-events: auto;
+}
+.endless-battle-overlay.active { display: flex; }
+
+@keyframes ebeSlideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.ebe-hint {
+    font-size: clamp(2.5rem, 10vw, 4rem);
+    animation: ebeHintPop 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+    line-height: 1;
+}
+@keyframes ebeHintPop {
+    from { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+    to   { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.ebe-blanks {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.ebe-blank {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    height: 48px;
+    border-radius: 10px;
+    border: 3px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.06);
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #fff;
+    font-family: 'Arial Black', sans-serif;
+    padding: 0 4px;
+    transition: all 0.15s;
+}
+
+.ebe-blank-filled {
+    border-color: #FFD700;
+    background: rgba(255,215,0,0.2);
+    color: #FFD700;
+    animation: ebeFillPop 0.2s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes ebeFillPop {
+    from { transform: scale(1.4); }
+    to   { transform: scale(1); }
+}
+
+.ebe-timer-bar {
+    width: 90%;
+    height: 10px;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.1);
+    overflow: hidden;
+    position: relative;
+}
+.ebe-timer-fill {
+    height: 100%;
+    border-radius: 5px;
+    background: #00FF88;
+    transition: width 0.1s linear, background 0.3s;
+}
+.ebe-timer-urgent .ebe-timer-fill {
+    animation: timerPulse 0.4s ease-in-out infinite;
+}
+@keyframes timerPulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.6; }
+}
+
+.ebe-tiles {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.2s;
+}
+
+.ebe-tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 52px;
+    height: 56px;
+    border-radius: 12px;
+    border: 3px solid #4ECDC4;
+    background: linear-gradient(135deg, #1a3a4a 0%, #0a1a2a 100%);
+    color: #4ECDC4;
+    font-size: clamp(0.9rem, 3.5vw, 1.3rem);
+    font-weight: bold;
+    font-family: 'Arial Black', 'Comic Sans MS', sans-serif;
+    cursor: pointer;
+    padding: 0 8px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.1s, background 0.1s, border-color 0.1s, box-shadow 0.1s;
+    box-shadow: 0 4px 0 #1a6a6a, 0 0 12px rgba(78,205,196,0.3);
+    user-select: none;
+}
+.ebe-tile:hover  { transform: translateY(-3px); box-shadow: 0 7px 0 #1a6a6a, 0 0 16px rgba(78,205,196,0.5); }
+.ebe-tile:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a6a6a; }
+
+.ebe-tile-used {
+    border-color: rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.2);
+    cursor: default;
+    box-shadow: none;
+    transform: none !important;
+}
+
+.ebe-tile-wrong {
+    border-color: #FF4444 !important;
+    background: rgba(255,68,68,0.2) !important;
+    color: #FF4444 !important;
+    animation: tileWrong 0.32s ease both;
+}
+@keyframes tileWrong {
+    0%,100% { transform: translateX(0); }
+    25%      { transform: translateX(-8px); }
+    75%      { transform: translateX(8px); }
+}
+
+.ebe-result {
+    font-family: 'Arial Black', 'Comic Sans MS', sans-serif;
+    font-size: clamp(1.2rem, 5vw, 1.8rem);
+    font-weight: bold;
+    padding: 8px 16px;
+    border-radius: 12px;
+    text-align: center;
+    animation: ebeResultPop 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes ebeResultPop {
+    from { transform: scale(0); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+}
+.ebe-result.hidden { display: none; }
+.ebe-result-perfect { color: #FFD700; text-shadow: 0 0 20px rgba(255,215,0,0.8), 0 0 40px rgba(255,140,0,0.5); }
+.ebe-result-good    { color: #00FF88; text-shadow: 0 0 16px rgba(0,255,136,0.6); }
+.ebe-result-miss    { color: #FF6B6B; text-shadow: 0 0 16px rgba(255,107,107,0.6); }
+
+.ebe-shake {
+    animation: overlayShake 0.3s ease both;
+}
+@keyframes overlayShake {
+    0%,100% { transform: translateX(0); }
+    20%      { transform: translateX(-10px); }
+    40%      { transform: translateX(10px); }
+    60%      { transform: translateX(-6px); }
+    80%      { transform: translateX(6px); }
+}
+
+/* ── Jump-only D-pad (hide left/right in endless mode) ───── */
+.endless-mode .dpad-move { display: none; }
+
+/* ── Mode chooser — updated hero & button styles ─────────── */
+#modeChooser {
+    background:
+        radial-gradient(ellipse at 30% 20%, rgba(90,180,60,0.35) 0%, transparent 55%),
+        radial-gradient(ellipse at 75% 80%, rgba(30,100,20,0.5) 0%, transparent 55%),
+        linear-gradient(160deg, #0d2b08 0%, #1a4a0f 45%, #2d6a1f 100%);
+}
+
+/* ── Enhanced battle overlay for campaign mode ───────────── */
+.battle-overlay {
+    display: none;
+    flex-direction: column;
+    pointer-events: none;
+}
+.battle-overlay.active {
+    display: flex;
+    pointer-events: auto;
+}
+
+/* ── Achievement popup ───────────────────────────────────── */
+/* Drawn entirely on canvas via JS — no extra CSS needed */
+
+/* ── Canvas roundRect polyfill notice ────────────────────── */
+/* Modern browsers support ctx.roundRect; legacy fallback gracefully degrades */
+
+/* ── Pulse keyframe for power-up indicators ──────────────── */
+@keyframes powerPulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.7; transform: scale(1.04); }
+}
+
+/* ── Grain count badge animation ─────────────────────────── */
+@keyframes grainPop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}

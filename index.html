@@ -3,19 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#2d6a1f">
-    <title>Samurice Dino Games</title>
+    <meta name="theme-color" content="#0d2b08">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Samurice Dino Games — Phonics runner where you slash dinosaurs with the power of words!">
+    <title>⚔️ Samurice Dino Games</title>
     <link rel="stylesheet" href="css/style.css">
+
+    <!-- ctx.roundRect polyfill for older browsers -->
+    <script>
+    (function() {
+      const proto = CanvasRenderingContext2D.prototype;
+      if (!proto.roundRect) {
+        proto.roundRect = function(x, y, w, h, r) {
+          if (typeof r === 'number') r = [r, r, r, r];
+          const [tl=0, tr=0, br=0, bl=0] = Array.isArray(r) ? r : [r];
+          this.beginPath();
+          this.moveTo(x + tl, y);
+          this.lineTo(x + w - tr, y);
+          this.arcTo(x + w, y, x + w, y + tr, tr);
+          this.lineTo(x + w, y + h - br);
+          this.arcTo(x + w, y + h, x + w - br, y + h, br);
+          this.lineTo(x + bl, y + h);
+          this.arcTo(x, y + h, x, y + h - bl, bl);
+          this.lineTo(x, y + tl);
+          this.arcTo(x, y, x + tl, y, tl);
+          this.closePath();
+        };
+      }
+    })();
+    </script>
 </head>
 <body>
 
 <!-- ══════════════════════════════════════════════════════════
-     MODE CHOOSER  (first screen seen on load)
+     MODE CHOOSER  (external entry point — choose game type)
 ═══════════════════════════════════════════════════════════════ -->
 <div id="modeChooser" class="screen active">
     <div class="mc-hero">
-        <h1 class="mc-title">🦖 Dino Games 🦖</h1>
-        <p class="mc-sub">Choose your adventure!</p>
+        <h1 class="mc-title">⚔️ Samurice Dino Games</h1>
+        <p class="mc-sub">Slash dinosaurs with the power of PHONICS!</p>
     </div>
 
     <div class="mc-buttons">
@@ -23,7 +50,7 @@
             <span class="mc-icon">⚔️</span>
             <div class="mc-text">
                 <span class="mc-name">Samurice Dino Slash</span>
-                <span class="mc-desc">Phonics platformer · Run · Collect · Blend · Defeat!</span>
+                <span class="mc-desc">Endless runner + Phonics combat · NEW: Shop · Daily · Achievements!</span>
             </div>
         </button>
 
@@ -38,23 +65,23 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     SAMURICE DINO SLASH — Mario-hybrid phonics platformer
-     Canvas = game world (runner phase + battle visuals)
+     SAMURICE DINO SLASH — Phonics auto-runner + battle game
+     Canvas = all game rendering (title, runner, menus, etc.)
      #battleOverlay = interactive phoneme tiles (HTML, for touch)
 ═══════════════════════════════════════════════════════════════ -->
 <div id="slashScreen" class="screen">
     <div id="slashWrapper">
 
-        <!-- Main game canvas: runner + battle worlds rendered here -->
+        <!-- Main game canvas -->
         <canvas id="slashCanvas"></canvas>
 
-        <!-- Rotate-device prompt — shown only in portrait mode -->
+        <!-- Rotate-device prompt — portrait only -->
         <div id="rotatePrompt" class="rotate-prompt">
             <div class="rotate-icon">📱➡️🔄</div>
             <div class="rotate-text">Rotate your device for the best experience!</div>
         </div>
 
-        <!-- Exit button (always visible over canvas) -->
+        <!-- Exit button -->
         <button id="slashExitBtn"
                 class="slash-exit-btn"
                 onclick="exitSlash()"
@@ -66,7 +93,8 @@
                 onclick="toggleFullscreen()"
                 title="Fullscreen">⛶</button>
 
-        <!-- Runner D-pad controls (touch only, shown during runner phase) -->
+        <!-- Runner D-pad controls (touch only) -->
+        <!-- In endless mode, left/right are hidden; only JUMP shown -->
         <div id="runnerControls" class="runner-controls hidden">
             <div class="dpad-move">
                 <button class="dpad-btn" id="dpadLeft">◀</button>
@@ -75,15 +103,17 @@
             <button class="dpad-btn dpad-jump" id="dpadJump">▲<br><span>JUMP</span></button>
         </div>
 
-        <!-- Battle overlay: phoneme tiles + word builder + controls.
-             Shown only during boss battle; populated by BattleEngine. -->
-        <div id="battleOverlay" class="battle-overlay hidden"></div>
+        <!-- Battle overlay: phoneme tiles + word builder.
+             Populated by BattleEngine (campaign) or EndlessBattleEngine (endless).
+             Class toggled between 'battle-overlay' (campaign) and
+             'endless-battle-overlay' (endless mode) by JS. -->
+        <div id="battleOverlay" class="battle-overlay"></div>
 
     </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     DINO DASH — Flappy Bird Screen  (UNTOUCHED)
+     DINO DASH — Flappy Bird Screen  (unchanged)
 ═══════════════════════════════════════════════════════════════ -->
 <div id="flappyScreen" class="screen">
     <div id="flappyWrapper">
@@ -113,15 +143,14 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     SCRIPTS
-     Load order (each builds on the previous):
-       1. phonicsData    – pure data, no dependencies
-       2. progressTracker – localStorage wrapper
-       3. audioManager   – Web Audio + TTS fallback
-       4. runnerEngine   – side-scrolling platformer
-       5. battleEngine   – phonics boss combat
-       6. slashGame      – orchestrator; overrides launchSlashGame()
-       7. game.js        – Dino Dash (completely untouched)
+     SCRIPTS — load order matters
+       1. phonicsData    – word data, no dependencies
+       2. progressTracker – localStorage (shop, achievements, daily, endless)
+       3. audioManager   – Web Audio + TTS + chiptune music
+       4. runnerEngine   – campaign runner + EndlessRunnerEngine (appended)
+       5. battleEngine   – campaign boss battle + EndlessBattleEngine (appended)
+       6. slashGame      – main orchestrator; overrides launchSlashGame()
+       7. game.js        – Dino Dash (untouched)
 ═══════════════════════════════════════════════════════════════ -->
 <script src="js/phonicsData.js"></script>
 <script src="js/progressTracker.js"></script>
@@ -132,7 +161,7 @@
 <script src="js/game.js"></script>
 
 <script>
-// ── Fullscreen toggle (works for both Slash and Dino Dash screens) ──
+// ── Fullscreen toggle ──────────────────────────────────────────
 function toggleFullscreen() {
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
   if (!fsEl) {
@@ -154,6 +183,17 @@ function _syncFsIcons() {
 }
 document.addEventListener('fullscreenchange',       _syncFsIcons);
 document.addEventListener('webkitfullscreenchange', _syncFsIcons);
+
+// ── Prevent context menu on long-press (mobile) ─────────────
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+// ── Prevent double-tap zoom on game elements ────────────────
+let lastTap = 0;
+document.addEventListener('touchend', function(e) {
+  const now = Date.now();
+  if (now - lastTap < 300) e.preventDefault();
+  lastTap = now;
+}, { passive: false });
 </script>
 
 </body>

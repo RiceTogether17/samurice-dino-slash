@@ -207,13 +207,64 @@ class AudioManager {
   sfxSpring()      { this._tone(280,'sine',0.04,0.35); this._tone(540,'sine',0.07,0.30,0.05); this._tone(820,'sine',0.08,0.25,0.09); }
   sfxCheckpoint()  { [523,659,784].forEach((f,i) => this._tone(f,'sine',0.14,0.32,i*0.09)); }
 
+  // ── NEW: Combo / power-up / achievement SFX ──────────────────
+  sfxCombo(streak) {
+    // Escalating rising arpeggio — higher streak = higher pitch
+    const base = 400 + Math.min(streak, 20) * 30;
+    [base, base*1.26, base*1.5, base*2].forEach((f,i) => this._tone(f,'sine',0.10,0.30,i*0.055));
+  }
+  sfxPerfectBlend() {
+    // Epic perfect-hit fanfare: chord + shimmer
+    [523,659,784,1047].forEach((f,i) => this._tone(f,'sine',0.22,0.38,i*0.04));
+    setTimeout(() => [880,1100,1320].forEach((f,i) => this._tone(f,'sine',0.14,0.28,i*0.05)), 200);
+  }
+  sfxPowerupCollect() {
+    [440,550,660,880].forEach((f,i) => this._tone(f,'triangle',0.14,0.32,i*0.06));
+  }
+  sfxAchievement() {
+    [523,659,784,880,1047,1319,1568].forEach((f,i) => this._tone(f,'sine',0.16,0.35,i*0.07));
+  }
+  sfxGateWarning() {
+    this._tone(220,'square',0.12,0.4); this._tone(220,'square',0.12,0.4,0.18);
+  }
+  sfxSlowMo() {
+    // Whoosh-down effect
+    if (!this.ctx) return; this._resume();
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain); gain.connect(this.ctx.destination);
+    osc.type = 'sine';
+    const t = this.ctx.currentTime;
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.exponentialRampToValueAtTime(100, t + 0.6);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.65);
+    osc.start(t); osc.stop(t + 0.7);
+  }
+  sfxZoneChange() {
+    [330,415,523,659].forEach((f,i) => this._tone(f,'triangle',0.18,0.30,i*0.09));
+  }
+  sfxGameOver() {
+    // Descending defeated tones
+    [400,320,250,180].forEach((f,i) => this._tone(f,'sawtooth',0.22,0.45,i*0.16));
+  }
+  sfxMagnet() {
+    [440,480,520].forEach((f,i) => this._tone(f,'sine',0.08,0.18,i*0.04));
+  }
+
   // ── Music control ─────────────────────────────────────────────
   startMusic(stageId) {
     if (this.muted || !this._music) return;
     this._resume();
     this._music.play(stageId);
   }
+  startEndlessMusic() { this.startMusic(1); }
   stopMusic() { if (this._music) this._music.stop(); }
+
+  speedUpMusic(factor) {
+    // Increase BPM by adjusting the scheduler's internal tempo
+    if (this._music) this._music.speedUp(factor);
+  }
 
   toggleMute() {
     this.muted = !this.muted;
@@ -286,11 +337,14 @@ class MusicPlayer {
     if (!this._ctx) return;
     this.stop();
     this._cfg      = MusicPlayer.STAGES[Math.min(stageId - 1, 5)];
+    this._bpmMult  = 1;
     this._playing  = true;
     this._beatIdx  = 0;
     this._nextBeat = this._ctx.currentTime + 0.08;
     this._schedule();
   }
+
+  speedUp(mult) { this._bpmMult = Math.min(mult, 2.0); }
 
   stop() {
     this._playing = false;
@@ -310,8 +364,8 @@ class MusicPlayer {
     const INTERVAL  = 55;   // ms between scheduler wakeups
     while (this._nextBeat < this._ctx.currentTime + LOOKAHEAD) {
       this._scheduleBeat(this._nextBeat);
-      // Advance by one 8th-note duration
-      this._nextBeat += (60 / this._cfg.bpm) / 2;
+      // Advance by one 8th-note duration (speed up with bpmMult)
+      this._nextBeat += (60 / (this._cfg.bpm * (this._bpmMult || 1))) / 2;
       this._beatIdx   = (this._beatIdx + 1) % 16;
     }
     this._timer = setTimeout(() => this._schedule(), INTERVAL);
