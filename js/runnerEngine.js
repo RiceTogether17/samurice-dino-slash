@@ -1472,30 +1472,36 @@ class RunnerEngine {
     this.outcome = null;
     this._paused = false;
     this.dustParticles = [];
+    this._dpadAbort = null;
   }
 
   // ── Bind D-pad button elements (called by SlashGame after creating runner) ──
   bindDpad(leftBtn, rightBtn, jumpBtn) {
+    // Abort any previous set of d-pad listeners before adding new ones
+    if (this._dpadAbort) this._dpadAbort.abort();
+    this._dpadAbort = new AbortController();
+    const sig = { signal: this._dpadAbort.signal };
+
     const hold = (btn, key) => {
       const start = () => { this.keys[key] = true;  btn.classList.add('held'); };
       const end   = () => { this.keys[key] = false; btn.classList.remove('held'); };
-      btn.addEventListener('touchstart', (e) => { e.preventDefault(); start(); }, { passive: false });
-      btn.addEventListener('touchend',   (e) => { e.preventDefault(); end(); });
-      btn.addEventListener('touchcancel',end);
-      btn.addEventListener('mousedown',  start);
-      btn.addEventListener('mouseup',    end);
-      btn.addEventListener('mouseleave', end);
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); start(); }, { passive: false, signal: this._dpadAbort.signal });
+      btn.addEventListener('touchend',   (e) => { e.preventDefault(); end(); },   sig);
+      btn.addEventListener('touchcancel', end, sig);
+      btn.addEventListener('mousedown',  start, sig);
+      btn.addEventListener('mouseup',    end,   sig);
+      btn.addEventListener('mouseleave', end,   sig);
     };
     hold(leftBtn,  'left');
     hold(rightBtn, 'right');
     // Jump: variable height — press to jump, release to cut
     const doJump  = (e) => { e.preventDefault(); this.player.jump(this.audio); jumpBtn.classList.add('held'); };
     const endJump = (e) => { e.preventDefault(); this.player.releaseJump(); jumpBtn.classList.remove('held'); };
-    jumpBtn.addEventListener('touchstart', doJump,  { passive: false });
-    jumpBtn.addEventListener('touchend',   endJump, { passive: false });
-    jumpBtn.addEventListener('touchcancel',endJump);
-    jumpBtn.addEventListener('mousedown',  doJump);
-    jumpBtn.addEventListener('mouseup',    endJump);
+    jumpBtn.addEventListener('touchstart', doJump,  { passive: false, signal: this._dpadAbort.signal });
+    jumpBtn.addEventListener('touchend',   endJump, { passive: false, signal: this._dpadAbort.signal });
+    jumpBtn.addEventListener('touchcancel', endJump, sig);
+    jumpBtn.addEventListener('mousedown',  doJump,  sig);
+    jumpBtn.addEventListener('mouseup',    endJump, sig);
   }
 
   // ── Keyboard input ────────────────────────────────────────────
@@ -1521,6 +1527,7 @@ class RunnerEngine {
   destroy() {
     document.removeEventListener('keydown', this._kd);
     document.removeEventListener('keyup',   this._ku);
+    if (this._dpadAbort) { this._dpadAbort.abort(); this._dpadAbort = null; }
   }
 
   // ── Update ───────────────────────────────────────────────────
@@ -1531,9 +1538,9 @@ class RunnerEngine {
 
     // Screen shake decay
     if (this._screenShake > 0) this._screenShake--;
-    // Stomp combo timer
+    // Stomp combo timer — reset fires exactly once when timer expires (set to -1 after)
     if (this._stompComboTimer > 0) this._stompComboTimer--;
-    else if (this._stompComboTimer === 0) this._stompCombo = 0;
+    else if (this._stompComboTimer === 0) { this._stompCombo = 0; this._stompComboTimer = -1; }
 
     this.player.applyInput(this.keys, this.levelW);
 
@@ -1588,6 +1595,12 @@ class RunnerEngine {
         this.player.invincible  = 120;
         this.player.groundPounding = false;
         this.player._groundPoundLanded = false;
+        // Clear all power-up state so bonuses don't carry over after death
+        this.player.powerUp      = null;
+        this.player._powerUpTimer = 0;
+        this.player._starTimer   = 0;
+        this.player.shieldActive = false;
+        this.player.boostFrames  = 0;
         this.particles.push(new RunnerParticle(
           this.W / 2, this.H * 0.4, '💔 Respawn!', '#FF4081', -4));
         return;
@@ -2158,6 +2171,11 @@ class RunnerEngine {
   // ── Pause ─────────────────────────────────────────────────────
   _togglePause() {
     this._paused = !this._paused;
+    if (this._paused) {
+      // Clear held keys so player doesn't resume moving when unpaused
+      this.keys.left  = false;
+      this.keys.right = false;
+    }
   }
 
   _drawPauseOverlay(ctx) {
