@@ -1,4 +1,4 @@
-"'use strict';
+'use strict';
 // ============================================================
 // SLASH GAME — js/slashGame.js
 // Main orchestrator for Samurice Dino Slash.
@@ -2094,5 +2094,5 @@ document.addEventListener('keydown', (e) => {
       _slashGameInstance.state = 'world-map';
     }
   }
-});"
- 
+});
+
