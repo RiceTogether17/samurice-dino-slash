@@ -138,6 +138,7 @@ class ProgressTracker {
       unlocked, stars: 0, bestScore: 0, attempts: 0,
       totalBlends: 0, correctBlends: 0,
       wordsMastered: [], wordsAttempted: {}, coinsCollected: 0, completedAt: null,
+      mastery: { noHit: false, speedClear: false, bestClearSec: null },
     };
   }
 
@@ -160,6 +161,13 @@ class ProgressTracker {
     if (typeof d.bestCombo !== 'number') d.bestCombo = 0;
     if (typeof d.totalRunDistance !== 'number') d.totalRunDistance = 0;
     if (typeof d.totalPerfectBlends !== 'number') d.totalPerfectBlends = 0;
+    Object.keys(d.stages || {}).forEach(id => {
+      const st = d.stages[id] || (d.stages[id] = this._freshStage(false));
+      if (!st.mastery || typeof st.mastery !== 'object') st.mastery = { noHit:false, speedClear:false, bestClearSec:null };
+      if (typeof st.mastery.noHit !== 'boolean') st.mastery.noHit = false;
+      if (typeof st.mastery.speedClear !== 'boolean') st.mastery.speedClear = false;
+      if (typeof st.mastery.bestClearSec !== 'number') st.mastery.bestClearSec = null;
+    });
   }
 
   _checkDailyReset() {
@@ -372,6 +380,40 @@ class ProgressTracker {
     this.data.stages[stageId] = s; this._save();
   }
 
+  recordStageMastery(stageId, result = {}) {
+    const s = this.getStage(stageId);
+    if (!s.mastery || typeof s.mastery !== 'object') {
+      s.mastery = { noHit:false, speedClear:false, bestClearSec:null };
+    }
+
+    const newlyEarned = [];
+    let bonus = 0;
+
+    if (typeof result.clearSec === 'number' && result.clearSec > 0) {
+      if (typeof s.mastery.bestClearSec !== 'number' || result.clearSec < s.mastery.bestClearSec) {
+        s.mastery.bestClearSec = result.clearSec;
+      }
+    }
+
+    if (result.noHit && !s.mastery.noHit) {
+      s.mastery.noHit = true;
+      newlyEarned.push('no-hit');
+      bonus += 75;
+    }
+
+    if (result.speedClear && !s.mastery.speedClear) {
+      s.mastery.speedClear = true;
+      newlyEarned.push('speed-clear');
+      bonus += 75;
+    }
+
+    this.data.stages[stageId] = s;
+    if (bonus > 0) this.addRiceGrains(bonus);
+    this._save();
+    return { bonus, newlyEarned, mastery: this.getStageMastery(stageId) };
+  }
+
+
   // ── Login reward ──────────────────────────────────────────────
   getLoginStreak()      { return this.data.loginStreak || 0; }
   canClaimLoginReward() { return !this.data.loginRewardClaimed; }
@@ -398,6 +440,19 @@ class ProgressTracker {
     if (s.totalBlends < 5) return 0;
     const acc = s.correctBlends / s.totalBlends;
     return acc >= 0.85 ? 2 : acc >= 0.60 ? 1 : 0;
+  }
+  getMasteredWords(stageId) {
+    const stage = this.getStage(stageId);
+    return Array.isArray(stage.wordsMastered) ? [...stage.wordsMastered] : [];
+  }
+  getStageMastery(stageId) {
+    const stage = this.getStage(stageId);
+    const m = stage.mastery || {};
+    return {
+      noHit: !!m.noHit,
+      speedClear: !!m.speedClear,
+      bestClearSec: typeof m.bestClearSec === 'number' ? m.bestClearSec : null,
+    };
   }
   getStars(stageId)       { return this.getStage(stageId).stars; }
   getStageSummary(id)     {

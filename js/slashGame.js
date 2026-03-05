@@ -1,4 +1,4 @@
-"'use strict';
+'use strict';
 // ============================================================
 // SLASH GAME — js/slashGame.js
 // Main orchestrator for Samurice Dino Slash.
@@ -65,6 +65,9 @@ class SlashGame {
     this._age = 0;
     this._transFrames = 0;
     this._transMsg = '';
+    this._stageStartedAt = 0;
+    this._lastRunnerHp = null;
+    this._stageWinMastery = null;
     // World map animation
     this._mapPlayerPos = null; // { x, y } animated player dot on map
     this._mapAnim = 0; // age for map animations
@@ -263,6 +266,9 @@ class SlashGame {
     this.stageId = id;
     this.overlay.classList.add('hidden');
     this.audio.preloadStage(id);
+    this._stageStartedAt = Date.now();
+    this._lastRunnerHp = null;
+    this._stageWinMastery = null;
     this._startRunner();
   }
   // ── D-pad helpers ─────────────────────────────────────────────
@@ -323,6 +329,17 @@ class SlashGame {
     const runnerScore = this._lastRunnerScore || 0;
     const score = battleScore + runnerScore;
     this.progress.completeStage(this.stageId, score);
+
+    const clearSec = this._stageStartedAt ? (Date.now() - this._stageStartedAt) / 1000 : null;
+    const runnerTookHit = typeof this._lastRunnerHp === 'number' ? this._lastRunnerHp < 3 : false;
+    const battleTookHit = this.battle ? this.battle.rikuHp < this.battle.rikuMaxHp : false;
+    const masteryResult = {
+      noHit: !(runnerTookHit || battleTookHit),
+      speedClear: typeof clearSec === 'number' && clearSec <= 95,
+      clearSec,
+    };
+    const masteryReward = this.progress.recordStageMastery(this.stageId, masteryResult);
+    this._stageWinMastery = { ...masteryReward.mastery, bonus: masteryReward.bonus, newly: masteryReward.newlyEarned, clearSec };
     this.overlay.classList.remove('active');
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
@@ -937,6 +954,7 @@ class SlashGame {
     if (this.runner.outcome === 'flag') {
       const coins = this.runner.getCollectedPhonemes();
       this._lastRunnerScore = this.runner.score || 0;
+      this._lastRunnerHp = this.runner?.player?.hp ?? 0;
       this.progress.recordRunnerComplete(this.stageId, this.runner.getCollectedCount());
       const scoreMsg = this._lastRunnerScore > 0 ? `\n⭐ Runner Score: ${this._lastRunnerScore.toLocaleString()}` : '';
       this._startTransition(
@@ -950,6 +968,7 @@ class SlashGame {
       // Timeout: still go to battle with what was collected
       const coins = this.runner.getCollectedPhonemes();
       this._lastRunnerScore = this.runner.score || 0;
+      this._lastRunnerHp = this.runner?.player?.hp ?? 0;
       this.progress.recordRunnerComplete(this.stageId, this.runner.getCollectedCount());
       this._startTransition(
         `⏱ Time's up! Boss battle with ${coins.length} phonemes!`,
@@ -1034,7 +1053,7 @@ class SlashGame {
     }
     // Panel
     const pw = Math.min(360, W - 40);
-    const ph = 320;
+    const ph = 360;
     const px = (W - pw) / 2;
     const py = (H - ph) / 2;
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -1059,9 +1078,22 @@ class SlashGame {
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.fillText(`${this.progress.getMasteredWords(this.stageId).length} words mastered!`, W / 2, py + 152);
     ctx.fillText(`🍚 +${stars * 50 + 20} rice points`, W / 2, py + 174);
+
+    const mastery = this._stageWinMastery || this.progress.getStageMastery(this.stageId);
+    const bestSec = mastery.bestClearSec ? Math.round(mastery.bestClearSec) : null;
+    ctx.font = '12px system-ui';
+    ctx.fillStyle = mastery.noHit ? '#9CFF9C' : 'rgba(255,255,255,0.65)';
+    ctx.fillText(`${mastery.noHit ? '✅' : '⬜'} No-Hit Clear`, W / 2, py + 198);
+    ctx.fillStyle = mastery.speedClear ? '#9CFF9C' : 'rgba(255,255,255,0.65)';
+    ctx.fillText(`${mastery.speedClear ? '✅' : '⬜'} Speed Clear (≤95s)${bestSec ? ` · Best ${bestSec}s` : ''}`, W / 2, py + 216);
+    if (this._stageWinMastery?.bonus > 0) {
+      ctx.fillStyle = '#FFD166';
+      ctx.font = 'bold 12px system-ui';
+      ctx.fillText(`🏅 Mastery Bonus +${this._stageWinMastery.bonus} rice`, W / 2, py + 234);
+    }
     // Buttons
     this._resultBtnRects = [
-      { label: '▶ Next Stage', x: W/2 - 100, y: py + 210, w: 200, h: 40,
+      { label: '▶ Next Stage', x: W/2 - 100, y: py + 248, w: 200, h: 40,
         action: () => {
           if (this.stageId < 6 && this.progress.isUnlocked(this.stageId + 1)) {
             this.stageId++;
@@ -1071,7 +1103,7 @@ class SlashGame {
           }
         }
       },
-      { label: '🗺 World Map', x: W/2 - 80, y: py + 264, w: 160, h: 36,
+      { label: '🗺 World Map', x: W/2 - 80, y: py + 302, w: 160, h: 36,
         action: () => { this.state = 'world-map'; }
       },
     ];
@@ -2094,5 +2126,5 @@ document.addEventListener('keydown', (e) => {
       _slashGameInstance.state = 'world-map';
     }
   }
-});"
- 
+});
+
