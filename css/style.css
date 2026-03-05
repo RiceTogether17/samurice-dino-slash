@@ -1,3 +1,7 @@
+/* === CHANGE LOG ===
+   Step 1 (Visuals & Polish): added battle UI glow polish for themed tiles/buttons.
+============================================================ */
+
 /* ============================================================
    GLOBAL RESET & BASE
 ============================================================ */
@@ -678,6 +682,7 @@ body {
    Layout: controls (sticky-top) → build → timer → pool → hints → feedback
 ═══════════════════════════════════════════════════════════ */
 .battle-overlay {
+    box-shadow: inset 0 20px 50px rgba(0,0,0,0.35), inset 0 -20px 50px rgba(0,0,0,0.25);
     position: absolute;
     bottom: 0;
     left: 0;
@@ -837,6 +842,7 @@ body {
 
 /* Individual tile — Mario question-block style */
 .be-tile {
+    box-shadow: 0 5px 0 rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08), 0 0 20px rgba(255,193,7,0.12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -923,6 +929,7 @@ body {
     /* no sticky panel background — buttons have their own dark bg */
 }
 .be-btn {
+    filter: drop-shadow(0 0 10px rgba(255,193,7,0.2));
     height: 48px;
     padding: 0 20px;
     font-size: 1rem;

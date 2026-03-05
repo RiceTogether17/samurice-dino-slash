@@ -1,4 +1,7 @@
 'use strict';
+// === CHANGE LOG ===
+// Step 1 (Visuals & Polish): sprite-sheet animation hooks, particle system FX,
+// stronger parallax, DinoGate pulse visuals, and themed rice HUD glow.
 // ============================================================
 // RUNNER ENGINE — js/runnerEngine.js
 // Mario-style auto-scroller. Riku runs right automatically;
@@ -36,11 +39,56 @@ const R_JUMP_BUFFER    = 10;   // frames to queue a jump before landing
 const R_SPRING_VEL     = -22;  // spring pad launch velocity
 const R_STAR_DUR       = 480;  // 8 seconds of star invincibility (60 fps)
 
+
+class SpriteAnimator {
+  constructor(sheetMeta) { this.sheet = sheetMeta || null; }
+  draw(ctx, animName, x, y, w, h, age, fps = 9) {
+    if (!this.sheet || !this.sheet.image || !this.sheet.animations) return false;
+    const frames = this.sheet.animations[animName];
+    if (!frames || !frames.length) return false;
+    const img = this.sheet.image;
+    const cols = Math.max(1, Math.floor((img.naturalWidth || img.width) / this.sheet.frameW));
+    const idx = frames[Math.floor(age / Math.max(1, Math.floor(60 / fps))) % frames.length];
+    const sx = (idx % cols) * this.sheet.frameW;
+    const sy = Math.floor(idx / cols) * this.sheet.frameH;
+    ctx.drawImage(img, sx, sy, this.sheet.frameW, this.sheet.frameH, x, y, w, h);
+    return true;
+  }
+}
+
+class ParticleSystem {
+  constructor() { this.items = []; }
+  spawn(kind, x, y, count = 12) {
+    for (let i = 0; i < count; i++) {
+      const ang = (Math.PI * 2 * i) / Math.max(1, count) + Math.random() * 0.6;
+      const spd = 1 + Math.random() * 4;
+      this.items.push({ kind, x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 1.5, life: 18 + Math.random() * 20, age: 0 });
+    }
+  }
+  update() {
+    this.items.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.16; p.vx *= 0.96; p.age++; });
+    this.items = this.items.filter(p => p.age < p.life);
+  }
+  draw(ctx) {
+    this.items.forEach(p => {
+      const t = 1 - p.age / p.life;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, t);
+      ctx.fillStyle = p.kind === 'rice' ? '#FFE082' : (p.kind === 'hit' ? '#FF6E6E' : '#B3E5FC');
+      ctx.beginPath();
+      if (p.kind === 'hit') ctx.rect(p.x - 2, p.y - 2, 4, 4);
+      else ctx.arc(p.x, p.y, 1.5 + t * 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // RUNNER PLAYER
 // ─────────────────────────────────────────────────────────────
 class RunnerPlayer {
-  constructor(groundY, canvasW, canvasH, sprites) {
+  constructor(groundY, canvasW, canvasH, sprites, sheetMeta) {
     // Scale to canvas — looks good in both landscape and portrait
     this.h       = Math.round(canvasH * 0.32);
     this.w       = Math.round(this.h * 0.80);
@@ -54,6 +102,7 @@ class RunnerPlayer {
     this.boostFrames = 0;
     this.shieldActive = false;
     this.sprites = sprites || {};
+    this.sheetAnimator = new SpriteAnimator(sheetMeta?.rikuSheet);
     this._frame  = 0;
     this._runCycle = 0;
     this._facing = 1;   // 1=right, -1=left
@@ -305,7 +354,9 @@ class RunnerPlayer {
       const dw = normW * sqX * (1 + landAmt);
       const dh = normH * sqY * (1 - landAmt * 0.85);
       // Centre horizontally; anchor at feet (sprite bottom = y + this.h)
-      ctx.drawImage(sp, dx + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
+      const stateName = !this.onGround ? 'jump' : (Math.abs(this.vx) < 0.5 ? 'idle' : (this.boostFrames > 0 ? 'slash' : 'run'));
+      const usedSheet = this.sheetAnimator.draw(ctx, stateName, dx + (this.w - dw) / 2, y + (this.h - dh), dw, dh, this._frame, 10);
+      if (!usedSheet) ctx.drawImage(sp, dx + (this.w - dw) / 2, y + (this.h - dh), dw, dh);
     } else {
       this._drawFallback(ctx, dx, y);
     }
@@ -1414,11 +1465,12 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
 // RUNNER ENGINE — main class
 // ─────────────────────────────────────────────────────────────
 class RunnerEngine {
-  constructor(canvas, stageData, sprites, audio, logicalW, logicalH) {
+  constructor(canvas, stageData, sprites, audio, logicalW, logicalH, spriteSheets) {
     this.canvas     = canvas;
     this.ctx        = canvas.getContext('2d');
     this.stage      = stageData;
     this.sprites    = sprites || {};
+    this.spriteSheets = spriteSheets || {};
     this.audio      = audio;
 
     const W = logicalW || canvas.clientWidth  || 480;
@@ -1443,7 +1495,7 @@ class RunnerEngine {
     this.flag             = level.flag;
     this.levelW           = level.totalWidth;
 
-    this.player    = new RunnerPlayer(this.groundY, W, H, sprites);
+    this.player    = new RunnerPlayer(this.groundY, W, H, sprites, this.spriteSheets);
 
     this.keys = { right: false, left: false, jump: false };
     this._bindInput();
@@ -1472,6 +1524,7 @@ class RunnerEngine {
     this.outcome = null;
     this._paused = false;
     this.dustParticles = [];
+    this.fx = new ParticleSystem();
     this._dpadAbort = null;
   }
 
@@ -1756,6 +1809,7 @@ class RunnerEngine {
     // Particles
     this.particles.forEach(p => p.update());
     this.particles = this.particles.filter(p => !p.isDead());
+    this.fx.update();
 
     // Dust particles
     this.dustParticles.forEach(p => p.update());
@@ -1772,6 +1826,7 @@ class RunnerEngine {
     this.score += bonus;
     if (this.audio) this.audio.sfxStomp();
     this.particles.push(new RunnerParticle(ex, ey, '💥', '#FF8F00'));
+    this.fx.spawn('hit', ex, ey, 10);
     if (this._stompCombo >= 2) {
       this.particles.push(new RunnerParticle(ex, ey - 30,
         `COMBO ×${this._stompCombo}!`, '#FFD700', -5));
@@ -1798,6 +1853,7 @@ class RunnerEngine {
     if (pu.type === 'rice-bowl') {
       this.player.hp = Math.min(this.player.hp + 1, 5); // +1 HP up to 5
       this.particles.push(new RunnerParticle(pu.sx, pu.worldY, '❤️ +1 HP!', '#FF4081', -5));
+      this.fx.spawn('rice', pu.sx, pu.worldY, 8);
       if (this.audio) this.audio.sfxBoost();
     } else if (pu.type === 'chili') {
       this.player.powerUp = 'chili';
@@ -1833,6 +1889,7 @@ class RunnerEngine {
 
     // Particle pop
     this.particles.push(new RunnerParticle(coin.sx, coin.worldY, coin.phoneme.toUpperCase(), '#FFF176', -4));
+    this.fx.spawn('rice', coin.sx, coin.worldY, 6);
 
     // Check if this completes a word in order
     this._checkWordCompletion(coin.wordId, coin.phIdx);
@@ -1932,6 +1989,7 @@ class RunnerEngine {
 
     // Particles
     this.particles.forEach(p => p.draw(ctx));
+    this.fx.draw(ctx);
 
     ctx.restore(); // end screen-shake transform
 
@@ -1981,6 +2039,8 @@ class RunnerEngine {
     this._drawMountainLayer(ctx, this._bgOffset2, 0.45, 5,  80, 'rgba(0,100,0,0.18)');
     // Layer 3: near trees
     this._drawTreeLayer(ctx, this._bgOffset3);
+    // Layer 4: close haze streaks for extra speed feeling
+    this._drawParallaxLayer(ctx, this._bgOffset3 * 1.35, 1.05, 9, 26, 'rgba(255,255,255,0.07)', 0.78);
   }
 
   _drawParallaxLayer(ctx, offset, scroll, count, radius, color, yFrac) {
@@ -3376,6 +3436,13 @@ class EndlessRunnerEngine {
     ctx.strokeStyle = `rgba(0,255,100,${0.6 + 0.3*Math.sin(t*0.08)})`;
     ctx.lineWidth = 2;
     ctx.strokeRect(screenX + w*0.2, y + h*0.15, w*0.6, h*0.85);
+    // Portal rings for transition telegraph
+    const ringPulse = 0.5 + 0.5 * Math.sin(t * 0.2);
+    ctx.strokeStyle = `rgba(180,255,180,${0.35 + ringPulse * 0.35})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(screenX + w / 2, y + h * 0.55, w * (0.2 + ringPulse * 0.14), h * (0.28 + ringPulse * 0.10), 0, 0, Math.PI * 2);
+    ctx.stroke();
     // Sword icon
     ctx.font = `${h * 0.3}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('⚔️', screenX + w/2, y + h * 0.55);
@@ -3424,6 +3491,12 @@ class EndlessRunnerEngine {
     ctx.fillRect(0, 0, W, 48);
 
     // ── Grains ────────────────────────────────────────────────
+    ctx.shadowColor = 'rgba(255,193,7,0.7)';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = 'rgba(40,20,0,0.38)';
+    ctx.roundRect(8, 6, 180, 34, 10);
+    ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.font = `bold ${fontSize}px Arial Black, sans-serif`;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#FFD700';
