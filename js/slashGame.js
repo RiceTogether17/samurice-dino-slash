@@ -1,4 +1,8 @@
 'use strict';
+// === CHANGE LOG ===
+// Step 1 (Visuals & Polish):
+// - Added sprite-sheet manifest support with safe placeholder fallbacks.
+// - Added spriteSheet metadata registry so renderer classes can animate from sheets.
 // ============================================================
 // SLASH GAME — js/slashGame.js
 // Main orchestrator for Samurice Dino Slash.
@@ -45,6 +49,35 @@ const SLASH_SPRITES = {
   'stage-6-volcanic': 'assets/backgrounds/stage-6.jpg',
   'victory-golden-harvest': 'assets/backgrounds/victory.jpg',
 };
+
+// Sprite sheets for animated canvas entities. These are optional and gracefully
+// fall back to existing per-frame sprites if files are missing.
+const SLASH_SPRITE_SHEETS = {
+  rikuSheet: {
+    key: 'sheet-riku',
+    url: 'assets/riku_sprites.png',
+    frameW: 256,
+    frameH: 256,
+    animations: {
+      run: [0, 1, 2, 3],
+      jump: [4, 5],
+      slash: [6, 7, 8],
+      idle: [9, 10],
+    },
+  },
+  dinoSheet: {
+    key: 'sheet-dino',
+    url: 'assets/dino_sprites.png',
+    frameW: 256,
+    frameH: 256,
+  },
+  particlesSheet: {
+    key: 'sheet-particles',
+    url: 'assets/particles.png',
+    frameW: 128,
+    frameH: 128,
+  },
+};
 // ─────────────────────────────────────────────────────────────
 // SLASH GAME
 // ─────────────────────────────────────────────────────────────
@@ -59,6 +92,7 @@ class SlashGame {
     this.audio = new AudioManager();
     this.progress = new ProgressTracker();
     this.sprites = {};
+    this.spriteSheets = {};
     // State
     this.state = 'title'; // title | mode-select | menu | stage-select | world-map | runner | transition | battle | stage-win | stage-lose | endless-runner | endless-battle | endless-gameover | shop | daily | achievements | leaderboard
     this.stageId = 1;
@@ -123,6 +157,39 @@ class SlashGame {
       img.src = url;
       this.sprites[key] = img;
     });
+
+    // Load optional sprite sheets. Missing files are replaced by generated
+    // placeholder sheets so animation code can run without runtime branching.
+    Object.entries(SLASH_SPRITE_SHEETS).forEach(([id, meta]) => {
+      const img = new Image();
+      img.onload = () => { this.spriteSheets[id] = { ...meta, image: img, placeholder: false }; };
+      img.onerror = () => {
+        const ph = this._buildSheetPlaceholder(meta.frameW, meta.frameH, id);
+        this.spriteSheets[id] = { ...meta, image: ph, placeholder: true };
+      };
+      img.src = meta.url;
+    });
+  }
+
+  // Procedural fallback sheet to keep game playable when sprite sheets are absent.
+  _buildSheetPlaceholder(frameW, frameH, label) {
+    const c = document.createElement('canvas');
+    c.width = frameW * 4;
+    c.height = frameH * 3;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1b1f29';
+    g.fillRect(0, 0, c.width, c.height);
+    for (let y = 0; y < c.height; y += frameH) {
+      for (let x = 0; x < c.width; x += frameW) {
+        g.strokeStyle = 'rgba(255,255,255,0.24)';
+        g.strokeRect(x + 2, y + 2, frameW - 4, frameH - 4);
+      }
+    }
+    g.fillStyle = '#ffd54f';
+    g.font = `bold ${Math.max(14, Math.floor(frameH * 0.11))}px system-ui`;
+    g.textAlign = 'center';
+    g.fillText(`${label} missing`, c.width / 2, c.height / 2);
+    return c;
   }
   // ── Loading screen (shown while sprites stream in) ───────────
   _drawLoading() {
@@ -288,7 +355,7 @@ class SlashGame {
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
-    this.runner = new RunnerEngine(this.canvas, stage, this.sprites, this.audio, this.W, this.H);
+    this.runner = new RunnerEngine(this.canvas, stage, this.sprites, this.audio, this.W, this.H, this.spriteSheets);
     // Wire D-pad buttons — also restore L/R visibility in case endless mode hid them
     const dL = document.getElementById('dpadLeft');
     const dR = document.getElementById('dpadRight');
@@ -2127,4 +2194,3 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
-
