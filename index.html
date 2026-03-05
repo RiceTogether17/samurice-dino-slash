@@ -34,8 +34,9 @@
     </script>
 </head>
 <body>
-
-<!-- MODE CHOOSER -->
+<!-- ══════════════════════════════════════════════════════════
+     MODE CHOOSER (external entry point — choose game type)
+═══════════════════════════════════════════════════════════════ -->
 <div id="modeChooser" class="screen active">
     <div class="mc-hero">
         <img src="assets/sprites/riku-idle.png" class="mc-mascot" alt="Riku the Samurice" onerror="this.style.display='none'">
@@ -47,29 +48,44 @@
             <span class="mc-icon">⚔️</span>
             <div class="mc-text">
                 <span class="mc-name">Samurice Dino Slash</span>
-                <span class="mc-desc">Runner + Phonics battles · Shop · Daily · Achievements</span>
+                <span class="mc-desc">Endless runner + Phonics combat · NEW: Shop · Daily · Achievements!</span>
             </div>
         </button>
         <button class="mc-btn flap-btn" onclick="launchFlappyGame()">
             <span class="mc-icon">🦕</span>
             <div class="mc-text">
                 <span class="mc-name">Dino Dash</span>
-                <span class="mc-desc">Flappy-style endless runner</span>
+                <span class="mc-desc">Flappy Bird style — how far can you go?</span>
             </div>
         </button>
     </div>
 </div>
-
-<!-- SLASH GAME (main canvas + overlay) -->
+<!-- ══════════════════════════════════════════════════════════
+     SAMURICE DINO SLASH — Phonics auto-runner + battle game
+     Canvas = all game rendering (title, runner, menus, etc.)
+     #battleOverlay = interactive phoneme tiles (HTML, for touch)
+═══════════════════════════════════════════════════════════════ -->
 <div id="slashScreen" class="screen">
     <div id="slashWrapper">
+        <!-- Main game canvas -->
         <canvas id="slashCanvas"></canvas>
+        <!-- Rotate-device prompt — portrait only -->
         <div id="rotatePrompt" class="rotate-prompt">
             <div class="rotate-icon">📱➡️🔄</div>
             <div class="rotate-text">Rotate your device for the best experience!</div>
         </div>
-        <button id="slashExitBtn" class="slash-exit-btn" onclick="exitSlash()" title="Back to menu">✕</button>
-        <button id="slashFsBtn" class="slash-fs-btn game-fs-btn" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
+        <!-- Exit button -->
+        <button id="slashExitBtn"
+                class="slash-exit-btn"
+                onclick="exitSlash()"
+                title="Back to menu">✕</button>
+        <!-- Fullscreen toggle -->
+        <button id="slashFsBtn"
+                class="slash-fs-btn game-fs-btn"
+                onclick="toggleFullscreen()"
+                title="Fullscreen">⛶</button>
+        <!-- Runner D-pad controls (touch only) -->
+        <!-- In endless mode, left/right are hidden; only JUMP shown -->
         <div id="runnerControls" class="runner-controls hidden">
             <div class="dpad-move">
                 <button class="dpad-btn" id="dpadLeft">◀</button>
@@ -77,11 +93,16 @@
             </div>
             <button class="dpad-btn dpad-jump" id="dpadJump">▲<br><span>JUMP</span></button>
         </div>
+        <!-- Battle overlay: phoneme tiles + word builder.
+             Populated by BattleEngine (campaign) or EndlessBattleEngine (endless).
+             Class toggled between 'battle-overlay' (campaign) and
+             'endless-battle-overlay' (endless mode) by JS. -->
         <div id="battleOverlay" class="battle-overlay"></div>
     </div>
 </div>
-
-<!-- DINO DASH (Flappy) -->
+<!-- ══════════════════════════════════════════════════════════
+     DINO DASH — Flappy Bird Screen (unchanged)
+═══════════════════════════════════════════════════════════════ -->
 <div id="flappyScreen" class="screen">
     <div id="flappyWrapper">
         <canvas id="flappyCanvas"></canvas>
@@ -102,51 +123,16 @@
         </button>
     </div>
 </div>
-
-<!-- ── NEW SCREENS ── -->
-
-<!-- SHOP SCREEN -->
-<div id="shopScreen" class="screen">
-    <div class="shop-header">
-        <h1>🏪 Rice Grain Shop</h1>
-        <p class="rice-count">You have: <span id="shopRiceCount">0</span> 🌾</p>
-    </div>
-    <div class="shop-tabs">
-        <button data-tab="swords" class="active">⚔️ Swords</button>
-        <button data-tab="hats">🎩 Hats</button>
-        <button data-tab="companions">🐾 Companions</button>
-        <button data-tab="powerups">💊 Power-Ups</button>
-    </div>
-    <div id="shopItems" class="shop-grid"></div>
-    <button class="back-btn" onclick="goToMenuFromShop()">← Back to Menu</button>
-</div>
-
-<!-- ACHIEVEMENTS SCREEN -->
-<div id="achievementsScreen" class="screen">
-    <div class="ach-header">
-        <h1>🥇 Achievements</h1>
-        <p><span id="achCount">0</span> / <span id="achTotal">0</span> unlocked</p>
-    </div>
-    <div id="achGrid" class="ach-grid"></div>
-    <button class="back-btn" onclick="goToMenuFromAchievements()">← Back</button>
-</div>
-
-<!-- DAILY CHALLENGE SCREEN -->
-<div id="dailyScreen" class="screen">
-    <div class="daily-header">
-        <h1>📅 Daily Challenge</h1>
-        <p id="dailyTheme"></p>
-    </div>
-    <div class="daily-progress">
-        <div class="progress-bar"><div id="dailyProgressBar" class="progress-fill"></div></div>
-        <p id="dailyProgressText">0 / 0 words</p>
-    </div>
-    <div id="dailyWordsList" class="daily-words"></div>
-    <button id="dailyActionBtn" class="daily-action-btn">Start Daily</button>
-    <button class="back-btn" onclick="goToMenuFromDaily()">← Back</button>
-</div>
-
-<!-- SCRIPTS -->
+<!-- ══════════════════════════════════════════════════════════
+     SCRIPTS — load order matters
+       1. phonicsData – word data, no dependencies
+       2. progressTracker – localStorage (shop, achievements, daily, endless)
+       3. audioManager – Web Audio + TTS + chiptune music
+       4. runnerEngine – campaign runner + EndlessRunnerEngine (appended)
+       5. battleEngine – campaign boss battle + EndlessBattleEngine (appended)
+       6. slashGame – main orchestrator; overrides launchSlashGame()
+       7. game.js – Dino Dash (untouched)
+═══════════════════════════════════════════════════════════════ -->
 <script src="js/phonicsData.js"></script>
 <script src="js/progressTracker.js"></script>
 <script src="js/audioManager.js"></script>
@@ -157,27 +143,30 @@
 <script>
 // ── Fullscreen toggle ──────────────────────────────────────────
 function toggleFullscreen() {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {});
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fsEl) {
+    const req = document.documentElement.requestFullscreen
+             || document.documentElement.webkitRequestFullscreen;
+    if (req) req.call(document.documentElement).catch(() => {});
   } else {
-    document.exitFullscreen().catch(() => {});
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) exit.call(document).catch(() => {});
   }
 }
-
-// ── Simple navigation helpers (called from buttons) ─────────────
-function goToMenu() {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('modeChooser').classList.add('active');
+function _syncFsIcons() {
+  const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  document.querySelectorAll('.game-fs-btn').forEach(btn => {
+    btn.textContent = inFs ? '⊡' : '⛶';
+    btn.title = inFs ? 'Exit fullscreen' : 'Fullscreen';
+  });
 }
-
-function goToMenuFromShop()   { goToMenu(); }
-function goToMenuFromAchievements() { goToMenu(); }
-function goToMenuFromDaily()  { goToMenu(); }
-
-// ── Prevent unwanted browser behaviors ─────────────────────────
+document.addEventListener('fullscreenchange', _syncFsIcons);
+document.addEventListener('webkitfullscreenchange', _syncFsIcons);
+// ── Prevent context menu on long-press (mobile) ─────────────
 document.addEventListener('contextmenu', e => e.preventDefault());
+// ── Prevent double-tap zoom on game elements ────────────────
 let lastTap = 0;
-document.addEventListener('touchend', e => {
+document.addEventListener('touchend', function(e) {
   const now = Date.now();
   if (now - lastTap < 300) e.preventDefault();
   lastTap = now;
@@ -185,3 +174,4 @@ document.addEventListener('touchend', e => {
 </script>
 </body>
 </html>
+ 
