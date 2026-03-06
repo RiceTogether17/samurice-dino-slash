@@ -41,7 +41,7 @@ const SLASH_SPRITES = {
   // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex': 'assets/dinosaurs/trex.png',
   'stage-1-tri': 'assets/dinosaurs/triceratops.png',
-  'stage-2-rapi': 'assets/dinosaurs/velociraptor-attack.png',
+  'stage-2-rapi': 'assets/dinosaurs/velociraptor.png',
   'stage-2-stego': 'assets/dinosaurs/stegosaurus.png',
   'stage-3-brachio':'assets/dinosaurs/brachiosaurus.png',
   'stage-3-ptera': 'assets/dinosaurs/pteranodon.png',
@@ -1466,7 +1466,7 @@ class SlashGame {
     const dinoEmojis = ['🦖','🦕','🦴'];
     for (let d = 0; d < 3; d++) {
       const dx = ((t * (1.2 + d*0.4) + d * W/3) % (W + 80)) - 80;
-      ctx.font = `${H*0.06}px serif`;
+      ctx.font = `${H*0.09}px serif`;
       ctx.textBaseline = 'middle';
       ctx.fillText(dinoEmojis[d % dinoEmojis.length], dx, H * 0.83);
     }
@@ -1503,9 +1503,9 @@ class SlashGame {
     ctx.fillStyle = '#4ECDC4';
     ctx.fillText('PHONICS POWER · SLASH DINOS · SAVE THE RICE PADDY', W/2, titleY + titleSize * 2.6 + bounce);
     // ── Riku character (procedural) ─────────────────────────────
-    const rikuX = W * 0.5, rikuY = H * 0.47;
-    const rikuBounce = Math.sin(t * 0.06) * 6;
-    const rikuSize = Math.min(W * 0.25, 110);
+    const rikuX = W * 0.5, rikuY = H * 0.45;
+    const rikuBounce = Math.sin(t * 0.06) * 8;
+    const rikuSize = Math.min(W * 0.38, 200);
     const titleRiku = this.sprites['riku-idle'] || this.sprites['riku-run'];
     if (titleRiku && titleRiku.complete && titleRiku.naturalWidth > 0) {
       const ar = titleRiku.naturalWidth / titleRiku.naturalHeight;
@@ -1519,11 +1519,11 @@ class SlashGame {
     const blinkAlpha = 0.5 + 0.5 * Math.sin(t * 0.08);
     ctx.globalAlpha = blinkAlpha;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `bold ${Math.min(20, W*0.05)}px Arial Black, sans-serif`;
+    ctx.font = `bold ${Math.min(28, W*0.065)}px Arial Black, sans-serif`;
     ctx.fillStyle = '#FFD700';
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
-    ctx.strokeText('TAP TO PLAY!', W/2, H * 0.73);
-    ctx.fillText('TAP TO PLAY!', W/2, H * 0.73);
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
+    ctx.strokeText('TAP TO PLAY!', W/2, H * 0.72);
+    ctx.fillText('TAP TO PLAY!', W/2, H * 0.72);
     ctx.globalAlpha = 1;
     // ── Rice grains / login streak info bottom ────────────────
     const g = this.progress.getRiceGrains();

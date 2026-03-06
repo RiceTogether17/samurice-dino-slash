@@ -1075,8 +1075,8 @@ class PowerUpItem {
 class FlyingEnemy {
   constructor(worldX, worldY, sprite = null) {
     this.worldX   = worldX;
-    this.w        = 68;
-    this.h        = 52;
+    this.w        = 100;
+    this.h        = 80;
     this._baseY   = worldY;
     this.worldY   = worldY;
     this.vx       = -1.4;

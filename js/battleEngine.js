@@ -322,10 +322,9 @@ class BattleEngine {
 
       if (!isUsed) {
         tile.addEventListener('click', () => this._onTileClick(ph, tile, idx));
-        tile.addEventListener('mouseenter', () => { this.audio?.playPhoneme(ph); this._pronounceTile(ph); });
+        tile.addEventListener('mouseenter', () => { this.audio?.playPhoneme(ph); });
         tile.addEventListener('touchstart', () => {
           this.audio?.playPhoneme(ph);
-          this._pronounceTile(ph);
         }, { passive: true });
         tile.addEventListener('touchend', (e) => {
           e.preventDefault();
@@ -342,10 +341,14 @@ class BattleEngine {
   _onTileClick(phoneme, tileEl, tileIdx) {
     if (this.state !== 'idle' && this.state !== 'blending') return;
     if (this._usedTileIdx.has(tileIdx)) return;
+    if (this.done) return;
+    // Cooldown: prevent rapid wrong-tile taps from stacking damage/skip
+    const now = Date.now();
+    if (now - (this._lastTileClickMs || 0) < 300) return;
+    this._lastTileClickMs = now;
 
     const expected = this._currentWord.phonemes[this._currentBuilt.length];
     this.audio?.playPhoneme(phoneme);
-    this._pronounceTile(phoneme);
 
     // Live correctness feedback per tile (green/red flash)
     if (phoneme !== expected) {
@@ -485,6 +488,7 @@ class BattleEngine {
 
   // ── Skip word after 3 failures ───────────────────────────────
   _skipWord() {
+    if (this.done || this.state === 'boss-attack') return;
     this._stopBlendTimer();
     this.state = 'boss-attack';
     this._combo = 0;
@@ -676,7 +680,7 @@ class BattleEngine {
   }
 
   _bossAutoAttack() {
-    if (this.done) return;
+    if (this.done || this.state === 'boss-attack') return;
     this.state = 'boss-attack';
     // Phase amplifies boss attack
     const phaseMult = this._bossPhase === 3 ? 1.5 : this._bossPhase === 2 ? 1.25 : 1.0;
