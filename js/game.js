@@ -48,13 +48,13 @@ const TERMINAL_VEL    = 11;
 const PIPE_SPEED_INIT = 2.8;
 const PIPE_SPEED_MAX  = 7.0;
 const SPEED_INCREMENT = 0.18;
-const GAP_INITIAL     = 175;
-const GAP_MIN         = 120;
+const GAP_INITIAL     = 210;
+const GAP_MIN         = 150;
 const GAP_SHRINK      = 3;
 const PIPE_INTERVAL   = 1800;
 const PIPE_WIDTH      = 68;
-const DINO_W          = 56;
-const DINO_H          = 56;
+const DINO_W          = 88;
+const DINO_H          = 88;
 const DINO_X          = 90;
 const GROUND_H        = 60;
 const SHAKE_DURATION  = 18;
@@ -62,8 +62,7 @@ const SHAKE_MAG       = 8;
 const PARTICLE_COUNT  = 22;
 
 const SKINS = [
-  { name: 'Raptor',       file: 'assets/dinosaurs/velociraptor.png'  },
-  { name: 'Velociraptor', file: 'assets/dinosaurs/velociraptor2.png' },
+  { name: 'Velociraptor', file: 'assets/dinosaurs/velociraptor.png'  },
   { name: 'Stego',        file: 'assets/dinosaurs/stegosaurus.png'  },
   { name: 'Triceratops',  file: 'assets/dinosaurs/triceratops.png'  },
   { name: 'T-Rex Boss',   file: 'assets/dinosaurs/trex.png'         },
@@ -855,7 +854,7 @@ class FlappyGame {
     // Dino preview
     const sp = this._sprite();
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      ctx.drawImage(sp, cx - 48, cy - 115, 96, 96);
+      ctx.drawImage(sp, cx - 64, cy - 120, 128, 128);
     }
 
     // Best
