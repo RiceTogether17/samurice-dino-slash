@@ -36,12 +36,12 @@ const SLASH_SPRITES = {
   'tile-dojo': 'assets/sprites/tile-dojo.png',
   'tile-rice': 'assets/sprites/tile-rice.png',
   // ── Minion dino ───────────────────────────────────────────
-  'minion-dino': 'assets/sprites/dino-minion.png',
-  'dino-minion': 'assets/sprites/minion-dino.png',
+  'minion-dino': 'assets/sprites/minion-dino.png',
+  'dino-minion': 'assets/sprites/dino-minion.png',
   // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex': 'assets/dinosaurs/trex.png',
   'stage-1-tri': 'assets/dinosaurs/triceratops.png',
-  'stage-2-rapi': 'assets/dinosaurs/velociraptor.png',
+  'stage-2-rapi': 'assets/dinosaurs/velociraptor-attack.png',
   'stage-2-stego': 'assets/dinosaurs/stegosaurus.png',
   'stage-3-brachio':'assets/dinosaurs/brachiosaurus.png',
   'stage-3-ptera': 'assets/dinosaurs/pteranodon.png',
@@ -1505,7 +1505,7 @@ class SlashGame {
     // ── Riku character (procedural) ─────────────────────────────
     const rikuX = W * 0.5, rikuY = H * 0.47;
     const rikuBounce = Math.sin(t * 0.06) * 6;
-    const rikuSize = Math.min(W * 0.38, 190);
+    const rikuSize = Math.min(W * 0.25, 110);
     const titleRiku = this.sprites['riku-idle'] || this.sprites['riku-run'];
     if (titleRiku && titleRiku.complete && titleRiku.naturalWidth > 0) {
       const ar = titleRiku.naturalWidth / titleRiku.naturalHeight;
