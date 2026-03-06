@@ -3,6 +3,8 @@
 // Step 1 (Visuals & Polish):
 // - Added sprite-sheet manifest support with safe placeholder fallbacks.
 // - Added spriteSheet metadata registry so renderer classes can animate from sheets.
+// Step 5 (Audio/UX/Mobile): first-play interactive tutorial + mobile touch improvements.
+// Step 6 (Technical): 60 FPS pacing cap, full preload gate, and `~` debug overlay toggle.
 // ============================================================
 // SLASH GAME — js/slashGame.js
 // Main orchestrator for Samurice Dino Slash.
@@ -93,6 +95,12 @@ class SlashGame {
     this.progress = new ProgressTracker();
     this.sprites = {};
     this.spriteSheets = {};
+    this._spritesReady = false;
+    this._sheetsReady = false;
+    this._audioReady = false;
+    this._targetFrameMs = 1000 / 60;
+    this._fpsSamples = [];
+    this._debugOverlay = false;
     // State
     this.state = 'title'; // title | mode-select | menu | stage-select | world-map | runner | transition | battle | stage-win | stage-lose | endless-runner | endless-battle | endless-gameover | shop | daily | achievements | leaderboard
     this.stageId = 1;
@@ -102,6 +110,7 @@ class SlashGame {
     this._stageStartedAt = 0;
     this._lastRunnerHp = null;
     this._stageWinMastery = null;
+    this._tutorial = null; // first-play interactive runner tutorial
     // World map animation
     this._mapPlayerPos = null; // { x, y } animated player dot on map
     this._mapAnim = 0; // age for map animations
@@ -111,8 +120,9 @@ class SlashGame {
     // Input for menus
     this._menuSel = 0;
     this._bindMenuInput();
-    // Load sprites (non-blocking)
+    // Load sprites and preload core audio (non-blocking)
     this._loadSprites();
+    this.audio.preloadAllGameAudio?.().finally(() => { this._audioReady = true; });
     // RAF loop
     this._loop = this._loop.bind(this);
     this._rafId = requestAnimationFrame(this._loop);
@@ -160,12 +170,19 @@ class SlashGame {
 
     // Load optional sprite sheets. Missing files are replaced by generated
     // placeholder sheets so animation code can run without runtime branching.
-    Object.entries(SLASH_SPRITE_SHEETS).forEach(([id, meta]) => {
+    const sheetEntries = Object.entries(SLASH_SPRITE_SHEETS);
+    let loadedSheets = 0;
+    const onSheetDone = () => {
+      loadedSheets++;
+      if (loadedSheets >= sheetEntries.length) this._sheetsReady = true;
+    };
+    sheetEntries.forEach(([id, meta]) => {
       const img = new Image();
-      img.onload = () => { this.spriteSheets[id] = { ...meta, image: img, placeholder: false }; };
+      img.onload = () => { this.spriteSheets[id] = { ...meta, image: img, placeholder: false }; onSheetDone(); };
       img.onerror = () => {
         const ph = this._buildSheetPlaceholder(meta.frameW, meta.frameH, id);
         this.spriteSheets[id] = { ...meta, image: ph, placeholder: true };
+        onSheetDone();
       };
       img.src = meta.url;
     });
@@ -213,6 +230,8 @@ class SlashGame {
   // ── Menu input (keyboard) ─────────────────────────────────────
   _bindMenuInput() {
     this._menuKd = (e) => {
+      // Step 6 debug overlay toggle (` or ~)
+      if (e.key === '`' || e.key === '~') { this._debugOverlay = !this._debugOverlay; return; }
       if (this.state === 'stage-select' || this.state === 'world-map') {
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
           this._menuSel = Math.min(5, this._menuSel + 1);
@@ -336,8 +355,68 @@ class SlashGame {
     this._stageStartedAt = Date.now();
     this._lastRunnerHp = null;
     this._stageWinMastery = null;
+    this._tutorial = null; // first-play interactive runner tutorial
     this._startRunner();
+    this._maybeStartTutorial();
   }
+
+  _maybeStartTutorial() {
+    if (this.stageId !== 1 || !this.progress?.shouldShowTutorial?.() || !this.runner) return;
+    this._tutorial = {
+      active: true,
+      leftSec: 30,
+      step: 0,
+      startedWorldX: this.runner.player.worldX,
+      jumped: false,
+      moved: false,
+      collected: false,
+    };
+  }
+
+  _updateTutorial(dt) {
+    if (!this._tutorial?.active || !this.runner) return;
+    const t = this._tutorial;
+    t.leftSec = Math.max(0, t.leftSec - dt);
+    if (!t.jumped && this.runner.player.vy < -1) { t.jumped = true; t.step = Math.max(t.step, 1); }
+    if (!t.moved && (this.runner.player.worldX - t.startedWorldX) > 120) { t.moved = true; t.step = Math.max(t.step, 2); }
+    if (!t.collected && this.runner.getCollectedCount() > 0) { t.collected = true; t.step = 3; }
+
+    if ((t.jumped && t.moved && t.collected) || t.leftSec <= 0) {
+      t.active = false;
+      this.progress?.markTutorialComplete?.();
+    }
+  }
+
+  _drawTutorialOverlay(ctx) {
+    if (!this._tutorial?.active) return;
+    const W = this.W;
+    const t = this._tutorial;
+    const hints = [
+      'Tap JUMP (or swipe up) to leap!',
+      'Great! Move right with ▶ to run.',
+      'Collect a glowing phoneme coin.',
+      'Nice! You are ready to slash dinos!'
+    ];
+    const panelW = Math.min(420, W - 28);
+    const panelH = 78;
+    const px = (W - panelW) / 2;
+    const py = 66;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.68)';
+    ctx.beginPath(); ctx.roundRect(px, py, panelW, panelH, 14); ctx.fill();
+    ctx.strokeStyle = '#FFD54F'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = 'bold 14px "Comic Sans MS", system-ui';
+    ctx.fillStyle = '#FFD54F';
+    ctx.fillText(`📘 Tutorial (${Math.ceil(t.leftSec)}s)`, W / 2, py + 8);
+    ctx.font = '13px system-ui';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(hints[Math.min(t.step, 3)], W / 2, py + 30);
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText('Auto-skips when complete', W / 2, py + 50);
+    ctx.restore();
+  }
+
   // ── D-pad helpers ─────────────────────────────────────────────
   _showDpad() {
     const el = document.getElementById('runnerControls');
@@ -355,7 +434,7 @@ class SlashGame {
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
-    this.runner = new RunnerEngine(this.canvas, stage, this.sprites, this.audio, this.W, this.H, this.spriteSheets);
+    this.runner = new RunnerEngine(this.canvas, stage, this.sprites, this.audio, this.W, this.H, this.spriteSheets, this.progress);
     // Wire D-pad buttons — also restore L/R visibility in case endless mode hid them
     const dL = document.getElementById('dpadLeft');
     const dR = document.getElementById('dpadRight');
@@ -393,6 +472,7 @@ class SlashGame {
   _onStageWin() {
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
     const battleScore = this.battle ? this.battle.score : 0;
+    this._lastBattleAccuracy = this.battle?.getAccuracyPercent?.() ?? null;
     const runnerScore = this._lastRunnerScore || 0;
     const score = battleScore + runnerScore;
     this.progress.completeStage(this.stageId, score);
@@ -441,9 +521,19 @@ class SlashGame {
   // ── MAIN LOOP ─────────────────────────────────────────────────
   _loop() {
     this._rafId = requestAnimationFrame(this._loop);
+    const now = performance.now();
+    if (!this._lastFrameTs) this._lastFrameTs = now;
+    const elapsedMs = now - this._lastFrameTs;
+    // Step 6: 60 FPS pacing lock. Skip overly-fast RAF callbacks.
+    if (elapsedMs + 0.2 < this._targetFrameMs) return;
+    this._lastFrameTs = now;
+    const frameDtSec = Math.min(0.05, Math.max(1 / 120, elapsedMs / 1000));
+    this._frameDtSec = frameDtSec;
+    this._fpsSamples.push(1 / frameDtSec);
+    if (this._fpsSamples.length > 30) this._fpsSamples.shift();
     this._age++;
-    // Block all states until sprites are ready; show loading screen instead
-    if (!this._spritesReady) { this._drawLoading(); return; }
+    // Block all states until sprites + sheets + audio preload are ready.
+    if (!this._spritesReady || !this._sheetsReady || !this._audioReady) { this._drawLoading(); return; }
     // Tick achievement popup
     this._tickAchievementPopup();
     switch (this.state) {
@@ -467,7 +557,43 @@ class SlashGame {
     }
     // Achievement popup on top of everything
     this._drawAchievementPopup();
+    if (this._debugOverlay) this._drawDebugOverlay();
   }
+  _drawDebugOverlay() {
+    const ctx = this.ctx;
+    const fps = this._fpsSamples.length
+      ? (this._fpsSamples.reduce((a, b) => a + b, 0) / this._fpsSamples.length)
+      : 0;
+    const lines = [
+      `DEBUG ~ ON`,
+      `state: ${this.state}`,
+      `fps: ${fps.toFixed(1)} | dt: ${(this._frameDtSec * 1000).toFixed(2)}ms`,
+      `assets: sprites=${this._spritesReady ? 'ok' : '...'} sheets=${this._sheetsReady ? 'ok' : '...'} audio=${this._audioReady ? 'ok' : '...'}`,
+    ];
+    if (this.runner && this.state.includes('runner')) {
+      lines.push(`runner hp=${this.runner.player?.hp ?? '-'} score=${this.runner.score ?? 0}`);
+    }
+    if (this.battle && this.state.includes('battle')) {
+      lines.push(`battle hp=${this.battle.rikuHp}/${this.battle.rikuMaxHp} boss=${this.battle.bossHp}/${this.battle.bossMaxHp}`);
+    }
+    ctx.save();
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    const pad = 8;
+    const boxW = Math.min(this.W * 0.86, 390);
+    const boxH = 20 + lines.length * 18;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(12, 12, boxW, boxH);
+    ctx.strokeStyle = 'rgba(120,255,180,0.8)';
+    ctx.strokeRect(12, 12, boxW, boxH);
+    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    lines.forEach((line, i) => {
+      ctx.fillStyle = i === 0 ? '#7CFFB2' : '#E9FFF2';
+      ctx.fillText(line, 12 + pad, 12 + pad + i * 18);
+    });
+    ctx.restore();
+  }
+
   // ── MENU STATE ───────────────────────────────────────────────
   _updateMenu() {
     this._drawMenu();
@@ -1015,8 +1141,17 @@ class SlashGame {
   // ── RUNNER UPDATE ────────────────────────────────────────────
   _updateRunner() {
     if (!this.runner) return;
-    this.runner.update();
+    const _dt = this._frameDtSec || (1 / 60);
+    this.runner.update(_dt);
     this.runner.draw();
+    this._updateTutorial(_dt);
+    this._drawTutorialOverlay(this.ctx);
+    if (this.audio) {
+      const hpPct = (this.runner.player?.hp || 1) / 3;
+      const urgency = Math.max(0, 1 - hpPct);
+      const speedFeel = Math.min(1, Math.abs(this.runner.player?.vx || 0) / 7);
+      this.audio.setMusicIntensity?.(Math.max(urgency, speedFeel * 0.8));
+    }
     if (!this.runner.done) return;
     if (this.runner.outcome === 'flag') {
       const coins = this.runner.getCollectedPhonemes();
@@ -1093,6 +1228,10 @@ class SlashGame {
     if (!this.battle) return;
     this.battle.update();
     this.battle.draw();
+    if (this.audio && this.battle?.bossMaxHp) {
+      const intensity = 1 - (this.battle.bossHp / this.battle.bossMaxHp);
+      this.audio.setMusicIntensity?.(Math.min(1, intensity + 0.2));
+    }
     if (!this.battle.done) return;
     if (this.battle.outcome === 'victory') this._onStageWin();
     else this._onStageLose();
@@ -1120,7 +1259,7 @@ class SlashGame {
     }
     // Panel
     const pw = Math.min(360, W - 40);
-    const ph = 360;
+    const ph = 396;
     const px = (W - pw) / 2;
     const py = (H - ph) / 2;
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -1146,21 +1285,36 @@ class SlashGame {
     ctx.fillText(`${this.progress.getMasteredWords(this.stageId).length} words mastered!`, W / 2, py + 152);
     ctx.fillText(`🍚 +${stars * 50 + 20} rice points`, W / 2, py + 174);
 
+    // End-of-run phonics stats summary
+    const stageStats = this.progress.getStage(this.stageId);
+    const stageAcc = stageStats.totalBlends > 0
+      ? Math.round((stageStats.correctBlends / stageStats.totalBlends) * 100)
+      : (this._lastBattleAccuracy ?? 0);
+    const recentAcc = this._lastBattleAccuracy ?? stageAcc;
+    ctx.font = '12px system-ui';
+    ctx.fillStyle = '#B3E5FC';
+    ctx.fillText(`📘 Run Accuracy: ${recentAcc}% · Lifetime Stage Accuracy: ${stageAcc}%`, W / 2, py + 190);
+
+    const masteredWords = this.progress.getMasteredWords(this.stageId);
+    const masteredPreview = masteredWords.slice(0, 5).map(w => w.toUpperCase()).join(', ');
+    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    ctx.fillText(`🏅 Mastered Words: ${masteredWords.length ? masteredPreview : 'Keep blending to master words!'}`, W / 2, py + 206);
+
     const mastery = this._stageWinMastery || this.progress.getStageMastery(this.stageId);
     const bestSec = mastery.bestClearSec ? Math.round(mastery.bestClearSec) : null;
     ctx.font = '12px system-ui';
     ctx.fillStyle = mastery.noHit ? '#9CFF9C' : 'rgba(255,255,255,0.65)';
-    ctx.fillText(`${mastery.noHit ? '✅' : '⬜'} No-Hit Clear`, W / 2, py + 198);
+    ctx.fillText(`${mastery.noHit ? '✅' : '⬜'} No-Hit Clear`, W / 2, py + 224);
     ctx.fillStyle = mastery.speedClear ? '#9CFF9C' : 'rgba(255,255,255,0.65)';
-    ctx.fillText(`${mastery.speedClear ? '✅' : '⬜'} Speed Clear (≤95s)${bestSec ? ` · Best ${bestSec}s` : ''}`, W / 2, py + 216);
+    ctx.fillText(`${mastery.speedClear ? '✅' : '⬜'} Speed Clear (≤95s)${bestSec ? ` · Best ${bestSec}s` : ''}`, W / 2, py + 242);
     if (this._stageWinMastery?.bonus > 0) {
       ctx.fillStyle = '#FFD166';
       ctx.font = 'bold 12px system-ui';
-      ctx.fillText(`🏅 Mastery Bonus +${this._stageWinMastery.bonus} rice`, W / 2, py + 234);
+      ctx.fillText(`🏅 Mastery Bonus +${this._stageWinMastery.bonus} rice`, W / 2, py + 260);
     }
     // Buttons
     this._resultBtnRects = [
-      { label: '▶ Next Stage', x: W/2 - 100, y: py + 248, w: 200, h: 40,
+      { label: '▶ Next Stage', x: W/2 - 100, y: py + 276, w: 200, h: 40,
         action: () => {
           if (this.stageId < 6 && this.progress.isUnlocked(this.stageId + 1)) {
             this.stageId++;
@@ -1170,7 +1324,7 @@ class SlashGame {
           }
         }
       },
-      { label: '🗺 World Map', x: W/2 - 80, y: py + 302, w: 160, h: 36,
+      { label: '🗺 World Map', x: W/2 - 80, y: py + 328, w: 160, h: 36,
         action: () => { this.state = 'world-map'; }
       },
     ];
@@ -1502,7 +1656,7 @@ class SlashGame {
   _updateEndlessRunner() {
     const runner = this.endlessRunner;
     if (!runner) { this.state = 'mode-select'; return; }
-    runner.update();
+    runner.update(this._frameDtSec || (1 / 60));
     if (runner.done) {
       if (runner.outcome === 'gate' && runner.hasPendingGate()) {
         this._startEndlessBattle();
@@ -1514,8 +1668,8 @@ class SlashGame {
     }
     // Speed up music proportional to distance
     if (this.audio && runner._distM > 0) {
-      const speedMult = 1 + Math.min(runner._distM / 3000, 0.8);
-      this.audio.speedUpMusic(speedMult);
+      const intensity = Math.min(1, runner._distM / 2200);
+      this.audio.setMusicIntensity?.(intensity);
     }
   }
   _startEndlessBattle() {
@@ -1530,7 +1684,8 @@ class SlashGame {
       this.canvas, document.getElementById('battleOverlay'),
       gateData.word, this.sprites, this.audio, this.W, this.H,
       (result, timeUsed) => this._onEndlessBattleDone(result, timeUsed),
-      gateData.autoBlend
+      gateData.autoBlend,
+      gateData.slowMoBonus || 0
     );
     this.state = 'endless-battle';
     // Draw a static frame of the runner in background
@@ -1584,7 +1739,7 @@ class SlashGame {
     const grains= runner.getGrains();
     const combo = runner.getMaxCombo();
     const perfects = runner.getPerfects();
-    this.progress.addRiceGrains(grains);
+    // Rice grains are now banked live during collection in endless runner.
     this.progress.recordEndlessRun(score, dist, combo);
     this.progress.recordPerfectBlends(perfects);
     // Store for display

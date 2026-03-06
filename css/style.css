@@ -1,5 +1,7 @@
 /* === CHANGE LOG ===
    Step 1 (Visuals & Polish): added battle UI glow polish for themed tiles/buttons.
+   Step 2 (Phonics & Battle System): colour-coded phoneme tiles + live correct/wrong flash states.
+   Step 5 (Audio, UX & Mobile): enlarged mobile D-pad, swipe-friendly controls, and larger battle tiles on touch devices.
 ============================================================ */
 
 /* ============================================================
@@ -894,6 +896,42 @@ body {
     opacity: 0.55;
     pointer-events: none;
 }
+
+/* Phoneme tile color coding by sound group */
+.be-tile-cons {
+    background: linear-gradient(160deg, #FFE0B2, #FFB74D);
+    border-color: #BF6F00;
+}
+.be-tile-vowel {
+    background: linear-gradient(160deg, #B3E5FC, #4FC3F7);
+    border-color: #0E7FAE;
+    color: #082436;
+}
+.be-tile-digraph {
+    background: linear-gradient(160deg, #D1C4E9, #9575CD);
+    border-color: #5E35B1;
+    color: #1C1037;
+}
+.be-tile-blend {
+    background: linear-gradient(160deg, #C8E6C9, #66BB6A);
+    border-color: #2E7D32;
+    color: #163419;
+}
+
+/* Live tile feedback flashes */
+@keyframes tileFlashOk {
+    0%   { box-shadow: 0 0 0 rgba(105,240,174,0); }
+    50%  { box-shadow: 0 0 18px 5px rgba(105,240,174,0.95); }
+    100% { box-shadow: 0 0 0 rgba(105,240,174,0); }
+}
+@keyframes tileFlashBad {
+    0%   { box-shadow: 0 0 0 rgba(255,82,82,0); }
+    50%  { box-shadow: 0 0 18px 5px rgba(255,82,82,0.9); }
+    100% { box-shadow: 0 0 0 rgba(255,82,82,0); }
+}
+.be-tile-flash-ok  { animation: tileFlashOk 0.24s ease-out; }
+.be-tile-flash-bad { animation: tileFlashBad 0.24s ease-out; }
+
 /* Hint tile — pulses gold to mark the first correct phoneme on the last attempt */
 @keyframes tileHintPulse {
     0%, 100% { box-shadow: 0 3px 0 #7f5700, 0 0  8px 2px rgba(255,215,0,0.45); }
@@ -1264,4 +1302,17 @@ body {
     0%   { transform: scale(1); }
     50%  { transform: scale(1.4); }
     100% { transform: scale(1); }
+}
+
+
+/* Step 5 mobile comfort: larger touch targets for runner + battle */
+@media (max-width: 900px) and (pointer: coarse) {
+    .runner-controls { bottom: 10px; padding: 0 10px; }
+    .dpad-btn { width: 84px; height: 84px; border-radius: 20px; font-size: 1.8rem; }
+    .dpad-jump { width: 98px; height: 98px; }
+    .dpad-btn span { font-size: 0.66rem; }
+
+    .be-pool { gap: 10px; max-height: 180px; }
+    .be-tile { min-width: 62px; height: 66px; font-size: 1.3rem; padding: 0 12px; border-radius: 12px; }
+    .be-btn { height: 54px; font-size: 1.02rem; }
 }

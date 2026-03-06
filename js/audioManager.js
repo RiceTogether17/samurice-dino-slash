@@ -1,4 +1,8 @@
 'use strict';
+// === CHANGE LOG ===
+// Step 5 (Audio, UX & Mobile): added blend chimes, swipe jump SFX,
+// and dynamic music intensity controls for runner/battle pacing.
+// Step 6 (Technical): added full-game audio preloading hooks for startup readiness.
 // ============================================================
 // AUDIO MANAGER — js/audioManager.js
 //
@@ -74,26 +78,40 @@ class AudioManager {
 
   // ── Preload a single audio file into buffer cache ────────────
   _preload(key, url) {
-    if (this.buffers[key] || this.loading[key]) return;
+    if (this.buffers[key]) return Promise.resolve(this.buffers[key]);
+    if (this.loading[key]) return this.loading[key];
     this.loading[key] = fetch(url)
       .then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
       .then(ab => this.ctx ? this.ctx.decodeAudioData(ab) : null)
-      .then(buf => { if (buf) this.buffers[key] = buf; })
-      .catch(() => { /* file not uploaded yet — TTS fallback will handle */ });
+      .then(buf => { if (buf) this.buffers[key] = buf; return buf; })
+      .catch(() => null); // file not uploaded yet — TTS fallback will handle
+    return this.loading[key];
   }
 
   // ── Preload all phonemes for a stage (call on stage start) ───
   preloadStage(stageId) {
     const stage = PHONICS_DATA.stageList[stageId - 1];
+    if (!stage || !Array.isArray(stage.words)) return Promise.resolve();
     const allPh = new Set();
+    const jobs = [];
     stage.words.forEach(w => w.phonemes.forEach(ph => allPh.add(ph)));
     allPh.forEach(ph => {
       const safe = ph.replace(/[^a-z]/gi, '').toLowerCase();
-      this._preload(`ph_${safe}`, `assets/audio/phonemes/${safe}.mp3`);
+      jobs.push(this._preload(`ph_${safe}`, `assets/audio/phonemes/${safe}.mp3`));
     });
     stage.words.forEach(w => {
-      this._preload(`word_${w.word}`, `assets/audio/words/${w.word}.mp3`);
+      jobs.push(this._preload(`word_${w.word}`, `assets/audio/words/${w.word}.mp3`));
     });
+    return Promise.all(jobs);
+  }
+
+  preloadAllGameAudio() {
+    const jobs = [];
+    for (let i = 1; i <= (PHONICS_DATA?.stageList?.length || 0); i++) {
+      jobs.push(this.preloadStage(i));
+    }
+    this._sfxKeys.forEach(k => jobs.push(this._preload(`sfx/${k}`, `assets/audio/sfx/${k}.${k === 'slash' ? 'mp3' : 'wav'}`)));
+    return Promise.all(jobs);
   }
 
   // ── Play a loaded buffer ─────────────────────────────────────
@@ -251,6 +269,12 @@ class AudioManager {
   sfxMagnet() {
     [440,480,520].forEach((f,i) => this._tone(f,'sine',0.08,0.18,i*0.04));
   }
+  sfxBlendChime() {
+    [660,880,990].forEach((f,i) => this._tone(f,'triangle',0.10,0.24,i*0.045));
+  }
+  sfxSwipeJump() {
+    this._tone(620,'triangle',0.08,0.22); this._tone(860,'sine',0.06,0.18,0.04);
+  }
 
   // ── Music control ─────────────────────────────────────────────
   startMusic(stageId) {
@@ -264,6 +288,14 @@ class AudioManager {
   speedUpMusic(factor) {
     // Increase BPM by adjusting the scheduler's internal tempo
     if (this._music) this._music.speedUp(factor);
+  }
+
+  // Dynamic intensity: 0..1 where higher = louder/faster music.
+  setMusicIntensity(level = 0.5) {
+    if (!this._music) return;
+    const clamped = Math.max(0, Math.min(1, level));
+    this._music.speedUp(1 + clamped * 0.8);
+    this._music.setVolume(0.16 + clamped * 0.16);
   }
 
   toggleMute() {

@@ -1,4 +1,9 @@
 'use strict';
+// === CHANGE LOG ===
+// Step 2 (Phonics & Battle System): added weak-phoneme tracking so
+// battle word selection can adapt to learner needs over time.
+// Step 4 (Progression & Content): shop equipment now exposes real gameplay
+// effects (sword damage, double-jump, companion perks) for engines to consume.
 // ============================================================
 // PROGRESS TRACKER — js/progressTracker.js
 // All player progress, shop, achievements, daily challenges.
@@ -130,6 +135,8 @@ class ProgressTracker {
       loginRewardClaimed: false,
       bestCombo: 0,
       totalRunDistance: 0,
+      weakPhonemesByStage: {},
+      tutorialCompleted: false,
     };
   }
 
@@ -161,6 +168,8 @@ class ProgressTracker {
     if (typeof d.bestCombo !== 'number') d.bestCombo = 0;
     if (typeof d.totalRunDistance !== 'number') d.totalRunDistance = 0;
     if (typeof d.totalPerfectBlends !== 'number') d.totalPerfectBlends = 0;
+    if (!d.weakPhonemesByStage || typeof d.weakPhonemesByStage !== 'object') d.weakPhonemesByStage = {};
+    if (typeof d.tutorialCompleted !== 'boolean') d.tutorialCompleted = false;
     Object.keys(d.stages || {}).forEach(id => {
       const st = d.stages[id] || (d.stages[id] = this._freshStage(false));
       if (!st.mastery || typeof st.mastery !== 'object') st.mastery = { noHit:false, speedClear:false, bestClearSec:null };
@@ -204,6 +213,10 @@ class ProgressTracker {
     d.setDate(d.getDate() + offsetDays);
     return d.toISOString().slice(0, 10);
   }
+
+
+  shouldShowTutorial() { return !this.data.tutorialCompleted; }
+  markTutorialComplete() { this.data.tutorialCompleted = true; this._save(); }
 
   // ── Currency ─────────────────────────────────────────────────
   getRiceGrains()      { return this.data.riceGrains || 0; }
@@ -266,6 +279,36 @@ class ProgressTracker {
     };
   }
 
+
+  // Resolve equipped item effects into concrete gameplay modifiers.
+  getEquippedEffects() {
+    const eq = this.getEquipped();
+
+    const swordDamageMult = {
+      'sword-basic': 1.0,
+      'sword-golden': 1.08,
+      'sword-fire': 1.14,
+      'sword-ice': 1.14,
+      'sword-thunder': 1.2,
+      'sword-rainbow': 1.28,
+    }[eq.sword] || 1.0;
+
+    const companionEffects = {
+      'comp-none':      { starterShield: false, battleMercy: 0, comboBonus: 0 },
+      'comp-baby-rex':  { starterShield: true,  battleMercy: 0, comboBonus: 0 },
+      'comp-duck':      { starterShield: false, battleMercy: 0, comboBonus: 0.05 },
+      'comp-koi':       { starterShield: false, battleMercy: 1, comboBonus: 0 },
+      'comp-panda':     { starterShield: false, battleMercy: 2, comboBonus: 0 },
+    }[eq.comp] || { starterShield:false, battleMercy:0, comboBonus:0 };
+
+    return {
+      swordDamageMult,
+      // Hat-mushroom grants permanent double-jump in runner modes.
+      runnerDoubleJump: eq.hat === 'hat-mushroom',
+      ...companionEffects,
+    };
+  }
+
   // ── Endless mode ─────────────────────────────────────────────
   getEndlessHighScore() { return this.data.endlessHighScore || 0; }
   getEndlessBestDist()  { return this.data.endlessBestDist  || 0; }
@@ -287,7 +330,7 @@ class ProgressTracker {
   }
 
   // ── Blend stats ───────────────────────────────────────────────
-  recordBlend(stageId, word, success, isPerfect = false) {
+  recordBlend(stageId, word, success, isPerfect = false, phonemes = []) {
     if (stageId && this.data.stages[stageId]) {
       const s = this.data.stages[stageId];
       s.totalBlends++;
@@ -304,6 +347,20 @@ class ProgressTracker {
       }
       this.data.stages[stageId] = s;
     }
+
+    // Track weak phonemes for adaptive battle word selection.
+    if (stageId) {
+      const key = String(stageId);
+      if (!this.data.weakPhonemesByStage[key]) this.data.weakPhonemesByStage[key] = {};
+      const weak = this.data.weakPhonemesByStage[key];
+      (phonemes || []).forEach((ph) => {
+        const phKey = String(ph || '').toLowerCase();
+        if (!phKey) return;
+        const cur = weak[phKey] || 0;
+        weak[phKey] = success ? Math.max(0, cur - 1) : Math.min(12, cur + 2);
+      });
+    }
+
     if (success) {
       this.data.totalWordsBlended = (this.data.totalWordsBlended || 0) + 1;
       if (isPerfect) this.data.totalPerfectBlends = (this.data.totalPerfectBlends || 0) + 1;
@@ -315,6 +372,12 @@ class ProgressTracker {
   }
 
   recordPerfectBlends(count) { if (count >= 10) this.unlock('perfect-10'); }
+
+  getWeakPhonemes(stageId) {
+    const key = String(stageId || '');
+    return { ...(this.data.weakPhonemesByStage?.[key] || {}) };
+  }
+
 
   // ── Daily ─────────────────────────────────────────────────────
   getDailyProgress()  { return this.data.dailyProgress || 0; }
