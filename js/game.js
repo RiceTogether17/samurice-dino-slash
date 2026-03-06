@@ -838,18 +838,18 @@ class FlappyGame {
 
     // Panel
     ctx.fillStyle = 'rgba(10,10,30,0.55)';
-    ctx.roundRect(cx - 165, cy - 175, 330, 360, 22);
+    ctx.roundRect(cx - 180, cy - 190, 360, 390, 24);
     ctx.fill();
 
     ctx.textAlign = 'center';
 
     // Title
-    ctx.font        = 'bold 34px "Comic Sans MS", system-ui, sans-serif';
+    ctx.font        = 'bold 40px "Comic Sans MS", system-ui, sans-serif';
     ctx.strokeStyle = '#222';
-    ctx.lineWidth   = 4;
-    ctx.strokeText('🦖 DINO DASH 🦖', cx, cy - 135);
+    ctx.lineWidth   = 5;
+    ctx.strokeText('🦖 DINO DASH 🦖', cx, cy - 145);
     ctx.fillStyle   = '#FFD700';
-    ctx.fillText('🦖 DINO DASH 🦖', cx, cy - 135);
+    ctx.fillText('🦖 DINO DASH 🦖', cx, cy - 145);
 
     // Dino preview
     const sp = this._sprite();
@@ -858,23 +858,23 @@ class FlappyGame {
     }
 
     // Best
-    ctx.font      = 'bold 18px system-ui, sans-serif';
+    ctx.font      = 'bold 22px "Comic Sans MS", system-ui, sans-serif';
     ctx.fillStyle = '#FFD700';
-    ctx.fillText(`Best: ${this.bestScore}`, cx, cy + 15);
+    ctx.fillText(`Best: ${this.bestScore}`, cx, cy + 20);
 
     // Tap prompt (pulsing opacity)
     const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 450);
     ctx.save();
     ctx.globalAlpha = pulse;
-    ctx.font        = 'bold 22px "Comic Sans MS", system-ui, sans-serif';
+    ctx.font        = 'bold 26px "Comic Sans MS", system-ui, sans-serif';
     ctx.fillStyle   = '#fff';
-    ctx.fillText('Tap / Space to Start!', cx, cy + 60);
+    ctx.fillText('Tap / Space to Fly!', cx, cy + 65);
     ctx.restore();
 
     // Controls hint
-    ctx.font      = '13px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText('P = pause  |  Space / Tap = flap', cx, cy + 110);
+    ctx.font      = '15px "Comic Sans MS", system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillText('P = pause  |  Space / Tap = flap', cx, cy + 115);
   }
 
   _drawPauseOverlay() {
