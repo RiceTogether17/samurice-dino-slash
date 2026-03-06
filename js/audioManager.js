@@ -50,6 +50,21 @@ class AudioManager {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     } catch { /* audio not supported */ }
 
+    // iOS / Android require a user gesture before AudioContext can play.
+    // Register a one-time capture-phase listener so it fires before any other
+    // handler, resuming the context the moment the player first touches the screen.
+    if (this.ctx && this.ctx.state === 'suspended') {
+      const unlock = () => {
+        this.ctx.resume().catch(() => {});
+        document.removeEventListener('pointerdown', unlock, true);
+        document.removeEventListener('touchstart',  unlock, true);
+        document.removeEventListener('keydown',      unlock, true);
+      };
+      document.addEventListener('pointerdown', unlock, true);
+      document.addEventListener('touchstart',  unlock, true);
+      document.addEventListener('keydown',      unlock, true);
+    }
+
     // Preload SFX immediately (correct extensions per actual files)
     const sfxFiles = {
       'coin':      'assets/audio/sfx/coin.wav',
