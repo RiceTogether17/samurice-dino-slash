@@ -330,6 +330,46 @@ class SlashGame {
     this.canvas.addEventListener('touchstart', this._canvasTap, { passive: true });
   }
   _handleCanvasClick(mx, my) {
+    // ── Paused overlay touch targets ───────────────────────────
+    // Check runner pause overlay buttons before any state dispatch.
+    if (this.state === 'runner' && this.runner?._paused) {
+      const rr = this.runner._pauseResumeBtnRect;
+      const rq = this.runner._pauseQuitBtnRect;
+      if (rr && mx >= rr.x && mx <= rr.x+rr.w && my >= rr.y && my <= rr.y+rr.h) {
+        this.runner._togglePause(); return;
+      }
+      if (rq && mx >= rq.x && mx <= rq.x+rq.w && my >= rq.y && my <= rq.y+rq.h) {
+        this.runner._paused = false; this.runner = null;
+        this._hidePauseBtn(); this._hideDpad();
+        this.audio.stopMusic(); this.state = 'world-map'; return;
+      }
+      return; // swallow all other taps while paused
+    }
+    if (this.state === 'endless-runner' && this.endlessRunner?._paused) {
+      const rr = this.endlessRunner._pauseResumeBtnRect;
+      const rq = this.endlessRunner._pauseQuitBtnRect;
+      if (rr && mx >= rr.x && mx <= rr.x+rr.w && my >= rr.y && my <= rr.y+rr.h) {
+        this.endlessRunner._togglePause(); return;
+      }
+      if (rq && mx >= rq.x && mx <= rq.x+rq.w && my >= rq.y && my <= rq.y+rq.h) {
+        this.endlessRunner._paused = false; this._stopEndlessRunner();
+        this._hidePauseBtn(); this.audio.stopMusic(); this.state = 'mode-select'; return;
+      }
+      return;
+    }
+    if (this.state === 'battle' && this.battle?._paused) {
+      const rr = this.battle._pauseResumeBtnRect;
+      const rq = this.battle._pauseQuitBtnRect;
+      if (rr && mx >= rr.x && mx <= rr.x+rr.w && my >= rr.y && my <= rr.y+rr.h) {
+        this.battle._togglePause(); return;
+      }
+      if (rq && mx >= rq.x && mx <= rq.x+rq.w && my >= rq.y && my <= rq.y+rq.h) {
+        this.battle._stopBlendTimer(); this.battle._paused = false; this.battle = null;
+        this._hidePauseBtn(); this.overlay.classList.add('hidden'); this.overlay.innerHTML = '';
+        this.audio.stopMusic(); this.state = 'world-map'; return;
+      }
+      return;
+    }
     // Title screen: any click advances
     if (this.state === 'title') {
       this.state = 'mode-select'; return;
@@ -484,6 +524,13 @@ class SlashGame {
     const el = document.getElementById('runnerControls');
     if (el) el.classList.add('hidden');
   }
+  // ── Pause button helpers ───────────────────────────────────────
+  _showPauseBtn() {
+    document.getElementById('slashPauseBtn')?.classList.remove('hidden');
+  }
+  _hidePauseBtn() {
+    document.getElementById('slashPauseBtn')?.classList.add('hidden');
+  }
   // ── RUNNER PHASE ─────────────────────────────────────────────
   _startRunner() {
     if (this.runner) { this.runner.destroy(); this.runner = null; }
@@ -501,6 +548,7 @@ class SlashGame {
     if (dpadMove) dpadMove.style.visibility = '';
     if (dL && dR && dJ) this.runner.bindDpad(dL, dR, dJ);
     this._showDpad();
+    this._showPauseBtn();
     // Start stage music
     this.audio.startMusic(this.stageId);
     this.state = 'runner';
@@ -519,6 +567,7 @@ class SlashGame {
     this.overlay.classList.remove('hidden');
     this.overlay.classList.add('active');
     this.overlay.innerHTML = '';
+    this._showPauseBtn();
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
     this.battle = new BattleEngine(
       this.canvas, this.overlay, stage, collectedPhonemes,
@@ -528,6 +577,7 @@ class SlashGame {
   }
   // ── STAGE WIN ────────────────────────────────────────────────
   _onStageWin() {
+    this._hidePauseBtn();
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
     const battleScore = this.battle ? this.battle.score : 0;
     this._lastBattleAccuracy = this.battle?.getAccuracyPercent?.() ?? null;
@@ -555,6 +605,7 @@ class SlashGame {
   }
   // ── STAGE LOSE ───────────────────────────────────────────────
   _onStageLose() {
+    this._hidePauseBtn();
     this.overlay.classList.remove('active');
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
@@ -564,6 +615,7 @@ class SlashGame {
   }
   // ── EXIT ─────────────────────────────────────────────────────
   exit() {
+    this._hidePauseBtn();
     if (this.runner) { this.runner.destroy(); this.runner = null; }
     if (this.battle) { this.battle.destroy(); this.battle = null; }
     this.audio.stopMusic();
@@ -1709,6 +1761,7 @@ class SlashGame {
     const j = document.getElementById('dpadJump');
     if (l && r && j) this.endlessRunner.bindDpad(l, r, j);
     this.state = 'endless-runner';
+    this._showPauseBtn();
     if (this.audio) this.audio.startEndlessMusic();
   }
   _stopEndlessRunner() {
@@ -1804,6 +1857,7 @@ class SlashGame {
   _endEndlessRun() {
     const runner = this.endlessRunner;
     if (!runner) { this.state = 'mode-select'; return; }
+    this._hidePauseBtn();
     this.audio?.stopMusic();
     if (this.audio) this.audio.sfxGameOver();
     const score = runner.getScore();
@@ -2296,24 +2350,24 @@ class SlashGame {
   // ── ACHIEVEMENT POPUP SYSTEM ──────────────────────────────────
   _tickAchievementPopup() {
     if (!this._achPopupQueue) this._achPopupQueue = [];
+
+    // Poll progress tracker every frame so unlocks are never missed,
+    // regardless of whether the queue already has items.
+    const newIds = this.progress.getNewAchievements();
+    if (newIds.length > 0) {
+      this.progress.clearNewAchievements();
+      for (const id of newIds) {
+        const ach = ACHIEVEMENTS.find(a => a.id === id);
+        if (ach) this._queueAchievementPopup(ach);
+      }
+    }
+
     if (this._achPopup) {
       this._achPopup.life -= 0.018;
       if (this._achPopup.life <= 0) {
         this._achPopup = null;
-        // Show next in queue
         if (this._achPopupQueue.length > 0) this._showNextPopup();
       }
-    } else if (this._achPopupQueue.length > 0) {
-      // Check for new achievements from progress tracker
-      const newIds = this.progress.getNewAchievements();
-      if (newIds.length > 0) {
-        this.progress.clearNewAchievements();
-        for (const id of newIds) {
-          const ach = ACHIEVEMENTS.find(a => a.id === id);
-          if (ach) this._queueAchievementPopup(ach);
-        }
-      }
-      this._showNextPopup();
     }
   }
   _queueAchievementPopup(ach) {

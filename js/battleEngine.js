@@ -158,12 +158,15 @@ class BattleEngine {
     this._blendTimeLeft  = BLEND_TIME;
     this._blendTimer     = null;
     this._currentBuilt   = [];   // phonemes selected so far
+    this._builtTileIdxes = [];   // parallel array: tile index for each built phoneme (enables undo)
     this._wrongAttempts  = 0;    // wrong-order attempts for current word
     this._showFirstHint  = false; // highlight first phoneme tile on penultimate attempt
     this._feedbackFlashTimer = 0; // tiny visual pulse when a tile is right/wrong
 
     // Pause
     this._paused = false;
+    this._pauseResumeBtnRect = null;
+    this._pauseQuitBtnRect   = null;
 
     // DOM refs (created by _setupDOM)
     this._tileEls   = [];
@@ -207,6 +210,13 @@ class BattleEngine {
     this._clearBtn.addEventListener('click', () => this._clearBuild());
     this._clearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._clearBuild(); });
 
+    this._undoBtn = document.createElement('button');
+    this._undoBtn.className   = 'be-btn be-btn-undo';
+    this._undoBtn.innerHTML   = '↩ Undo';
+    this._undoBtn.title       = 'Undo last tile';
+    this._undoBtn.addEventListener('click', () => this._undoLastTile());
+    this._undoBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._undoLastTile(); });
+
     this._hearBtn = document.createElement('button');
     this._hearBtn.className   = 'be-btn be-btn-hear';
     this._hearBtn.innerHTML   = '🔊 Hear';
@@ -218,7 +228,7 @@ class BattleEngine {
     });
     this._hearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._hearBtn.click(); });
 
-    controls.append(this._clearBtn, this._hearBtn);
+    controls.append(this._clearBtn, this._undoBtn, this._hearBtn);
     this.overlay.appendChild(controls);
 
     // ── 2. Target hint (emoji + blank slots) ────────────────
@@ -265,9 +275,10 @@ class BattleEngine {
     }
     this._currentWord   = this._wordQueue[this._wordQueueIdx++];
     this._shuffledPh    = this._shuffleArray([...this._currentWord.phonemes]); // randomise tile order
-    this._wrongAttempts = 0;
-    this._currentBuilt  = [];
-    this._usedTileIdx   = new Set();
+    this._wrongAttempts  = 0;
+    this._currentBuilt   = [];
+    this._builtTileIdxes = [];
+    this._usedTileIdx    = new Set();
     this._showFirstHint = false;
 
     this._renderTargetHint();
@@ -358,6 +369,7 @@ class BattleEngine {
 
     this.state = 'blending';
     this._currentBuilt.push(phoneme);
+    this._builtTileIdxes.push(tileIdx);   // track for undo
     this._usedTileIdx.add(tileIdx);
     tileEl.classList.add('be-tile-used');
     this._flashTileFeedback(tileEl, 'ok');
@@ -446,8 +458,9 @@ class BattleEngine {
     const pokeDmg = Math.max(2, Math.floor(this.stage.bossAttack * 0.12));
     this.rikuHp = Math.max(0, this.rikuHp - pokeDmg);
     this._rikuShake = 5;
-    this._currentBuilt = [];
-    this._usedTileIdx = new Set();
+    this._currentBuilt   = [];
+    this._builtTileIdxes = [];
+    this._usedTileIdx    = new Set();
     this._showFirstHint = (this._wrongAttempts >= MAX_WRONGS - 1);
     this._renderCurrentWordTiles();
     this._renderBlanks();
@@ -713,12 +726,26 @@ class BattleEngine {
   // ── Clear build (keep current word, reset attempts) ──────────
   _clearBuild() {
     if (this.state === 'riku-attack' || this.state === 'boss-attack') return;
-    this._currentBuilt = [];
-    this._usedTileIdx  = new Set();
+    this._currentBuilt   = [];
+    this._builtTileIdxes = [];
+    this._usedTileIdx    = new Set();
     this._renderCurrentWordTiles();
     this._renderBlanks();
     this._setFeedback('');
     this.state = 'idle';
+  }
+
+  // ── Undo: remove the last placed tile ───────────────────────
+  _undoLastTile() {
+    if (this.state === 'riku-attack' || this.state === 'boss-attack') return;
+    if (!this._currentBuilt.length) return;
+    this._currentBuilt.pop();
+    const lastIdx = this._builtTileIdxes.pop();
+    if (lastIdx !== undefined) this._usedTileIdx.delete(lastIdx);
+    this._renderCurrentWordTiles();
+    this._renderBlanks();
+    this._setFeedback('↩ Tile removed — try again!', '#FFD54F');
+    if (this.state === 'blending') this.state = 'idle';
   }
 
   // ── Feedback text ────────────────────────────────────────────
@@ -877,31 +904,45 @@ class BattleEngine {
 
   _drawPauseOverlay(ctx) {
     const cx = this.W / 2;
-    const cy = Math.round(this.H * 0.30); // centre in upper canvas (battle UI below)
+    // Centre in the upper canvas portion (battle overlay takes bottom half)
+    const cy = Math.round(this.H * 0.28);
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.52)';
-    ctx.fillRect(0, 0, this.W, this.H * 0.60);
+    ctx.fillStyle = 'rgba(0,0,0,0.58)';
+    ctx.fillRect(0, 0, this.W, this.H * 0.62);
     // Panel
-    const pw = Math.min(300, this.W * 0.72);
-    const ph = 145;
-    ctx.fillStyle   = 'rgba(10,10,30,0.88)';
+    const pw = Math.min(300, this.W * 0.74);
+    const ph = 186;
+    const px = cx - pw / 2, py = cy - ph / 2;
+    ctx.fillStyle   = 'rgba(10,10,30,0.92)';
     ctx.strokeStyle = '#FFD700';
     ctx.lineWidth   = 2.5;
-    ctx.beginPath(); ctx.roundRect(cx - pw / 2, cy - ph / 2, pw, ph, 18); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 18); ctx.fill(); ctx.stroke();
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
     ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Comic Sans MS", system-ui`;
     ctx.fillStyle    = '#FFD700';
-    ctx.shadowColor  = '#FF6F00';
-    ctx.shadowBlur   = 14;
-    ctx.fillText('⏸ PAUSED', cx, cy - 32);
+    ctx.shadowColor  = '#FF6F00'; ctx.shadowBlur = 14;
+    ctx.fillText('⏸ PAUSED', cx, py + 32);
     ctx.shadowBlur   = 0;
-    ctx.font      = `${Math.round(this.W * 0.034)}px "Comic Sans MS", system-ui`;
+    // ── Resume button ────────────────────────────────────────
+    const btnW = pw - 40, btnH = 44;
+    const resumeY = py + 64;
+    ctx.fillStyle = 'rgba(50,180,80,0.85)';
+    ctx.strokeStyle = '#7CFC9A'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 20, resumeY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
-    ctx.fillText('P or ESC to resume', cx, cy + 8);
-    ctx.fillStyle = '#FF9800';
-    ctx.font      = `${Math.round(this.W * 0.031)}px "Comic Sans MS", system-ui`;
-    ctx.fillText('Q — quit to map', cx, cy + 42);
+    ctx.fillText('▶ RESUME', cx, resumeY + btnH / 2);
+    this._pauseResumeBtnRect = { x: px + 20, y: resumeY, w: btnW, h: btnH };
+    // ── Quit button ──────────────────────────────────────────
+    const quitY = resumeY + btnH + 12;
+    ctx.fillStyle = 'rgba(180,50,20,0.75)';
+    ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 20, quitY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFD9D0';
+    ctx.fillText('🗺 Quit to Map', cx, quitY + btnH / 2);
+    this._pauseQuitBtnRect = { x: px + 20, y: quitY, w: btnW, h: btnH };
     ctx.restore();
   }
 

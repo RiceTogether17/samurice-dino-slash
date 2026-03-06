@@ -616,6 +616,30 @@ body {
 }
 .slash-exit-btn { top: 10px; right: 10px; }
 .slash-fs-btn   { top: 10px; right: 58px; font-size: 1.1rem; }
+/* Pause button — bottom-left corner, away from D-pad but visible on all devices */
+.slash-pause-btn {
+    position: absolute;
+    z-index: 30;
+    top: 10px; left: 10px;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    transition: background 0.15s, transform 0.1s;
+    touch-action: manipulation;
+}
+.slash-pause-btn:hover  { background: rgba(255,215,0,0.35); }
+.slash-pause-btn:active { transform: scale(0.9); }
+.slash-pause-btn.hidden { display: none; }
 .slash-exit-btn:hover  { background: rgba(200,30,30,0.75); }
 .slash-exit-btn:active,
 .slash-fs-btn:active   { transform: scale(0.9); }
@@ -861,15 +885,16 @@ body {
     max-height: 130px;
 }
 
-/* Individual tile — Mario question-block style */
+/* Individual tile — Mario question-block style
+   Min 56px × 56px for WCAG 2.5.5 touch-target compliance (kids 4-8) */
 .be-tile {
     box-shadow: 0 5px 0 rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08), 0 0 20px rgba(255,193,7,0.12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 44px;
-    height: 46px;
-    padding: 0 8px;
+    min-width: 56px;
+    height: 56px;
+    padding: 0 10px;
     background: linear-gradient(160deg, #FFF9C4, #FFD600);
     color: #3E2000;
     font-weight: 900;
@@ -1015,6 +1040,15 @@ body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 .be-btn-clear:hover { background: rgba(244,67,54,0.9); border-color: #F44336; color: #fff; }
+
+.be-btn-undo {
+    background: rgba(100,60,10,0.75);
+    color: #FFD54F;
+    border: 1.5px solid rgba(255,193,7,0.6);
+    font-size: 0.95rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.be-btn-undo:hover { background: rgba(255,193,7,0.85); color: #3E2000; }
 
 .be-btn-hear {
     background: rgba(20,90,180,0.75);

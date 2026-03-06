@@ -84,6 +84,11 @@
                 class="slash-fs-btn game-fs-btn"
                 onclick="toggleFullscreen()"
                 title="Fullscreen">⛶</button>
+        <!-- Pause button — visible only during active runner / battle -->
+        <button id="slashPauseBtn"
+                class="slash-pause-btn hidden"
+                onclick="_slashPause()"
+                title="Pause (P)">⏸</button>
         <!-- Runner D-pad controls (touch only) -->
         <!-- In endless mode, left/right are hidden; only JUMP shown -->
         <div id="runnerControls" class="runner-controls hidden">
@@ -162,6 +167,14 @@ function _syncFsIcons() {
 }
 document.addEventListener('fullscreenchange', _syncFsIcons);
 document.addEventListener('webkitfullscreenchange', _syncFsIcons);
+// ── Pause button (visible only during runner / battle) ──────
+function _slashPause() {
+  if (!_slashGameInstance) return;
+  const s = _slashGameInstance.state;
+  if (s === 'runner'  && _slashGameInstance.runner)  _slashGameInstance.runner._togglePause();
+  if (s === 'battle'  && _slashGameInstance.battle)  _slashGameInstance.battle._togglePause();
+  if (s === 'endless-runner' && _slashGameInstance.endlessRunner) _slashGameInstance.endlessRunner._togglePause();
+}
 // ── Prevent context menu on long-press (mobile) ─────────────
 document.addEventListener('contextmenu', e => e.preventDefault());
 // ── Prevent double-tap zoom on game elements ────────────────
