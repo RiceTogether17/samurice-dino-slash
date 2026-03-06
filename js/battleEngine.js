@@ -110,6 +110,7 @@ class BattleEngine {
     this.ctx       = canvas.getContext('2d');
     this.overlay   = overlay;   // DOM element: #battleOverlay
     this.stage     = stageData;
+    this._blendTime  = stageData.blendTime ?? BLEND_TIME;
     this.sprites   = sprites || {};
     this.audio     = audio;
     this.progress  = progress;
@@ -156,7 +157,7 @@ class BattleEngine {
     this._bossBobOffset = 0;
 
     // Blend session
-    this._blendTimeLeft  = BLEND_TIME;
+    this._blendTimeLeft  = this._blendTime;
     this._blendTimer     = null;
     this._currentBuilt   = [];   // phonemes selected so far
     this._builtTileIdxes = [];   // parallel array: tile index for each built phoneme (enables undo)
@@ -475,7 +476,8 @@ class BattleEngine {
     this._currentBuilt   = [];
     this._builtTileIdxes = [];
     this._usedTileIdx    = new Set();
-    this._showFirstHint = (this._wrongAttempts >= MAX_WRONGS - 1);
+    const _hintThreshold = (this.stage.id <= 2) ? 1 : MAX_WRONGS - 1;
+    this._showFirstHint = (this._wrongAttempts >= _hintThreshold);
     this._renderCurrentWordTiles();
     this._renderBlanks();
     if (this.rikuHp <= 0) this._lose();
@@ -501,8 +503,9 @@ class BattleEngine {
     const _fy = Math.round(this.H * 0.58);
     this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy * 0.50), `-${dmg}`, '#FF5252'));
 
-    // On penultimate attempt, hint the first correct tile
-    this._showFirstHint = (this._wrongAttempts >= MAX_WRONGS - 1);
+    // Hint the first correct tile; for early stages show hint from 1st wrong attempt
+    const _hintAt = (this.stage.id <= 2) ? 1 : MAX_WRONGS - 1;
+    this._showFirstHint = (this._wrongAttempts >= _hintAt);
 
     // Reset build and re-render tiles in the same shuffled order
     this._currentBuilt = [];
@@ -605,7 +608,7 @@ class BattleEngine {
     this._stopBlendTimer();
     this.state = 'riku-attack';
 
-    const timeBonus = Math.max(0, this._blendTimeLeft / BLEND_TIME);
+    const timeBonus = Math.max(0, this._blendTimeLeft / this._blendTime);
     const accuracyPct = this._attemptedBlends > 0 ? (this._correctBlends / this._attemptedBlends) : 1;
     // Streak multiplier grows steadily for clean chains.
     const streakMult = 1 + Math.min(this._streak, 8) * 0.12;
@@ -692,12 +695,12 @@ class BattleEngine {
   // ── Timer ────────────────────────────────────────────────────
   _startBlendTimer() {
     this._stopBlendTimer();
-    this._blendTimeLeft = BLEND_TIME;
+    this._blendTimeLeft = this._blendTime;
     this._timerBar.style.width = '100%';
     this._timerBar.className = 'be-timer-fill';
     this._blendTimer = setInterval(() => {
       this._blendTimeLeft -= 0.1;
-      const pct = Math.max(0, this._blendTimeLeft / BLEND_TIME);
+      const pct = Math.max(0, this._blendTimeLeft / this._blendTime);
       this._timerBar.style.width  = (pct * 100) + '%';
       this._timerBar.className = 'be-timer-fill' +
         (pct < 0.25 ? ' be-timer-urgent' : pct < 0.5 ? ' be-timer-warn' : '');
@@ -941,7 +944,7 @@ class BattleEngine {
     this._stopBlendTimer();
     this._blendTimer = setInterval(() => {
       this._blendTimeLeft -= 0.1;
-      const pct = Math.max(0, this._blendTimeLeft / BLEND_TIME);
+      const pct = Math.max(0, this._blendTimeLeft / this._blendTime);
       this._timerBar.style.width  = (pct * 100) + '%';
       this._timerBar.className = 'be-timer-fill' +
         (pct < 0.25 ? ' be-timer-urgent' : pct < 0.5 ? ' be-timer-warn' : '');

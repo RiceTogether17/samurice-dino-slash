@@ -14,7 +14,7 @@ const PHONICS_DATA = {
     id: 1, name: "Rice Paddy Valley",
     pattern: "Short-a Words", patternDesc: "short 'a' · cat · bat · fan · map",
     bg: "stage-1-rice-paddy", bossFile: "stage-1-rex", bossName: "Rex the Rapscallion",
-    bossHp: 120, bossAttack: 14, minionFile: "stage-1-tri",
+    blendTime: 26, bossHp: 120, bossAttack: 14, minionFile: "stage-1-tri",
     skyColor: ["#87CEEB","#c5e8f8"], groundColor: "#5a8a3c", accentColor: "#ff6b35",
     runnerSpeed: 3.2,
     words: [
@@ -41,7 +41,7 @@ const PHONICS_DATA = {
     id: 2, name: "Bamboo Dojo Forest",
     pattern: "Short-e Words", patternDesc: "short 'e' · bed · pet · ten · leg",
     bg: "stage-2-bamboo", bossFile: "stage-2-rapi", bossName: "Rapi the Ruthless",
-    bossHp: 130, bossAttack: 15, minionFile: "stage-2-stego",
+    blendTime: 24, bossHp: 130, bossAttack: 15, minionFile: "stage-2-stego",
     skyColor: ["#4CAF50","#81C784"], groundColor: "#2E7D32", accentColor: "#8BC34A",
     runnerSpeed: 3.6,
     words: [
@@ -68,7 +68,7 @@ const PHONICS_DATA = {
     id: 3, name: "Cherry Blossom Temple",
     pattern: "Short-i Words", patternDesc: "short 'i' · sit · bit · win · pig",
     bg: "stage-3-cherry-temple", bossFile: "stage-3-brachio", bossName: "Brachio the Bold",
-    bossHp: 140, bossAttack: 16, minionFile: "stage-3-ptera",
+    blendTime: 22, bossHp: 140, bossAttack: 16, minionFile: "stage-3-ptera",
     skyColor: ["#FFB7C5","#FF69B4"], groundColor: "#C2185B", accentColor: "#FF80AB",
     runnerSpeed: 4.0,
     words: [
@@ -95,7 +95,7 @@ const PHONICS_DATA = {
     id: 4, name: "Ancient Rice Ruins",
     pattern: "Short-o Words", patternDesc: "short 'o' · dog · hot · hop · log",
     bg: "stage-4-ruins", bossFile: "stage-4-anky", bossName: "Anky the Armored",
-    bossHp: 150, bossAttack: 17, minionFile: "stage-4-anky",
+    blendTime: 21, bossHp: 150, bossAttack: 17, minionFile: "stage-4-anky",
     skyColor: ["#795548","#a1887f"], groundColor: "#4E342E", accentColor: "#FF9800",
     runnerSpeed: 4.2,
     words: [
@@ -122,7 +122,7 @@ const PHONICS_DATA = {
     id: 5, name: "Mountain Rice Terraces",
     pattern: "Short-u Words", patternDesc: "short 'u' · cup · bug · fun · run",
     bg: "stage-5-mountain-terraces", bossFile: "stage-5-spino", bossName: "Spino the Spinner",
-    bossHp: 160, bossAttack: 18, minionFile: "stage-5-pachy",
+    blendTime: 20, bossHp: 160, bossAttack: 18, minionFile: "stage-5-pachy",
     skyColor: ["#1565C0","#42A5F5"], groundColor: "#1B5E20", accentColor: "#4CAF50",
     runnerSpeed: 4.5,
     words: [
@@ -150,7 +150,7 @@ const PHONICS_DATA = {
     pattern: "Consonant Blends",
     patternDesc: "bl · cl · fl · cr · dr · sn · st — two sounds together!",
     bg: "stage-6-volcanic", bossFile: "stage-6-dilo", bossName: "Dilo the Destroyer",
-    bossHp: 180, bossAttack: 20, minionFile: "stage-6-dilo",
+    blendTime: 18, bossHp: 180, bossAttack: 20, minionFile: "stage-6-dilo",
     skyColor: ["#212121","#B71C1C"], groundColor: "#880E4F", accentColor: "#FF6F00",
     runnerSpeed: 5.0,
     words: [
@@ -319,19 +319,120 @@ PHONICS_DATA.categoryPacks = {
 };
 
 // ── DAILY CHALLENGE WORD SETS (seeded by day-of-year) ────────
+// Inline wordObjs with phoneme data — no lookup needed.
 PHONICS_DATA.dailySets = [
-  { theme:"SH Words",   emoji:"🚢", words:["ship","shop","shed","shin","shot","shad"] },
-  { theme:"CH Words",   emoji:"💬", words:["chip","chat","chin","chop","chess","chain"] },
-  { theme:"TH Words",   emoji:"👆", words:["thin","that","them","than","this","thud"] },
-  { theme:"Blends!",    emoji:"💥", words:["clap","frog","snap","step","crab","spin"] },
-  { theme:"Short-A",    emoji:"🐱", words:["cat","bat","hat","fan","man","cap"] },
-  { theme:"Short-E",    emoji:"🛏️", words:["bed","red","pet","ten","hen","pen"] },
-  { theme:"Short-I",    emoji:"🪑", words:["sit","bit","win","dig","pig","mix"] },
-  { theme:"Short-O",    emoji:"🔥", words:["hot","dog","hop","log","dot","pot"] },
-  { theme:"Short-U",    emoji:"☕", words:["cup","bug","fun","run","sun","mud"] },
-  { theme:"Long-A",     emoji:"🎂", words:["cake","lake","bake","rake","wake","make"] },
-  { theme:"Long-I",     emoji:"🚲", words:["bike","kite","rice","nice","dice","mice"] },
-  { theme:"Long-O",     emoji:"🕊️", words:["hope","rose","home","rope","nose","bone"] },
+  { theme:"SH Words", emoji:"🚢", wordObjs:[
+    { word:"ship",  phonemes:["sh","i","p"],  hint:"🚢" },
+    { word:"shop",  phonemes:["sh","o","p"],  hint:"🏪" },
+    { word:"shed",  phonemes:["sh","e","d"],  hint:"🛖" },
+    { word:"shin",  phonemes:["sh","i","n"],  hint:"🦵" },
+    { word:"shot",  phonemes:["sh","o","t"],  hint:"🎯" },
+    { word:"shout", phonemes:["sh","ou","t"], hint:"📣" },
+  ]},
+  { theme:"CH Words", emoji:"💬", wordObjs:[
+    { word:"chip",  phonemes:["ch","i","p"],  hint:"🍟" },
+    { word:"chat",  phonemes:["ch","a","t"],  hint:"💬" },
+    { word:"chin",  phonemes:["ch","i","n"],  hint:"😀" },
+    { word:"chop",  phonemes:["ch","o","p"],  hint:"🪓" },
+    { word:"chess", phonemes:["ch","e","ss"], hint:"♟️" },
+    { word:"chest", phonemes:["ch","e","st"], hint:"📦" },
+  ]},
+  { theme:"TH Words", emoji:"👆", wordObjs:[
+    { word:"thin",  phonemes:["th","i","n"],  hint:"📏" },
+    { word:"that",  phonemes:["th","a","t"],  hint:"👆" },
+    { word:"them",  phonemes:["th","e","m"],  hint:"👥" },
+    { word:"than",  phonemes:["th","a","n"],  hint:"⚖️" },
+    { word:"this",  phonemes:["th","i","s"],  hint:"👇" },
+    { word:"thud",  phonemes:["th","u","d"],  hint:"💥" },
+  ]},
+  { theme:"Blends!", emoji:"💥", wordObjs:[
+    { word:"clap",  phonemes:["cl","a","p"],  hint:"👏" },
+    { word:"frog",  phonemes:["fr","o","g"],  hint:"🐸" },
+    { word:"snap",  phonemes:["sn","a","p"],  hint:"🫰" },
+    { word:"step",  phonemes:["st","e","p"],  hint:"👟" },
+    { word:"crab",  phonemes:["cr","a","b"],  hint:"🦀" },
+    { word:"spin",  phonemes:["sp","i","n"],  hint:"🌀" },
+  ]},
+  { theme:"Short-A", emoji:"🐱", wordObjs:[
+    { word:"cat",   phonemes:["c","a","t"],   hint:"🐱" },
+    { word:"bat",   phonemes:["b","a","t"],   hint:"🦇" },
+    { word:"hat",   phonemes:["h","a","t"],   hint:"🎩" },
+    { word:"fan",   phonemes:["f","a","n"],   hint:"🌬️" },
+    { word:"man",   phonemes:["m","a","n"],   hint:"🧑" },
+    { word:"cap",   phonemes:["c","a","p"],   hint:"🧢" },
+  ]},
+  { theme:"Short-E", emoji:"🛏️", wordObjs:[
+    { word:"bed",   phonemes:["b","e","d"],   hint:"🛏️" },
+    { word:"red",   phonemes:["r","e","d"],   hint:"🔴" },
+    { word:"pet",   phonemes:["p","e","t"],   hint:"🐾" },
+    { word:"ten",   phonemes:["t","e","n"],   hint:"🔟" },
+    { word:"hen",   phonemes:["h","e","n"],   hint:"🐔" },
+    { word:"pen",   phonemes:["p","e","n"],   hint:"🖊️" },
+  ]},
+  { theme:"Short-I", emoji:"🪑", wordObjs:[
+    { word:"sit",   phonemes:["s","i","t"],   hint:"🪑" },
+    { word:"bit",   phonemes:["b","i","t"],   hint:"🦷" },
+    { word:"win",   phonemes:["w","i","n"],   hint:"🏆" },
+    { word:"dig",   phonemes:["d","i","g"],   hint:"⛏️" },
+    { word:"pig",   phonemes:["p","i","g"],   hint:"🐷" },
+    { word:"mix",   phonemes:["m","i","x"],   hint:"🥣" },
+  ]},
+  { theme:"Short-O", emoji:"🔥", wordObjs:[
+    { word:"hot",   phonemes:["h","o","t"],   hint:"🔥" },
+    { word:"dog",   phonemes:["d","o","g"],   hint:"🐶" },
+    { word:"hop",   phonemes:["h","o","p"],   hint:"🐸" },
+    { word:"log",   phonemes:["l","o","g"],   hint:"🪵" },
+    { word:"dot",   phonemes:["d","o","t"],   hint:"⚫" },
+    { word:"pot",   phonemes:["p","o","t"],   hint:"🍯" },
+  ]},
+  { theme:"Short-U", emoji:"☕", wordObjs:[
+    { word:"cup",   phonemes:["c","u","p"],   hint:"☕" },
+    { word:"bug",   phonemes:["b","u","g"],   hint:"🐛" },
+    { word:"fun",   phonemes:["f","u","n"],   hint:"🎉" },
+    { word:"run",   phonemes:["r","u","n"],   hint:"🏃" },
+    { word:"sun",   phonemes:["s","u","n"],   hint:"☀️" },
+    { word:"mud",   phonemes:["m","u","d"],   hint:"🌧️" },
+  ]},
+  { theme:"Long-A", emoji:"🎂", wordObjs:[
+    { word:"cake",  phonemes:["c","a","ke"],  hint:"🎂" },
+    { word:"lake",  phonemes:["l","a","ke"],  hint:"🏞️" },
+    { word:"bake",  phonemes:["b","a","ke"],  hint:"👨‍🍳" },
+    { word:"rake",  phonemes:["r","a","ke"],  hint:"🍂" },
+    { word:"wake",  phonemes:["w","a","ke"],  hint:"⏰" },
+    { word:"make",  phonemes:["m","a","ke"],  hint:"🔨" },
+  ]},
+  { theme:"Long-I", emoji:"🚲", wordObjs:[
+    { word:"bike",  phonemes:["b","i","ke"],  hint:"🚲" },
+    { word:"kite",  phonemes:["k","i","te"],  hint:"🪁" },
+    { word:"rice",  phonemes:["r","i","ce"],  hint:"🍚" },
+    { word:"nice",  phonemes:["n","i","ce"],  hint:"😊" },
+    { word:"dice",  phonemes:["d","i","ce"],  hint:"🎲" },
+    { word:"mice",  phonemes:["m","i","ce"],  hint:"🐭" },
+  ]},
+  { theme:"Long-O", emoji:"🕊️", wordObjs:[
+    { word:"hope",  phonemes:["h","o","pe"],  hint:"🕊️" },
+    { word:"rose",  phonemes:["r","o","se"],  hint:"🌹" },
+    { word:"home",  phonemes:["h","o","me"],  hint:"🏠" },
+    { word:"rope",  phonemes:["r","o","pe"],  hint:"🪢" },
+    { word:"nose",  phonemes:["n","o","se"],  hint:"👃" },
+    { word:"bone",  phonemes:["b","o","ne"],  hint:"🦴" },
+  ]},
+  { theme:"WH Words", emoji:"❓", wordObjs:[
+    { word:"when",  phonemes:["wh","e","n"],  hint:"❓" },
+    { word:"whip",  phonemes:["wh","i","p"],  hint:"🎠" },
+    { word:"what",  phonemes:["wh","a","t"],  hint:"❔" },
+    { word:"whim",  phonemes:["wh","i","m"],  hint:"🌀" },
+    { word:"ship",  phonemes:["sh","i","p"],  hint:"🚢" },
+    { word:"chat",  phonemes:["ch","a","t"],  hint:"💬" },
+  ]},
+  { theme:"Expert Mix", emoji:"🌋", wordObjs:[
+    { word:"crash",  phonemes:["cr","a","sh"],   hint:"💥" },
+    { word:"blend",  phonemes:["bl","e","nd"],   hint:"🌀" },
+    { word:"stomp",  phonemes:["st","o","mp"],   hint:"🦶" },
+    { word:"chest",  phonemes:["ch","e","st"],   hint:"📦" },
+    { word:"snap",   phonemes:["sn","a","p"],    hint:"🫰" },
+    { word:"shrimp", phonemes:["shr","i","mp"],  hint:"🦐" },
+  ]},
 ];
 
 // ── HELPERS ──────────────────────────────────────────────────
@@ -339,12 +440,8 @@ PHONICS_DATA.getDailySet = function() {
   const d = new Date();
   const dayOfYear = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
   const set = PHONICS_DATA.dailySets[dayOfYear % PHONICS_DATA.dailySets.length];
-  // Gather all word objects across tiers and stages
-  const allWords = [];
-  for (const tier of PHONICS_DATA.endlessTiers) allWords.push(...tier.words);
-  for (const stage of PHONICS_DATA.stageList)   allWords.push(...stage.words);
-  const result = set.words.map(w => allWords.find(x => x.word === w)).filter(Boolean);
-  return { ...set, wordObjs: result };
+  // wordObjs are inline — return directly with 'words' alias for display
+  return { ...set, words: (set.wordObjs || []).map(w => w.word) };
 };
 
 PHONICS_DATA.getEndlessWords = function(distMeters) {
