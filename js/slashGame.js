@@ -36,12 +36,12 @@ const SLASH_SPRITES = {
   'tile-dojo': 'assets/sprites/tile-dojo.png',
   'tile-rice': 'assets/sprites/tile-rice.png',
   // ── Minion dino ───────────────────────────────────────────
-  'minion-dino': 'assets/sprites/dino-minion.png',
-  'dino-minion': 'assets/sprites/minion-dino.png',
+  'minion-dino': 'assets/sprites/minion-dino.png',
+  'dino-minion': 'assets/sprites/dino-minion.png',
   // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex': 'assets/dinosaurs/trex.png',
   'stage-1-tri': 'assets/dinosaurs/triceratops.png',
-  'stage-2-rapi': 'assets/dinosaurs/velociraptor.png',
+  'stage-2-rapi': 'assets/dinosaurs/velociraptor-attack.png',
   'stage-2-stego': 'assets/dinosaurs/stegosaurus.png',
   'stage-3-brachio':'assets/dinosaurs/brachiosaurus.png',
   'stage-3-ptera': 'assets/dinosaurs/pteranodon.png',
@@ -79,6 +79,21 @@ const SLASH_SPRITES = {
   'stage-6-volcanic': 'assets/backgrounds/stage-6.jpg',
   'victory-golden-harvest': 'assets/backgrounds/victory.jpg',
 };
+
+
+// Preload only startup-critical sprites before leaving loading screen.
+// Non-critical assets continue streaming in the background.
+const CRITICAL_SPRITE_KEYS = new Set([
+  'riku-idle', 'riku-walk-1', 'riku-walk-2', 'riku-walk-3', 'riku-walk-4',
+  'riku-run', 'riku-jump', 'riku-jump-1', 'riku-hurt', 'riku-victory',
+  'minion-dino',
+  'stage-1-rex', 'stage-1-tri', 'stage-2-rapi', 'stage-2-stego',
+  'stage-3-brachio', 'stage-3-ptera', 'stage-4-anky', 'stage-5-spino',
+  'stage-5-pachy', 'stage-6-dilo',
+  'stage-1-rice-paddy', 'stage-2-bamboo', 'stage-3-cherry-temple',
+  'stage-4-ruins', 'stage-5-mountain-terraces', 'stage-6-volcanic',
+  'victory-golden-harvest',
+]);
 
 // Sprite sheets for animated canvas entities. These are optional and gracefully
 // fall back to existing per-frame sprites if files are missing.
@@ -186,11 +201,17 @@ class SlashGame {
   // ── Sprite loading ───────────────────────────────────────────
   _loadSprites() {
     const entries = Object.entries(SLASH_SPRITES);
-    let loaded = 0;
-    this._spritesReady = false;
+    let criticalLoaded = 0;
+    const criticalTotal = entries.reduce((n, [key]) => n + (CRITICAL_SPRITE_KEYS.has(key) ? 1 : 0), 0);
+    this._spritesReady = criticalTotal === 0;
     entries.forEach(([key, url]) => {
       const img = new Image();
-      const done = () => { if (++loaded >= entries.length) this._spritesReady = true; };
+      const done = () => {
+        if (CRITICAL_SPRITE_KEYS.has(key)) {
+          criticalLoaded++;
+          if (criticalLoaded >= criticalTotal) this._spritesReady = true;
+        }
+      };
       img.onload = done;
       img.onerror = done;
       img.src = url;
@@ -1485,7 +1506,15 @@ class SlashGame {
     const rikuX = W * 0.5, rikuY = H * 0.47;
     const rikuBounce = Math.sin(t * 0.06) * 6;
     const rikuSize = Math.min(W * 0.25, 110);
-    this._drawRikuIdle(ctx, rikuX, rikuY + rikuBounce, rikuSize, t);
+    const titleRiku = this.sprites['riku-idle'] || this.sprites['riku-run'];
+    if (titleRiku && titleRiku.complete && titleRiku.naturalWidth > 0) {
+      const ar = titleRiku.naturalWidth / titleRiku.naturalHeight;
+      const drawH = rikuSize;
+      const drawW = drawH * ar;
+      ctx.drawImage(titleRiku, rikuX - drawW / 2, rikuY + rikuBounce - drawH / 2, drawW, drawH);
+    } else {
+      this._drawRikuIdle(ctx, rikuX, rikuY + rikuBounce, rikuSize, t);
+    }
     // ── "TAP TO PLAY" blinking prompt ─────────────────────────
     const blinkAlpha = 0.5 + 0.5 * Math.sin(t * 0.08);
     ctx.globalAlpha = blinkAlpha;
