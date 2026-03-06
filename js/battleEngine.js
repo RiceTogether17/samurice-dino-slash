@@ -1,4 +1,12 @@
 'use strict';
+// === CHANGE LOG ===
+// Step 2 (Phonics & Battle System):
+// - Added adaptive word queueing from progress weak-phoneme tracking.
+// - Added speech-synthesis tile pronunciation on hover/click.
+// - Added live tile feedback flashes (correct/incorrect) + colour-coded tiles.
+// - Added streak multiplier + speed/accuracy based slash-type scoring.
+// Step 4 (Progression & Content): equipped shop effects now influence
+// battle damage and companion safety perks; exposes run accuracy stats.
 // ============================================================
 // BATTLE ENGINE — js/battleEngine.js
 // One-word-at-a-time phonics combat.
@@ -107,6 +115,7 @@ class BattleEngine {
     this.sprites   = sprites || {};
     this.audio     = audio;
     this.progress  = progress;
+    this._equippedEffects = this.progress?.getEquippedEffects?.() || {};
 
     // Use logical dimensions passed from SlashGame (avoids DPR physical-pixel bug)
     this.W = logicalW || canvas.clientWidth  || 480;
@@ -119,8 +128,8 @@ class BattleEngine {
     this.bossMaxHp     = stageData.bossHp;
     this.bossHp        = stageData.bossHp;
 
-    // Word queue — shuffled copy of stage words, one at a time
-    this._wordQueue     = this._shuffleArray([...stageData.words]);
+    // Word queue — adaptive ordering based on weak phonemes first
+    this._wordQueue     = this._buildAdaptiveWordQueue();
     this._wordQueueIdx  = 0;
     this._currentWord   = null;
     this._shuffledPh    = [];   // shuffled phoneme tiles for current word
@@ -130,10 +139,15 @@ class BattleEngine {
     this.state       = 'idle';
     this._age        = 0;
     this._combo      = 0;
+    this._streak     = 0;      // consecutive successful blends for streak multiplier
+    this._attemptedBlends = 0; // local battle accuracy tracking
+    this._correctBlends   = 0; // local battle accuracy tracking
     this.score       = 0;
     this._bossPhase  = 1;   // 1, 2, or 3
     this._phaseFlash = 0;   // frames of phase-change visual effect
     this._specialReady = false;  // Riku special attack charged
+    this._companionMercy = this._equippedEffects.battleMercy || 0;
+    this._starterShield = !!this._equippedEffects.starterShield;
 
     // Animations
     this.slashParticles = [];
@@ -148,6 +162,7 @@ class BattleEngine {
     this._currentBuilt   = [];   // phonemes selected so far
     this._wrongAttempts  = 0;    // wrong-order attempts for current word
     this._showFirstHint  = false; // highlight first phoneme tile on penultimate attempt
+    this._feedbackFlashTimer = 0; // tiny visual pulse when a tile is right/wrong
 
     // Pause
     this._paused = false;
@@ -247,7 +262,7 @@ class BattleEngine {
 
     // Cycle through queue (re-shuffle when exhausted)
     if (this._wordQueueIdx >= this._wordQueue.length) {
-      this._wordQueue    = this._shuffleArray([...this.stage.words]);
+      this._wordQueue    = this._buildAdaptiveWordQueue();
       this._wordQueueIdx = 0;
     }
     this._currentWord   = this._wordQueue[this._wordQueueIdx++];
@@ -294,6 +309,7 @@ class BattleEngine {
     let hintApplied = false;
 
     this._shuffledPh.forEach((ph, idx) => {
+      const colorClass = this._getPhonemeColorClass(ph);
       const isUsed = this._usedTileIdx.has(idx);
       // Hint: highlight the tile matching the first needed phoneme on penultimate attempt
       const isHint = this._showFirstHint && !isUsed && !hintApplied &&
@@ -301,16 +317,17 @@ class BattleEngine {
       if (isHint) hintApplied = true;
 
       const tile   = document.createElement('button');
-      tile.className        = 'be-tile' + (isUsed ? ' be-tile-used' : '') + (isHint ? ' be-tile-hint' : '');
+      tile.className        = 'be-tile ' + colorClass + (isUsed ? ' be-tile-used' : '') + (isHint ? ' be-tile-hint' : '');
       tile.textContent      = ph.toUpperCase();
       tile.dataset.phoneme  = ph;
       tile.dataset.idx      = idx;
 
       if (!isUsed) {
         tile.addEventListener('click', () => this._onTileClick(ph, tile, idx));
-        tile.addEventListener('mouseenter', () => this.audio?.playPhoneme(ph));
+        tile.addEventListener('mouseenter', () => { this.audio?.playPhoneme(ph); this._pronounceTile(ph); });
         tile.addEventListener('touchstart', () => {
           this.audio?.playPhoneme(ph);
+          this._pronounceTile(ph);
         }, { passive: true });
         tile.addEventListener('touchend', (e) => {
           e.preventDefault();
@@ -328,19 +345,28 @@ class BattleEngine {
     if (this.state !== 'idle' && this.state !== 'blending') return;
     if (this._usedTileIdx.has(tileIdx)) return;
 
+    const expected = this._currentWord.phonemes[this._currentBuilt.length];
+    this.audio?.playPhoneme(phoneme);
+    this._pronounceTile(phoneme);
+
+    // Live correctness feedback per tile (green/red flash)
+    if (phoneme !== expected) {
+      this._onWrongTile(expected, phoneme, tileEl);
+      return;
+    }
+
     this.state = 'blending';
     this._currentBuilt.push(phoneme);
     this._usedTileIdx.add(tileIdx);
     tileEl.classList.add('be-tile-used');
-
-    this.audio?.playPhoneme(phoneme);
+    this._flashTileFeedback(tileEl, 'ok');
 
     this._renderBlanks();
-    this._setFeedback('');
+    this._setFeedback('✅ Nice sound! Keep blending…', '#7CFC9A');
 
     // Auto-submit when all phonemes are placed
     if (this._currentBuilt.length === this._currentWord.phonemes.length) {
-      setTimeout(() => this._checkCurrentWord(), 300);
+      setTimeout(() => this._checkCurrentWord(), 220);
     }
   }
 
@@ -362,12 +388,109 @@ class BattleEngine {
     }
   }
 
+  // ── Adaptive queue: weak phonemes get served earlier ─────────────────
+  _buildAdaptiveWordQueue() {
+    const words = [...(this.stage.words || [])];
+    const weakMap = this.progress?.getWeakPhonemes?.(this.stage.id) || this.progress?.getWeakSounds?.(this.stage.id) || {};
+    const scored = words.map(w => ({ word: w, score: this._getWordWeaknessScore(w, weakMap) + Math.random() * 0.35 }));
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map(x => x.word);
+  }
+
+  _getWordWeaknessScore(wordObj, weakMap) {
+    const bonus = (wordObj.phonemes || []).reduce((sum, ph) => sum + (weakMap[ph.toLowerCase()] || 0), 0);
+    return bonus + ((wordObj.phonemes?.length || 0) >= 4 ? 0.25 : 0);
+  }
+
+  // ── Tile pronunciation helper using speech synthesis ─────────────────
+  _pronounceTile(phoneme) {
+    if (!window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(phoneme);
+    u.rate = 0.86;
+    u.pitch = 1.12;
+    // Avoid interrupting long instructional speech if already speaking.
+    if (!window.speechSynthesis.speaking) window.speechSynthesis.speak(u);
+  }
+
+  // ── Visual tile categories (colour-coded phonics groups) ─────────────
+  _getPhonemeColorClass(phoneme) {
+    const ph = String(phoneme || '').toLowerCase();
+    const vowels = new Set(['a','e','i','o','u']);
+    if (vowels.has(ph)) return 'be-tile-vowel';
+    if (/^(sh|ch|th|wh|ph|ck|ng)$/.test(ph)) return 'be-tile-digraph';
+    if (ph.length >= 2) return 'be-tile-blend';
+    return 'be-tile-cons';
+  }
+
+  _flashTileFeedback(tileEl, type) {
+    if (!tileEl) return;
+    const cls = type === 'ok' ? 'be-tile-flash-ok' : 'be-tile-flash-bad';
+    tileEl.classList.remove('be-tile-flash-ok', 'be-tile-flash-bad');
+    tileEl.classList.add(cls);
+    setTimeout(() => tileEl.classList.remove(cls), 240);
+  }
+
+  _onWrongTile(expected, got, tileEl) {
+    this._flashTileFeedback(tileEl, 'bad');
+    this.audio?.sfxWrongBlend?.();
+    this._setFeedback(`❌ Try '${String(expected).toUpperCase()}' first. You tapped '${String(got).toUpperCase()}'.`, '#FF8A80');
+
+    this._wrongAttempts++;
+    if (this._wrongAttempts >= MAX_WRONGS) {
+      this._skipWord();
+      return;
+    }
+
+    // keep pressure but lighter than full-word failure
+    const pokeRaw = Math.max(2, Math.floor(this.stage.bossAttack * 0.12));
+    const pokeDmg = this._applyIncomingDamage(pokeRaw, 'tile-wrong');
+    this.rikuHp = Math.max(0, this.rikuHp - pokeDmg);
+    this._rikuShake = 5;
+    this._currentBuilt = [];
+    this._usedTileIdx = new Set();
+    this._showFirstHint = (this._wrongAttempts >= MAX_WRONGS - 1);
+    this._renderCurrentWordTiles();
+    this._renderBlanks();
+    if (this.rikuHp <= 0) this._lose();
+  }
+
+
+  _applyIncomingDamage(baseDmg, label = 'blocked') {
+    // Starter shield from companion blocks one incoming hit.
+    if (this._starterShield) {
+      this._starterShield = false;
+      this.damagePops.push(new DamagePop(Math.round(this.W * 0.24), Math.round(this.H * 0.30), '🛡️ BLOCK!', '#80D8FF'));
+      this._setFeedback('🛡️ Companion shield blocked the hit!', '#80D8FF');
+      return 0;
+    }
+    // Companion mercy grants a few free mistakes before HP damage.
+    if (this._companionMercy > 0) {
+      this._companionMercy--;
+      this.damagePops.push(new DamagePop(Math.round(this.W * 0.24), Math.round(this.H * 0.33), '🐾 SAVE!', '#C5E1A5'));
+      this._setFeedback('🐾 Companion helped! No damage this time.', '#C5E1A5');
+      return 0;
+    }
+    return baseDmg;
+  }
+
+  _getSwordDamageMult() {
+    return this._equippedEffects.swordDamageMult || 1;
+  }
+
+  getAccuracyPercent() {
+    if (this._attemptedBlends <= 0) return 100;
+    return Math.max(0, Math.min(100, Math.round((this._correctBlends / this._attemptedBlends) * 100)));
+  }
+
   // ── Wrong order: let player try again ────────────────────────
   _wrongOrder() {
     this._combo = 0;
+    this._streak = 0;
+    this._attemptedBlends++;
     this.state  = 'idle';
 
-    const dmg  = Math.floor(this.stage.bossAttack * 0.3);
+    const rawDmg  = Math.floor(this.stage.bossAttack * 0.3);
+    const dmg = this._applyIncomingDamage(rawDmg, 'wrong-order');
     this.rikuHp = Math.max(0, this.rikuHp - dmg);
     this._rikuShake = 8;
     if (this.audio) this.audio.sfxWrongBlend();
@@ -396,8 +519,11 @@ class BattleEngine {
     this._stopBlendTimer();
     this.state = 'boss-attack';
     this._combo = 0;
+    this._streak = 0;
+    this._attemptedBlends++;
 
-    const dmg = this.stage.bossAttack;
+    const rawDmg = this.stage.bossAttack;
+    const dmg = this._applyIncomingDamage(rawDmg, 'skip');
     this.rikuHp = Math.max(0, this.rikuHp - dmg);
     this._rikuShake = 14;
     this._bossShake = 6;
@@ -409,7 +535,7 @@ class BattleEngine {
     const _fy = Math.round(this.H * 0.58);
     this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy * 0.50), `🦖 -${dmg}`, '#FF5252'));
 
-    if (this.progress) this.progress.recordBlend(this.stage.id, this._currentWord.word, false);
+    if (this.progress) this.progress.recordBlend(this.stage.id, this._currentWord.word, false, false, this._currentWord.phonemes);
 
     setTimeout(() => {
       if (this._destroyed) return;
@@ -456,7 +582,7 @@ class BattleEngine {
     const floorY = Math.round(this.H * 0.58);
     const bossX  = Math.round(this.W * 0.72);
     const bossY  = Math.round(floorY * 0.50);
-    const specialDmg = Math.floor(wordObj.damage * 3.5);
+    const specialDmg = Math.floor(wordObj.damage * 3.5 * this._getSwordDamageMult());
 
     this.bossHp = Math.max(0, this.bossHp - specialDmg);
     this._bossShake = 40;
@@ -479,23 +605,37 @@ class BattleEngine {
     this._stopBlendTimer();
     this.state = 'riku-attack';
 
-    const timeBonus = this._blendTimeLeft / BLEND_TIME;
-    const comboMult = 1 + Math.min(this._combo, 4) * 0.25;
+    const timeBonus = Math.max(0, this._blendTimeLeft / BLEND_TIME);
+    const accuracyPct = this._attemptedBlends > 0 ? (this._correctBlends / this._attemptedBlends) : 1;
+    // Streak multiplier grows steadily for clean chains.
+    const streakMult = 1 + Math.min(this._streak, 8) * 0.12 + (this._equippedEffects.comboBonus || 0);
     // Phase damage multiplier — reward surviving to later boss phases
     const phaseMult = this._bossPhase === 3 ? 1.2 :
                       this._bossPhase === 2 ? 1.1 : 1.0;
-    const damage    = Math.floor(wordObj.damage * comboMult * (0.7 + timeBonus * 0.3) * phaseMult);
+
+    // Slash type derived from speed + accuracy for educational feedback.
+    let slashType = 'Standard Slash';
+    let slashMult = 1.0;
+    if (timeBonus > 0.72 && accuracyPct >= 0.85) { slashType = '⚡ Speed Slash'; slashMult = 1.28; }
+    if (timeBonus > 0.82 && accuracyPct >= 0.93) { slashType = '🌈 Precision Slash'; slashMult = 1.45; }
+
+    const swordMult = this._getSwordDamageMult();
+    const damage = Math.floor(wordObj.damage * streakMult * (0.72 + timeBonus * 0.28) * phaseMult * slashMult * swordMult);
 
     this._combo++;
+    this._streak++;
+    this._attemptedBlends++;
+    this._correctBlends++;
     this.bossHp  = Math.max(0, this.bossHp - damage);
-    this.score  += damage * 2;
+    this.score  += Math.floor(damage * (1.8 + accuracyPct * 0.4));
     this._bossShake = 22;
 
     // Mark special as ready at combo 5
     if (this._combo >= 5) this._specialReady = true;
 
-    if (this.progress) this.progress.recordBlend(this.stage.id, wordObj.word, true);
+    if (this.progress) this.progress.recordBlend(this.stage.id, wordObj.word, true, timeBonus > 0.82, wordObj.phonemes);
     if (this.audio)    this.audio.sfxSlash();
+    if (this.audio)    this.audio.sfxBlendChime?.();
     if (this.audio)    this.audio.sfxBossHit();
     setTimeout(() => {
       if (this._destroyed) return;
@@ -522,12 +662,12 @@ class BattleEngine {
     const _praiseGreat   = ['GREAT! ⚔️','NICE SLICE! 🗡️','WORD WARRIOR! 🏆','SLICED IT! ✨','DINO SMASHER! 💪'];
     const _rng = Math.floor(Math.random() * 5);
     const gradeText = this._combo >= 5 ? `✨ RIKU SPECIAL! ×${this._combo}` :
-                      this._combo >= 3 ? `COMBO ×${this._combo}! ⚡` :
+                      this._combo >= 3 ? `STREAK ×${this._combo}! ⚡` :
                       timeBonus > 0.7  ? _praisePerfect[_rng] : _praiseGreat[_rng];
 
     this.damagePops.push(new DamagePop(bossX, bossY - 40, `-${damage}`, '#FFD700'));
-    this.damagePops.push(new DamagePop(bossX, bossY - 80, gradeText, '#fff'));
-    this._setFeedback(`⚔️ "${wordObj.word.toUpperCase()}" — ${gradeText} (${damage} dmg)`, '#FFD700');
+    this.damagePops.push(new DamagePop(bossX, bossY - 80, `${slashType} • ${gradeText}`, '#fff'));
+    this._setFeedback(`⚔️ "${wordObj.word.toUpperCase()}" — ${slashType} • ${gradeText} (${damage} dmg, acc ${Math.round(accuracyPct * 100)}%)`, '#FFD700');
 
     this._checkBossPhase();
 
@@ -574,8 +714,10 @@ class BattleEngine {
     const phaseMult = this._bossPhase === 3 ? 1.5 : this._bossPhase === 2 ? 1.25 : 1.0;
     this._bossShake = this._bossPhase >= 2 ? 14 : 8;
     this._combo = 0;
+    this._streak = 0;
 
-    const dmg = Math.floor(this.stage.bossAttack * phaseMult);
+    const rawDmg = Math.floor(this.stage.bossAttack * phaseMult);
+    const dmg = this._applyIncomingDamage(rawDmg, 'timeout');
     this.rikuHp = Math.max(0, this.rikuHp - dmg);
     if (this.audio) this.audio.sfxBossHit();
     if (this.audio) this.audio.sfxHurt();
@@ -1085,7 +1227,7 @@ class BattleEngine {
 
 class EndlessBattleEngine {
   // timeLimit: seconds (default 4)
-  constructor(canvas, overlay, wordObj, sprites, audio, logicalW, logicalH, onDone, autoBlend = false) {
+  constructor(canvas, overlay, wordObj, sprites, audio, logicalW, logicalH, onDone, autoBlend = false, slowMoBonus = 0) {
     this.canvas   = canvas;
     this.ctx      = canvas.getContext('2d');
     this.overlay  = overlay;
@@ -1096,8 +1238,10 @@ class EndlessBattleEngine {
     this.H        = logicalH || canvas.clientHeight || 700;
     this.onDone   = onDone;   // callback(result:'perfect'|'good'|'miss'|'timeout', timeUsed)
     this._autoBlend = autoBlend;
+    this._slowMoBonus = Math.max(0, slowMoBonus || 0);
 
-    this.timeLimit  = 4.5;
+    // Endless runner slow-mo power-up grants more blend time at the gate battle.
+    this.timeLimit  = 4.5 + this._slowMoBonus;
     this._timeLeft  = this.timeLimit;
     this._age       = 0;
     this._built     = [];   // phonemes tapped so far
@@ -1322,6 +1466,7 @@ class EndlessBattleEngine {
         this._slashLines.push({ x: cx - 80 + i*40, y: cy, a, l: 80, life: 1 });
       }
       this.audio?.sfxSlash();
+      this.audio?.sfxBlendChime?.();
       this._resultEl.textContent = '⚔️ NICE SLASH!';
       this._resultEl.className = 'ebe-result ebe-result-good';
     }

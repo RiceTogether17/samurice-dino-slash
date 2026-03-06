@@ -1,4 +1,7 @@
 'use strict';
+// === CHANGE LOG ===
+// Step 4 (Progression & Content): expanded phonics content with
+// long-vowel, sight-word, and multisyllabic category packs.
 // ============================================================
 // PHONICS DATA — js/phonicsData.js
 // Campaign stages (6) + Endless mode tiers + Daily challenge sets
@@ -253,7 +256,33 @@ PHONICS_DATA.endlessTiers = [
     ],
   },
   {
-    label: "Expert Mix", minDist: 2000,
+    label: "Sight Words", minDist: 1700,
+    words: [
+      { word:"the",   phonemes:["th","e"],      hint:"📘" },
+      { word:"said",  phonemes:["s","ai","d"], hint:"🗣️" },
+      { word:"come",  phonemes:["c","o","me"], hint:"➡️" },
+      { word:"were",  phonemes:["w","er","e"], hint:"👥" },
+      { word:"have",  phonemes:["h","a","ve"], hint:"🤲" },
+      { word:"some",  phonemes:["s","o","me"], hint:"🔢" },
+      { word:"does",  phonemes:["d","oe","s"], hint:"❓" },
+      { word:"once",  phonemes:["o","n","ce"], hint:"1️⃣" },
+    ],
+  },
+  {
+    label: "Multisyllabic", minDist: 2200,
+    words: [
+      { word:"robot",   phonemes:["ro","bot"],        hint:"🤖" },
+      { word:"tiger",   phonemes:["ti","ger"],        hint:"🐯" },
+      { word:"sunset",  phonemes:["sun","set"],       hint:"🌇" },
+      { word:"music",   phonemes:["mu","sic"],        hint:"🎵" },
+      { word:"dino",    phonemes:["di","no"],         hint:"🦖" },
+      { word:"volcano", phonemes:["vol","ca","no"], hint:"🌋" },
+      { word:"banana",  phonemes:["ba","na","na"],  hint:"🍌" },
+      { word:"samurai", phonemes:["sa","mu","rai"], hint:"⚔️" },
+    ],
+  },
+  {
+    label: "Expert Mix", minDist: 2600,
     words: [
       { word:"crash",  phonemes:["cr","a","sh"],    hint:"💥" },
       { word:"blend",  phonemes:["bl","e","nd"],    hint:"🌀" },
@@ -266,6 +295,28 @@ PHONICS_DATA.endlessTiers = [
     ],
   },
 ];
+
+// ── CONTENT CATEGORY PACKS (Step 4 expansion) ─────────────────
+PHONICS_DATA.categoryPacks = {
+  longVowels: [
+    { word:"cake", phonemes:["c","a","ke"], hint:"🎂" },
+    { word:"bike", phonemes:["b","i","ke"], hint:"🚲" },
+    { word:"rope", phonemes:["r","o","pe"], hint:"🪢" },
+    { word:"cube", phonemes:["c","u","be"], hint:"🎲" },
+  ],
+  sightWords: [
+    { word:"the", phonemes:["th","e"], hint:"📘" },
+    { word:"said", phonemes:["s","ai","d"], hint:"🗣️" },
+    { word:"have", phonemes:["h","a","ve"], hint:"🤲" },
+    { word:"does", phonemes:["d","oe","s"], hint:"❓" },
+  ],
+  multisyllabic: [
+    { word:"robot", phonemes:["ro","bot"], hint:"🤖" },
+    { word:"volcano", phonemes:["vol","ca","no"], hint:"🌋" },
+    { word:"banana", phonemes:["ba","na","na"], hint:"🍌" },
+    { word:"samurai", phonemes:["sa","mu","rai"], hint:"⚔️" },
+  ],
+};
 
 // ── DAILY CHALLENGE WORD SETS (seeded by day-of-year) ────────
 PHONICS_DATA.dailySets = [
