@@ -2325,32 +2325,43 @@ class RunnerEngine {
     const cx = this.W / 2;
     const cy = this.H / 2;
     ctx.save();
-    // Dim the entire screen
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = 'rgba(0,0,0,0.62)';
     ctx.fillRect(0, 0, this.W, this.H);
     // Panel
-    const pw = Math.min(300, this.W * 0.7);
-    const ph = 150;
-    ctx.fillStyle   = 'rgba(10,10,30,0.88)';
+    const pw = Math.min(300, this.W * 0.72);
+    const ph = 188;
+    const px = cx - pw / 2, py = cy - ph / 2;
+    ctx.fillStyle   = 'rgba(10,10,30,0.92)';
     ctx.strokeStyle = '#FFD700';
     ctx.lineWidth   = 2.5;
-    ctx.beginPath(); ctx.roundRect(cx - pw / 2, cy - ph / 2, pw, ph, 18); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 18); ctx.fill(); ctx.stroke();
     // Title
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
     ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Comic Sans MS", system-ui`;
     ctx.fillStyle    = '#FFD700';
-    ctx.shadowColor  = '#FF6F00';
-    ctx.shadowBlur   = 14;
-    ctx.fillText('⏸ PAUSED', cx, cy - 34);
+    ctx.shadowColor  = '#FF6F00'; ctx.shadowBlur = 14;
+    ctx.fillText('⏸ PAUSED', cx, py + 34);
     ctx.shadowBlur   = 0;
-    // Hints
-    ctx.font      = `${Math.round(this.W * 0.034)}px "Comic Sans MS", system-ui`;
+    // ── Resume button ────────────────────────────────────────
+    const btnW = pw - 40, btnH = 44;
+    const resumeY = py + 66;
+    ctx.fillStyle = 'rgba(50,180,80,0.85)';
+    ctx.strokeStyle = '#7CFC9A'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 20, resumeY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
-    ctx.fillText('P or ESC to resume', cx, cy + 6);
-    ctx.fillStyle = '#FF9800';
-    ctx.font      = `${Math.round(this.W * 0.031)}px "Comic Sans MS", system-ui`;
-    ctx.fillText('Q — quit to map', cx, cy + 42);
+    ctx.fillText('▶ RESUME', cx, resumeY + btnH / 2);
+    this._pauseResumeBtnRect = { x: px + 20, y: resumeY, w: btnW, h: btnH };
+    // ── Quit button ──────────────────────────────────────────
+    const quitY = resumeY + btnH + 12;
+    ctx.fillStyle = 'rgba(180,50,20,0.75)';
+    ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 20, quitY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFD9D0';
+    ctx.fillText('🗺 Quit to Map', cx, quitY + btnH / 2);
+    this._pauseQuitBtnRect = { x: px + 20, y: quitY, w: btnW, h: btnH };
     ctx.restore();
   }
 
