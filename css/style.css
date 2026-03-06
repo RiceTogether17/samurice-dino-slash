@@ -1302,3 +1302,24 @@ body {
     50%  { transform: scale(1.4); }
     100% { transform: scale(1); }
 }
+
+
+/* Step 5 mobile comfort: larger touch targets for runner + battle */
+@media (max-width: 900px) and (pointer: coarse) {
+    .runner-controls { bottom: 10px; padding: 0 10px; }
+    .dpad-btn { width: 84px; height: 84px; border-radius: 20px; font-size: 1.8rem; }
+    .dpad-jump { width: 98px; height: 98px; }
+    .dpad-btn span { font-size: 0.66rem; }
+
+    .be-pool { gap: 10px; max-height: 180px; }
+    .be-tile { min-width: 62px; height: 66px; font-size: 1.3rem; padding: 0 12px; border-radius: 12px; }
+    .be-btn { height: 54px; font-size: 1.02rem; }
+}
+
+
+/* Merge-resolution guard block: keep phoneme tile visual classes stable
+   even when adjacent button/theming changes are merged from other branches. */
+.be-overlay .be-tile-cons    { background: linear-gradient(160deg, #FFE0B2, #FFB74D); }
+.be-overlay .be-tile-vowel   { background: linear-gradient(160deg, #B3E5FC, #4FC3F7); }
+.be-overlay .be-tile-digraph { background: linear-gradient(160deg, #D1C4E9, #9575CD); }
+.be-overlay .be-tile-blend   { background: linear-gradient(160deg, #C8E6C9, #66BB6A); }

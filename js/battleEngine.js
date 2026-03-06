@@ -113,6 +113,7 @@ class BattleEngine {
     this.sprites   = sprites || {};
     this.audio     = audio;
     this.progress  = progress;
+    this._equippedEffects = this.progress?.getEquippedEffects?.() || {};
 
     // Use logical dimensions passed from SlashGame (avoids DPR physical-pixel bug)
     this.W = logicalW || canvas.clientWidth  || 480;
@@ -143,6 +144,8 @@ class BattleEngine {
     this._bossPhase  = 1;   // 1, 2, or 3
     this._phaseFlash = 0;   // frames of phase-change visual effect
     this._specialReady = false;  // Riku special attack charged
+    this._companionMercy = this._equippedEffects.battleMercy || 0;
+    this._starterShield = !!this._equippedEffects.starterShield;
 
     // Animations
     this.slashParticles = [];
@@ -455,7 +458,8 @@ class BattleEngine {
     this._attemptedBlends++;
     this.state  = 'idle';
 
-    const dmg  = Math.floor(this.stage.bossAttack * 0.3);
+    const rawDmg  = Math.floor(this.stage.bossAttack * 0.3);
+    const dmg = this._applyIncomingDamage(rawDmg, 'wrong-order');
     this.rikuHp = Math.max(0, this.rikuHp - dmg);
     this._rikuShake = 8;
     if (this.audio) this.audio.sfxWrongBlend();
@@ -487,7 +491,8 @@ class BattleEngine {
     this._streak = 0;
     this._attemptedBlends++;
 
-    const dmg = this.stage.bossAttack;
+    const rawDmg = this.stage.bossAttack;
+    const dmg = this._applyIncomingDamage(rawDmg, 'skip');
     this.rikuHp = Math.max(0, this.rikuHp - dmg);
     this._rikuShake = 14;
     this._bossShake = 6;
@@ -546,7 +551,7 @@ class BattleEngine {
     const floorY = Math.round(this.H * 0.58);
     const bossX  = Math.round(this.W * 0.72);
     const bossY  = Math.round(floorY * 0.50);
-    const specialDmg = Math.floor(wordObj.damage * 3.5);
+    const specialDmg = Math.floor(wordObj.damage * 3.5 * this._getSwordDamageMult());
 
     this.bossHp = Math.max(0, this.bossHp - specialDmg);
     this._bossShake = 40;
@@ -598,6 +603,7 @@ class BattleEngine {
 
     if (this.progress) this.progress.recordBlend(this.stage.id, wordObj.word, true, timeBonus > 0.82, wordObj.phonemes);
     if (this.audio)    this.audio.sfxSlash();
+    if (this.audio)    this.audio.sfxBlendChime?.();
     if (this.audio)    this.audio.sfxBossHit();
     setTimeout(() => {
       if (this._destroyed) return;
@@ -678,7 +684,8 @@ class BattleEngine {
     this._combo = 0;
     this._streak = 0;
 
-    const dmg = Math.floor(this.stage.bossAttack * phaseMult);
+    const rawDmg = Math.floor(this.stage.bossAttack * phaseMult);
+    const dmg = this._applyIncomingDamage(rawDmg, 'timeout');
     this.rikuHp = Math.max(0, this.rikuHp - dmg);
     if (this.audio) this.audio.sfxBossHit();
     if (this.audio) this.audio.sfxHurt();
@@ -1188,7 +1195,7 @@ class BattleEngine {
 
 class EndlessBattleEngine {
   // timeLimit: seconds (default 4)
-  constructor(canvas, overlay, wordObj, sprites, audio, logicalW, logicalH, onDone, autoBlend = false) {
+  constructor(canvas, overlay, wordObj, sprites, audio, logicalW, logicalH, onDone, autoBlend = false, slowMoBonus = 0) {
     this.canvas   = canvas;
     this.ctx      = canvas.getContext('2d');
     this.overlay  = overlay;
@@ -1199,8 +1206,10 @@ class EndlessBattleEngine {
     this.H        = logicalH || canvas.clientHeight || 700;
     this.onDone   = onDone;   // callback(result:'perfect'|'good'|'miss'|'timeout', timeUsed)
     this._autoBlend = autoBlend;
+    this._slowMoBonus = Math.max(0, slowMoBonus || 0);
 
-    this.timeLimit  = 4.5;
+    // Endless runner slow-mo power-up grants more blend time at the gate battle.
+    this.timeLimit  = 4.5 + this._slowMoBonus;
     this._timeLeft  = this.timeLimit;
     this._age       = 0;
     this._built     = [];   // phonemes tapped so far
@@ -1425,6 +1434,7 @@ class EndlessBattleEngine {
         this._slashLines.push({ x: cx - 80 + i*40, y: cy, a, l: 80, life: 1 });
       }
       this.audio?.sfxSlash();
+      this.audio?.sfxBlendChime?.();
       this._resultEl.textContent = '⚔️ NICE SLASH!';
       this._resultEl.className = 'ebe-result ebe-result-good';
     }

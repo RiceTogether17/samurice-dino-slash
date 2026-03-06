@@ -2,6 +2,9 @@
 // === CHANGE LOG ===
 // Step 1 (Visuals & Polish): sprite-sheet animation hooks, particle system FX,
 // stronger parallax, DinoGate pulse visuals, and themed rice HUD glow.
+// Step 3 (Runner Mechanics): delta-time simulation for endless runner,
+// object pooling for hazards/rice grains, chunk variety, and rice/shop tuning.
+// Step 6 (Technical): ES6 DinoGate entity + constructor ordering fix for starter shield.
 // ============================================================
 // RUNNER ENGINE — js/runnerEngine.js
 // Mario-style auto-scroller. Riku runs right automatically;
@@ -69,7 +72,7 @@ class ParticleSystem {
       this.items.push({ kind, x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 1.5, life: 18 + Math.random() * 20, age: 0 });
     }
   }
-  update() {
+  update(dt = 1 / 60) {
     this.items.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.16; p.vx *= 0.96; p.age++; });
     this.items = this.items.filter(p => p.age < p.life);
   }
@@ -113,6 +116,9 @@ class RunnerPlayer {
     // Variable jump
     this._holdingJump  = false;
     this._jumpFrames   = 0;
+    // Shop progression perk: optional permanent double-jump
+    this.canDoubleJump = false;
+    this._doubleJumpUsed = false;
     // Power-up state
     this.powerUp = null;    // 'rice-bowl' | 'chili' | 'shield-item' | 'star' | null
     this._powerUpTimer = 0;
@@ -134,12 +140,13 @@ class RunnerPlayer {
   }
 
   jump(audio) {
-    const canJump = this.onGround || this._coyoteFrames > 0;
+    const canJump = this.onGround || this._coyoteFrames > 0 || (this.canDoubleJump && !this._doubleJumpUsed);
     if (!canJump) {
       // Buffer the jump — execute automatically the moment we land
       this._jumpBuffer = R_JUMP_BUFFER;
       return;
     }
+    if (!this.onGround && this._coyoteFrames <= 0 && this.canDoubleJump) this._doubleJumpUsed = true;
     this.groundPounding  = false;
     this.vy              = R_JUMP_VEL;
     this.onGround        = false;
@@ -230,6 +237,7 @@ class RunnerPlayer {
       this._coyoteFrames = R_COYOTE_FRAMES;
     } else if (this.onGround) {
       this._coyoteFrames = 0;
+      this._doubleJumpUsed = false;
     } else if (this._coyoteFrames > 0) {
       this._coyoteFrames--;
     }
@@ -627,7 +635,7 @@ class MinionDino {
 
   updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
 
-  update() {
+  update(dt = 1 / 60) {
     if (this.defeated) { this.deathFrames++; return; }
     this._age++;
     this.worldX += this.vx;
@@ -833,7 +841,7 @@ class MovingPlatform extends RunnerPlatform {
     this._age       = 0;
   }
 
-  update() {
+  update(dt = 1 / 60) {
     this._age++;
     const t = this._age * this._speed + this._phase;
     if (this._moveType === 'h') {
@@ -884,7 +892,7 @@ class QuestionBlock {
     this.sy = this.worldY - (this._bounce > 0 ? Math.sin(this._bounce / 8 * Math.PI) * 10 : 0);
   }
 
-  update() {
+  update(dt = 1 / 60) {
     this._age++;
     if (this._bounce > 0) this._bounce--;
   }
@@ -983,7 +991,7 @@ class PowerUpItem {
 
   updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
 
-  update(groundY, platforms) {
+  update(groundY, platforms, dtScale = 1) {
     if (this.collected) return;
     this._age++;
     this.vy = Math.min(this.vy + this._gravity, 14);
@@ -1086,7 +1094,7 @@ class FlyingEnemy {
     this.sx = this.worldX - camOffsetX;
   }
 
-  update() {
+  update(dt = 1 / 60) {
     if (this.defeated) { this.deathFrames++; return; }
     this._age++;
     this.worldX += this.vx;
@@ -1187,7 +1195,7 @@ class SpringPad {
   updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
   isVisible(canvasW) { return this.sx + this.w > -20 && this.sx < canvasW + 20; }
 
-  update() {
+  update(dt = 1 / 60) {
     this._age++;
     if (this._bounce > 0) this._bounce--;
   }
@@ -1311,7 +1319,7 @@ class RunnerParticle {
     this.life  = 1;
     this.scale = 0.5;
   }
-  update() {
+  update(dt = 1 / 60) {
     this.x    += this.vx;
     this.y    += this.vy;
     this.vy   += 0.12;
@@ -1348,7 +1356,7 @@ class DustParticle {
     this.r    = Math.random() * 4 + 2;
     this.life = 0.65 + Math.random() * 0.35;
   }
-  update() {
+  update(dt = 1 / 60) {
     this.x    += this.vx;
     this.y    += this.vy;
     this.vy   += 0.1;
@@ -1469,13 +1477,14 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
 // RUNNER ENGINE — main class
 // ─────────────────────────────────────────────────────────────
 class RunnerEngine {
-  constructor(canvas, stageData, sprites, audio, logicalW, logicalH, spriteSheets) {
+  constructor(canvas, stageData, sprites, audio, logicalW, logicalH, spriteSheets, progress = null) {
     this.canvas     = canvas;
     this.ctx        = canvas.getContext('2d');
     this.stage      = stageData;
     this.sprites    = sprites || {};
     this.spriteSheets = spriteSheets || {};
     this.audio      = audio;
+    this.progress   = progress;
 
     const W = logicalW || canvas.clientWidth  || 480;
     const H = logicalH || canvas.clientHeight || 700;
@@ -1500,6 +1509,8 @@ class RunnerEngine {
     this.levelW           = level.totalWidth;
 
     this.player    = new RunnerPlayer(this.groundY, W, H, sprites, this.spriteSheets);
+    this._equippedEffects = this.progress?.getEquippedEffects?.() || {};
+    if (this._equippedEffects.runnerDoubleJump) this.player.canDoubleJump = true;
 
     this.keys = { right: false, left: false, jump: false };
     this._bindInput();
@@ -1579,16 +1590,36 @@ class RunnerEngine {
     };
     document.addEventListener('keydown', this._kd);
     document.addEventListener('keyup',   this._ku);
+
+    // Mobile swipe-jump support (upward swipe anywhere on runner canvas).
+    this._touchStartY = null;
+    this._swipeAbort = new AbortController();
+    const sig = { signal: this._swipeAbort.signal };
+    this.canvas.addEventListener('touchstart', (e) => {
+      if (!e.touches?.length) return;
+      this._touchStartY = e.touches[0].clientY;
+    }, { passive: true, signal: this._swipeAbort.signal });
+    this.canvas.addEventListener('touchmove', (e) => {
+      if (this._touchStartY == null || !e.touches?.length) return;
+      const dy = e.touches[0].clientY - this._touchStartY;
+      if (dy < -45) {
+        this.player.jump(this.audio);
+        this.audio?.sfxSwipeJump?.();
+        this._touchStartY = null;
+      }
+    }, { passive: true, signal: this._swipeAbort.signal });
+    this.canvas.addEventListener('touchend', () => { this.player.releaseJump(); this._touchStartY = null; }, sig);
   }
 
   destroy() {
     document.removeEventListener('keydown', this._kd);
     document.removeEventListener('keyup',   this._ku);
     if (this._dpadAbort) { this._dpadAbort.abort(); this._dpadAbort = null; }
+    if (this._swipeAbort) { this._swipeAbort.abort(); this._swipeAbort = null; }
   }
 
   // ── Update ───────────────────────────────────────────────────
-  update() {
+  update(dt = 1 / 60) {
     if (this.done) return;
     if (this._paused) return;
     this._age++;
@@ -2310,7 +2341,21 @@ const E_ZONES = [
 ];
 
 // ── Chunk pattern types ───────────────────────────────────────
-const E_CHUNK_TYPES = ['safe','platform','gap','spike','ptero','gate'];
+const E_CHUNK_TYPES = ['safe','platform','gap','spike','ptero','zigzag','stair','gate'];
+
+// Step 6: formal ES6 DinoGate entity used by endless runner chunks.
+class DinoGate {
+  constructor(screenX, y, w = 60, h = 120) {
+    this.screenX = screenX;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.triggered = false;
+    this.word = null;
+  }
+
+  scroll(dx) { this.screenX -= dx; }
+}
 
 // ─────────────────────────────────────────────────────────────
 // ENDLESS PLAYER — thin wrapper around identical physics logic
@@ -2365,24 +2410,24 @@ class EndlessPlayer {
     this._holding = false;
   }
 
-  update(groundY, platforms) {
+  update(groundY, platforms, dtScale = 1) {
     this._wasOnGround = this.onGround;
     this._anim++;
-    if (this.invincible > 0)  this.invincible--;
-    if (this._magnet > 0)     this._magnet--;
-    if (this._slow > 0)       this._slow--;
-    if (this._dblJumpT > 0)   { this._dblJumpT--; this.dblJump = this._dblJumpT > 0; if (!this.dblJump) this._dblUsed = false; }
-    if (this._landSquash > 0) this._landSquash--;
-    if (this._jumpFlash  > 0) this._jumpFlash--;
-    if (this._buffer > 0)     this._buffer--;
+    if (this.invincible > 0)  this.invincible -= dtScale;
+    if (this._magnet > 0)     this._magnet -= dtScale;
+    if (this._slow > 0)       this._slow -= dtScale;
+    if (this._dblJumpT > 0)   { this._dblJumpT -= dtScale; this.dblJump = this._dblJumpT > 0; if (!this.dblJump) this._dblUsed = false; }
+    if (this._landSquash > 0) this._landSquash -= dtScale;
+    if (this._jumpFlash  > 0) this._jumpFlash -= dtScale;
+    if (this._buffer > 0)     this._buffer -= dtScale;
     if (this._holding) {
-      this._holdFrames++;
+      this._holdFrames += dtScale;
       if (this._holdFrames > E_JUMP_HOLD) this._holding = false;
     }
 
     // Gravity
-    this.vy = Math.min(this.vy + E_GRAVITY, 20);
-    this.y += this.vy;
+    this.vy = Math.min(this.vy + E_GRAVITY * dtScale, 20);
+    this.y += this.vy * dtScale;
 
     // Ground collision
     this.onGround = false;
@@ -2409,7 +2454,7 @@ class EndlessPlayer {
     } else if (this.onGround) {
       this._coyote = 0; this._dblUsed = false;
     } else if (this._coyote > 0) {
-      this._coyote--;
+      this._coyote -= dtScale;
     }
 
     // Landing
@@ -2575,7 +2620,7 @@ class EndlessParticle {
     this._ang  = Math.random() * Math.PI * 2;
     this._spin = (Math.random()-0.5) * 0.2;
   }
-  update() {
+  update(dt = 1 / 60) {
     this.x  += this.vx;
     this.y  += this.vy;
     this.vy += this.gravity;
@@ -2638,13 +2683,22 @@ class EndlessRunnerEngine {
     this._speed    = E_BASE_SPEED;
     this._age      = 0;
 
+    // Equipped items
+    this._equipped = progress ? progress.getEquipped() : {};
+    this._equippedEffects = progress?.getEquippedEffects?.() || {};
+    this._swordId  = this._equipped.sword || 'sword-basic';
+
     // Player
     this.player = new EndlessPlayer(this.groundY, this.H);
     this.player.x = Math.round(this.W * 0.28);
-
-    // Equipped items
-    this._equipped = progress ? progress.getEquipped() : {};
-    this._swordId  = this._equipped.sword || 'sword-basic';
+    if (this._equippedEffects.runnerDoubleJump) {
+      this.player.dblJump = true;
+      this.player._dblJumpT = 999999;
+    }
+    if (this._equippedEffects.starterShield) {
+      this._shieldActive = true;
+      this.player.shield = true;
+    }
 
     // World objects (all in screen-relative coords, managed as scrolling)
     this._platforms = [];  // { screenX, y, w, h }
@@ -2653,6 +2707,10 @@ class EndlessRunnerEngine {
     this._powerItems= [];  // { screenX, y, type, collected }
     this._pterodactyls = []; // { screenX, y, amplitude, phase, speed }
     this._gates     = [];  // { screenX, y, w, h, triggered }
+
+    // Object pools (reduce allocations on long endless sessions).
+    this._grainPool = [];
+    this._spikePool = [];
 
     // Chunk generation
     this._nextChunkX = this.W;   // screen X where next chunk starts
@@ -2664,6 +2722,7 @@ class EndlessRunnerEngine {
     // Scoring
     this.score    = 0;
     this.grains   = 0;  // rice grains collected this run
+    this._riceScoreMult = 1; // rises as grains are chained together
     this.combo    = 0;
     this.maxCombo = 0;
     this._perfectBlends = 0;
@@ -2697,7 +2756,8 @@ class EndlessRunnerEngine {
     this._slowTimer     = 0;
     this._dblJumpTimer  = 0;
     this._autoBlend     = false;
-    this._shieldActive  = false;
+    // Keep starter-shield state from equipped effects (set above) intact.
+    this._shieldActive  = !!this._equippedEffects.starterShield;
     this._activePowerup = null;
     this._powerupTimer  = 0;
 
@@ -2829,29 +2889,33 @@ class EndlessRunnerEngine {
     const d = Math.min(1, dist / 2000);
     const rand = Math.random();
 
-    if (this._chunksSinceHazard >= 2 && rand < 0.15 + d * 0.2) {
+    if (this._chunksSinceHazard >= 2 && rand < 0.12 + d * 0.18) {
       this._spawnGapChunk(x);
       this._chunksSinceHazard = 0;
-    } else if (rand < 0.2 + d * 0.15) {
+    } else if (rand < 0.2 + d * 0.12) {
       this._spawnPlatformChunk(x);
-    } else if (this._chunksSinceHazard >= 1 && rand < 0.35 + d * 0.15) {
+    } else if (this._chunksSinceHazard >= 1 && rand < 0.34 + d * 0.12) {
       this._spawnSpikeChunk(x);
       this._chunksSinceHazard = 0;
-    } else if (dist > 300 && rand < 0.3 + d * 0.2) {
+    } else if (dist > 300 && rand < 0.46 + d * 0.16) {
       this._spawnPteroChunk(x);
+    } else if (dist > 450 && rand < 0.63) {
+      this._spawnZigzagChunk(x);
+    } else if (dist > 650 && rand < 0.78) {
+      this._spawnStairChunk(x);
     } else {
       this._spawnSafeChunk(x);
     }
 
     // Maybe drop a power-up
-    if (Math.random() < 0.12) this._spawnPowerItem(x + E_CHUNK_W * 0.5, this.groundY - 80);
+    if (Math.random() < 0.14) this._spawnPowerItem(x + E_CHUNK_W * 0.5, this.groundY - 80);
 
     // Always scatter some grains
     const numGrains = 3 + Math.floor(Math.random() * 5);
     for (let i = 0; i < numGrains; i++) {
       const gx = x + 50 + Math.random() * (E_CHUNK_W - 100);
       const gy = this.groundY - 30 - Math.random() * 60;
-      this._grains.push({ screenX: gx, y: gy, r: 8, collected: false, wobble: Math.random() * Math.PI * 2 });
+      this._grains.push(this._acquireGrain(gx, gy, 8, Math.random() * Math.PI * 2));
     }
   }
 
@@ -2869,11 +2933,9 @@ class EndlessRunnerEngine {
   }
 
   _spawnGapChunk(x) {
-    // A gap in the ground — represented by a long slab on each side
+    // A gap in the ground — represented by pooled obstacle object.
     const gapW = 80 + Math.random() * 60;
-    // Visual hint: dark ground edges
-    this._spikes.push({ screenX: x + E_CHUNK_W*0.4, y: this.groundY - 20,
-                        w: gapW, h: 20 + this.H, type: 'gap', deadly: true });
+    this._spikes.push(this._acquireSpike(x + E_CHUNK_W * 0.4, this.groundY - 20, gapW, 20 + this.H, 'gap'));
   }
 
   _spawnSpikeChunk(x) {
@@ -2882,8 +2944,7 @@ class EndlessRunnerEngine {
     const spacing = 45;
     const startX = x + 100 + Math.random() * 100;
     for (let i = 0; i < numSpikes; i++) {
-      this._spikes.push({ screenX: startX + i * spacing, y: this.groundY - 26,
-                          w: 28, h: 26, type: 'spike', deadly: true });
+      this._spikes.push(this._acquireSpike(startX + i * spacing, this.groundY - 26, 28, 26, 'spike'));
     }
   }
 
@@ -2899,13 +2960,29 @@ class EndlessRunnerEngine {
     });
   }
 
+  _spawnZigzagChunk(x) {
+    for (let i = 0; i < 6; i++) {
+      const gy = this.groundY - 90 - (i % 2) * 70;
+      this._grains.push(this._acquireGrain(x + 120 + i * 80, gy, 8, i * 0.5));
+    }
+  }
+
+  _spawnStairChunk(x) {
+    for (let i = 0; i < 4; i++) {
+      const py = this.groundY - 48 - i * 35;
+      this._platforms.push({ screenX: x + 70 + i * 110, y: py, w: 92, h: 18 });
+      this._spawnGrainLine(x + 92 + i * 110, py - 18, 2, 26);
+    }
+  }
+
   _spawnGateChunk(x) {
     // DinoGate — triggers phonics battle
-    this._gates.push({
-      screenX: x + 250, y: this.groundY - 120,
-      w: 60, h: 120, triggered: false,
-      word: null, // populated when triggered
-    });
+    this._gates.push(new DinoGate(
+      x + 250,
+      this.groundY - 120,
+      60,
+      120,
+    ));
     // Clear hazards nearby
     this._spawnGrainLine(x + 80, this.groundY - 35, 6, 35);
   }
@@ -2913,8 +2990,40 @@ class EndlessRunnerEngine {
   _spawnGrainLine(startX, y, count, spacing) {
     for (let i = 0; i < count; i++) {
       const arcY = y - Math.sin((i / (count-1)) * Math.PI) * 30;
-      this._grains.push({ screenX: startX + i * spacing, y: arcY, r: 8, collected: false, wobble: i * 0.4 });
+      this._grains.push(this._acquireGrain(startX + i * spacing, arcY, 8, i * 0.4));
     }
+  }
+
+
+  _acquireGrain(screenX, y, r = 8, wobble = 0) {
+    const g = this._grainPool.pop() || { screenX:0, y:0, r:8, collected:false, wobble:0 };
+    g.screenX = screenX;
+    g.y = y;
+    g.r = r;
+    g.collected = false;
+    g.wobble = wobble;
+    return g;
+  }
+
+  _releaseGrain(g) {
+    if (!g) return;
+    g.collected = false;
+    this._grainPool.push(g);
+  }
+
+  _acquireSpike(screenX, y, w, h, type = 'spike') {
+    const s = this._spikePool.pop() || { screenX:0, y:0, w:0, h:0, type:'spike' };
+    s.screenX = screenX;
+    s.y = y;
+    s.w = w;
+    s.h = h;
+    s.type = type;
+    return s;
+  }
+
+  _releaseSpike(spike) {
+    if (!spike) return;
+    this._spikePool.push(spike);
   }
 
   _spawnPowerItem(screenX, y) {
@@ -2930,16 +3039,29 @@ class EndlessRunnerEngine {
     for (const g of this._grains)        g.screenX -= dx;
     for (const p of this._powerItems)    p.screenX -= dx;
     for (const p of this._pterodactyls)  p.screenX -= dx;
-    for (const g of this._gates)         g.screenX -= dx;
+    for (const g of this._gates)         g.scroll(dx);
     for (const c of this._clouds)        { c.x -= dx * c.speed * 0.2; if (c.x + c.w < 0) c.x = this.W + c.w; }
     for (const d of this._bgDecor)       { d.x -= dx * (0.3 + d.layer * 0.1); if (d.x < -100) d.x = this.W + 100; }
   }
 
   _cullOffscreen() {
     const margin = -150;
-    this._platforms    = this._platforms.filter(p => p.screenX + p.w > margin);
-    this._spikes       = this._spikes.filter(s => s.screenX + s.w > margin && s.screenX < this.W + 50);
-    this._grains       = this._grains.filter(g => !g.collected && g.screenX > margin);
+    this._platforms = this._platforms.filter(p => p.screenX + p.w > margin);
+
+    const nextSpikes = [];
+    for (const s of this._spikes) {
+      if (s.screenX + s.w > margin && s.screenX < this.W + 50) nextSpikes.push(s);
+      else this._releaseSpike(s);
+    }
+    this._spikes = nextSpikes;
+
+    const nextGrains = [];
+    for (const g of this._grains) {
+      if (!g.collected && g.screenX > margin) nextGrains.push(g);
+      else this._releaseGrain(g);
+    }
+    this._grains = nextGrains;
+
     this._powerItems   = this._powerItems.filter(p => !p.collected && p.screenX > margin);
     this._pterodactyls = this._pterodactyls.filter(p => !p.defeated && p.screenX + p.w > margin);
     this._gates        = this._gates.filter(g => !g.triggered && g.screenX + g.w > margin);
@@ -3060,26 +3182,27 @@ class EndlessRunnerEngine {
   }
 
   // ── Main update ──────────────────────────────────────────────
-  update() {
+  update(dt = 1 / 60) {
     if (this.done) return;
-    this._age++;
+    const dtScale = Math.max(0.5, Math.min(2.0, dt * 60));
+    this._age += dtScale;
 
     // Slow-mo management
-    if (this._slowTimer > 0) { this._slowTimer--; if (this._slowTimer <= 0) this._slowFactor = 1; }
-    if (this._magnetTimer > 0) this._magnetTimer--;
+    if (this._slowTimer > 0) { this._slowTimer -= dtScale; if (this._slowTimer <= 0) this._slowFactor = 1; }
+    if (this._magnetTimer > 0) this._magnetTimer -= dtScale;
     else this.player._magnet = 0;
-    if (this._powerupTimer > 0) this._powerupTimer--;
+    if (this._powerupTimer > 0) this._powerupTimer -= dtScale;
 
     // Escalate speed (affected by slow-mo)
-    const speedUp = E_SPEED_ACCEL * this._slowFactor;
+    const speedUp = E_SPEED_ACCEL * this._slowFactor * dtScale;
     this._speed   = Math.min(this._speed + speedUp, E_MAX_SPEED);
-    const dx = this._speed * this._slowFactor;
+    const dx = this._speed * this._slowFactor * dtScale;
 
     // Scroll world
     this._scrollAll(dx);
     this._worldX += dx;
     this._distM   = Math.round(this._worldX / 60);
-    this.score   += Math.round(dx * 0.5); // distance score
+    this.score   += Math.round(dx * (0.5 + Math.max(0, this._riceScoreMult - 1) * 0.2)); // distance score
 
     // Generate new chunks
     if (this._nextChunkX - this._worldX < this.W + E_CHUNK_W) {
@@ -3090,18 +3213,18 @@ class EndlessRunnerEngine {
     this._updateZone();
 
     // Update player physics (pass visible platforms)
-    this.player.update(this.groundY, this._platforms);
+    this.player.update(this.groundY, this._platforms, dtScale);
 
     // Combo timeout
-    if (this._comboTimeout > 0) this._comboTimeout--;
-    if (this._comboScale > 1) this._comboScale = Math.max(1, this._comboScale - 0.05);
-    if (this._comboAlpha > 0) this._comboAlpha = Math.max(0, this._comboAlpha - 0.003);
+    if (this._comboTimeout > 0) this._comboTimeout -= dtScale;
+    if (this._comboScale > 1) this._comboScale = Math.max(1, this._comboScale - 0.05 * dtScale);
+    if (this._comboAlpha > 0) this._comboAlpha = Math.max(0, this._comboAlpha - 0.003 * dtScale);
 
     // Screen shake
-    if (this._shake > 0) this._shake--;
+    if (this._shake > 0) this._shake -= dtScale;
 
     // Zone flash
-    if (this._zoneFlash > 0) this._zoneFlash--;
+    if (this._zoneFlash > 0) this._zoneFlash -= dtScale;
 
     // Particles
     for (const p of this._particles) p.update();
@@ -3157,7 +3280,9 @@ class EndlessRunnerEngine {
       if (Math.sqrt(dx*dx+dy*dy) < pw*0.55 + g.r) {
         g.collected = true;
         this.grains++;
-        this.score += 50;
+        this._riceScoreMult = Math.min(3.5, 1 + this.grains * 0.025);
+        this.score += Math.round(50 * this._riceScoreMult);
+        this.progress?.addRiceGrains?.(1);
         if (this.audio) this.audio.sfxCoin();
         this._particles.push(new EndlessParticle(g.screenX, g.y, { color:'#FFD700', type:'star', r:5, vy:-3, decay:0.05 }));
       }
@@ -3218,7 +3343,7 @@ class EndlessRunnerEngine {
         this._inBattle = true;
         const wordPool = PHONICS_DATA.getEndlessWords(this._distM);
         const word = wordPool[Math.floor(Math.random() * wordPool.length)];
-        this._pendingGateData = { word, autoBlend: this._autoBlend };
+        this._pendingGateData = { word, autoBlend: this._autoBlend, slowMoBonus: this._slowTimer > 0 ? 1.5 : 0 };
         this._autoBlend = false;
         this.done    = true;
         this.outcome = 'gate';
@@ -3498,14 +3623,14 @@ class EndlessRunnerEngine {
     ctx.shadowColor = 'rgba(255,193,7,0.7)';
     ctx.shadowBlur = 10;
     ctx.fillStyle = 'rgba(40,20,0,0.38)';
-    ctx.roundRect(8, 6, 180, 34, 10);
+    ctx.roundRect(8, 6, 242, 34, 10);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.font = `bold ${fontSize}px Arial Black, sans-serif`;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#FFD700';
     ctx.fillText('🌾', 8, 12);
-    ctx.fillText(this.grains, 32, 14);
+    ctx.fillText(`${this.grains}  x${this._riceScoreMult.toFixed(1)}`, 32, 14);
 
     // ── Distance ──────────────────────────────────────────────
     ctx.textAlign = 'center';

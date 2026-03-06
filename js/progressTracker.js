@@ -210,6 +210,10 @@ class ProgressTracker {
     return d.toISOString().slice(0, 10);
   }
 
+
+  shouldShowTutorial() { return !this.data.tutorialCompleted; }
+  markTutorialComplete() { this.data.tutorialCompleted = true; this._save(); }
+
   // ── Currency ─────────────────────────────────────────────────
   getRiceGrains()      { return this.data.riceGrains || 0; }
   getRicePoints()      { return this.getRiceGrains(); }
@@ -268,6 +272,36 @@ class ProgressTracker {
       sword: this.data.equippedSword || 'sword-basic',
       hat:   this.data.equippedHat   || 'hat-none',
       comp:  this.data.equippedComp  || 'comp-none',
+    };
+  }
+
+
+  // Resolve equipped item effects into concrete gameplay modifiers.
+  getEquippedEffects() {
+    const eq = this.getEquipped();
+
+    const swordDamageMult = {
+      'sword-basic': 1.0,
+      'sword-golden': 1.08,
+      'sword-fire': 1.14,
+      'sword-ice': 1.14,
+      'sword-thunder': 1.2,
+      'sword-rainbow': 1.28,
+    }[eq.sword] || 1.0;
+
+    const companionEffects = {
+      'comp-none':      { starterShield: false, battleMercy: 0, comboBonus: 0 },
+      'comp-baby-rex':  { starterShield: true,  battleMercy: 0, comboBonus: 0 },
+      'comp-duck':      { starterShield: false, battleMercy: 0, comboBonus: 0.05 },
+      'comp-koi':       { starterShield: false, battleMercy: 1, comboBonus: 0 },
+      'comp-panda':     { starterShield: false, battleMercy: 2, comboBonus: 0 },
+    }[eq.comp] || { starterShield:false, battleMercy:0, comboBonus:0 };
+
+    return {
+      swordDamageMult,
+      // Hat-mushroom grants permanent double-jump in runner modes.
+      runnerDoubleJump: eq.hat === 'hat-mushroom',
+      ...companionEffects,
     };
   }
 
