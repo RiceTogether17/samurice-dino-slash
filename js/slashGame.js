@@ -328,6 +328,12 @@ class SlashGame {
     };
     this.canvas.addEventListener('click', this._canvasClick);
     this.canvas.addEventListener('touchstart', this._canvasTap, { passive: true });
+
+    // ── Page Visibility auto-pause ──────────────────────────
+    this._visibilityHandler = () => {
+      if (document.hidden) this._autoPauseOnHidden();
+    };
+    document.addEventListener('visibilitychange', this._visibilityHandler);
   }
   _handleCanvasClick(mx, my) {
     // ── Paused overlay touch targets ───────────────────────────
@@ -639,8 +645,32 @@ class SlashGame {
     document.removeEventListener('keydown', this._menuKd);
     this.canvas.removeEventListener('click', this._canvasClick);
     this.canvas.removeEventListener('touchstart', this._canvasTap);
+    if (this._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityHandler = null;
+    }
     cancelAnimationFrame(this._rafId);
   }
+  // ── Auto-pause when page becomes hidden ──────────────────────
+  _autoPauseOnHidden() {
+    const s = this.state;
+    const isGameplay = s === 'runner' || s === 'battle' || s === 'endless-runner' || s === 'endless-battle';
+    if (!isGameplay) return;
+    if (s === 'runner' && this.runner && !this.runner._paused) {
+      this.runner._paused = true;
+      this.runner._stopBlendTimer?.();
+    }
+    if (s === 'battle' && this.battle && !this.battle._paused) {
+      this.battle._paused = true;
+      this.battle._stopBlendTimer?.();
+    }
+    if (s === 'endless-runner' && this.endlessRunner && !this.endlessRunner._paused) {
+      this.endlessRunner._paused = true;
+    }
+    // endless-battle has no explicit pause but its timer is performance.now() based;
+    // nothing more to do — user must manually resume via pause button.
+  }
+
   // ── MAIN LOOP ─────────────────────────────────────────────────
   _loop() {
     this._rafId = requestAnimationFrame(this._loop);
