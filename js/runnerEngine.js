@@ -26,7 +26,7 @@ const R_ACCEL      = 0.55;  // px/frame² acceleration
 const R_MAX_SPD    = 6.0;   // max run speed
 const R_FRICTION   = 0.78;  // velocity multiplier when no key held
 const R_BOOST_DUR  = 240;   // frames of speed boost after full-word collect
-const R_COIN_R     = 28;    // coin collision radius
+const R_COIN_R     = 34;    // coin collision radius
 const R_LEVEL_W    = 7800;  // world width per level (px)
 const R_WORDS_PER_STAGE = 8; // words shown in each runner level
 
@@ -1075,8 +1075,8 @@ class PowerUpItem {
 class FlyingEnemy {
   constructor(worldX, worldY, sprite = null) {
     this.worldX   = worldX;
-    this.w        = 100;
-    this.h        = 80;
+    this.w        = 150;
+    this.h        = 120;
     this._baseY   = worldY;
     this.worldY   = worldY;
     this.vx       = -1.4;
@@ -1425,11 +1425,11 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   const groundY    = canvasH - R_GROUND_H;
   const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
   const difficulty = stageData.id - 1;             // 0-5
-  const minionSp   = sprites && sprites['minion-dino'];
+  const minionSp   = sprites && (sprites['dino-minion'] || sprites['minion-dino']);
   const flyingSp   = sprites && sprites['flying-enemy'];
   const springSp   = sprites && sprites['spring-pad'];
   const checkpointSp = sprites && sprites['checkpoint-flag'];
-  const minionSize = Math.max(96, Math.round(canvasH * 0.22));
+  const minionSize = Math.max(110, Math.round(canvasH * 0.28));
   const items      = {
     platforms: [], coins: [], minions: [], flag: null,
     movingPlatforms: [], questionBlocks: [], powerUps: [], flyingEnemies: [],
@@ -2282,7 +2282,7 @@ class RunnerEngine {
       ctx.beginPath(); ctx.roundRect(bx, by, bw * pct, 14, 4); ctx.fill();
 
       ctx.fillStyle   = '#fff';
-      ctx.font        = 'bold 12px "Comic Sans MS", system-ui';
+      ctx.font        = 'bold 15px "Comic Sans MS", system-ui';
       ctx.textAlign   = 'center';
       ctx.fillText(p.powerUp === 'chili' ? '🌶️ CHILI RUSH!' : '⚡ BLEND BOOST!',
         this.W / 2, by - 7);
@@ -2302,10 +2302,10 @@ class RunnerEngine {
     }
 
     // ── Stage label (bottom-left)
-    ctx.font      = '12px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font      = 'bold 16px "Comic Sans MS", system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.textAlign = 'left';
-    ctx.fillText(`Stage ${this.stage.id}: ${this.stage.name}`, 10, this.H - R_GROUND_H - 10);
+    ctx.fillText(`Stage ${this.stage.id}: ${this.stage.name}`, 12, this.H - R_GROUND_H - 12);
 
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign    = 'left';

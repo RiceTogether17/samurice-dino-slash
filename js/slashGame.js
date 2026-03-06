@@ -86,7 +86,7 @@ const SLASH_SPRITES = {
 const CRITICAL_SPRITE_KEYS = new Set([
   'riku-idle', 'riku-walk-1', 'riku-walk-2', 'riku-walk-3', 'riku-walk-4',
   'riku-run', 'riku-jump', 'riku-jump-1', 'riku-hurt', 'riku-victory',
-  'minion-dino',
+  'minion-dino', 'dino-minion',
   'stage-1-rex', 'stage-1-tri', 'stage-2-rapi', 'stage-2-stego',
   'stage-3-brachio', 'stage-3-ptera', 'stage-4-anky', 'stage-5-spino',
   'stage-5-pachy', 'stage-6-dilo',
@@ -1443,9 +1443,9 @@ class SlashGame {
     ctx.clearRect(0, 0, W, H);
     // Animated gradient background
     const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, `hsl(${220 + Math.sin(t*0.01)*15},70%,${15 + Math.sin(t*0.008)*5}%)`);
-    sky.addColorStop(0.6, `hsl(${200 + Math.sin(t*0.012)*10},60%,${35 + Math.sin(t*0.01)*5}%)`);
-    sky.addColorStop(1, `hsl(${130 + Math.sin(t*0.015)*10},50%,${20 + Math.sin(t*0.009)*3}%)`);
+    sky.addColorStop(0, `hsl(${210 + Math.sin(t*0.01)*10},65%,${55 + Math.sin(t*0.008)*8}%)`);
+    sky.addColorStop(0.5, `hsl(${35 + Math.sin(t*0.012)*10},75%,${60 + Math.sin(t*0.01)*5}%)`);
+    sky.addColorStop(1, `hsl(${130 + Math.sin(t*0.015)*10},60%,${35 + Math.sin(t*0.009)*5}%)`);
     ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
     // Stars
     for (let i = 0; i < 20; i++) {
@@ -1458,21 +1458,21 @@ class SlashGame {
     }
     ctx.globalAlpha = 1;
     // Ground strip
-    ctx.fillStyle = '#2a5a18';
+    ctx.fillStyle = '#3d9a3a';
     ctx.fillRect(0, H * 0.78, W, H * 0.22);
-    ctx.fillStyle = '#3d7a2a';
+    ctx.fillStyle = '#55c850';
     ctx.fillRect(0, H * 0.78, W, 8);
     // Animated dinos running in background
-    const dinoEmojis = ['🦖','🦕','🦴'];
-    for (let d = 0; d < 3; d++) {
-      const dx = ((t * (1.2 + d*0.4) + d * W/3) % (W + 80)) - 80;
-      ctx.font = `${H*0.09}px serif`;
+    const dinoEmojis = ['🦖','🦕','🦴','🍚','🌾'];
+    for (let d = 0; d < 5; d++) {
+      const dx = ((t * (1.0 + d*0.35) + d * W/5) % (W + 100)) - 100;
+      ctx.font = `${H*0.11}px serif`;
       ctx.textBaseline = 'middle';
-      ctx.fillText(dinoEmojis[d % dinoEmojis.length], dx, H * 0.83);
+      ctx.fillText(dinoEmojis[d % dinoEmojis.length], dx, H * 0.84 + Math.sin(t * 0.04 + d) * 6);
     }
     // ── Title logo ────────────────────────────────────────────
-    const titleY = H * 0.12;
-    const titleSize = Math.min(W * 0.09, 42);
+    const titleY = H * 0.08;
+    const titleSize = Math.min(W * 0.11, 52);
     // Shimmer effect
     ctx.save();
     const shimmer = ctx.createLinearGradient(0, titleY, W, titleY + 80);
@@ -1499,13 +1499,13 @@ class SlashGame {
     ctx.fillText('DINO SLASH 🦖', W/2, titleY + titleSize * 1.4 + bounce);
     ctx.restore();
     // Subtitle: Phonics Power!
-    ctx.textAlign = 'center'; ctx.font = `bold ${Math.min(16, W*0.038)}px Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.font = `bold ${Math.min(20, W*0.045)}px Arial, sans-serif`;
     ctx.fillStyle = '#4ECDC4';
-    ctx.fillText('PHONICS POWER · SLASH DINOS · SAVE THE RICE PADDY', W/2, titleY + titleSize * 2.6 + bounce);
+    ctx.fillText('LEARN TO READ · SLASH DINOS · SAVE THE RICE PADDY!', W/2, titleY + titleSize * 2.6 + bounce);
     // ── Riku character (procedural) ─────────────────────────────
-    const rikuX = W * 0.5, rikuY = H * 0.45;
-    const rikuBounce = Math.sin(t * 0.06) * 8;
-    const rikuSize = Math.min(W * 0.38, 200);
+    const rikuX = W * 0.5, rikuY = H * 0.43;
+    const rikuBounce = Math.sin(t * 0.06) * 10;
+    const rikuSize = Math.min(W * 0.48, 280);
     const titleRiku = this.sprites['riku-idle'] || this.sprites['riku-run'];
     if (titleRiku && titleRiku.complete && titleRiku.naturalWidth > 0) {
       const ar = titleRiku.naturalWidth / titleRiku.naturalHeight;
@@ -1519,19 +1519,20 @@ class SlashGame {
     const blinkAlpha = 0.5 + 0.5 * Math.sin(t * 0.08);
     ctx.globalAlpha = blinkAlpha;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `bold ${Math.min(28, W*0.065)}px Arial Black, sans-serif`;
+    const tapSize = Math.min(36, W * 0.08);
+    ctx.font = `bold ${tapSize}px Arial Black, sans-serif`;
     ctx.fillStyle = '#FFD700';
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
-    ctx.strokeText('TAP TO PLAY!', W/2, H * 0.72);
-    ctx.fillText('TAP TO PLAY!', W/2, H * 0.72);
+    ctx.strokeStyle = '#5a2000'; ctx.lineWidth = 6;
+    ctx.strokeText('TAP TO PLAY!', W/2, H * 0.74);
+    ctx.fillText('TAP TO PLAY!', W/2, H * 0.74);
     ctx.globalAlpha = 1;
     // ── Rice grains / login streak info bottom ────────────────
     const g = this.progress.getRiceGrains();
     const streak = this.progress.getLoginStreak();
     ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-    ctx.font = `bold ${Math.min(15,W*0.036)}px Arial, sans-serif`;
+    ctx.font = `bold ${Math.min(20,W*0.048)}px Arial, sans-serif`;
     ctx.fillStyle = '#FFD700';
-    ctx.fillText(`🌾 ${g}`, 12, H - 10);
+    ctx.fillText(`🌾 ${g}`, 14, H - 10);
     if (streak > 1) {
       ctx.textAlign = 'right';
       ctx.fillStyle = '#FF8C00';

@@ -9,7 +9,7 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-    background: #2d6a1f;
+    background: #2d8a4e;
     font-family: 'Comic Sans MS', system-ui, sans-serif;
     text-align: center;
     color: #333;
@@ -31,30 +31,39 @@ body {
 
 
 /* ============================================================
-   MODE CHOOSER  — full-screen vibrant layout, no white card
+   MODE CHOOSER  — bright, warm, kid-friendly layout
 ============================================================ */
 #modeChooser {
     background:
-        radial-gradient(ellipse at 30% 20%, rgba(90,180,60,0.35) 0%, transparent 55%),
-        radial-gradient(ellipse at 75% 80%, rgba(30,100,20,0.5) 0%, transparent 55%),
-        linear-gradient(160deg, #0d2b08 0%, #1a4a0f 45%, #2d6a1f 100%);
+        radial-gradient(ellipse at 20% 10%, rgba(255,220,100,0.4) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 90%, rgba(255,140,50,0.3) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(255,255,200,0.15) 0%, transparent 60%),
+        linear-gradient(160deg, #1a6b3a 0%, #2d8a4e 35%, #44a864 70%, #3d9a55 100%);
     flex-direction: column;
     gap: 0;
     overflow: hidden;
 }
 
-/* Decorative floating rice particles (pure CSS, no JS) */
+/* Decorative floating sparkles */
 #modeChooser::before {
     content: '';
     position: absolute;
     inset: 0;
     background-image:
-        radial-gradient(circle 2px at 15% 25%, rgba(255,215,0,0.35) 100%, transparent),
-        radial-gradient(circle 2px at 80% 15%, rgba(255,215,0,0.25) 100%, transparent),
-        radial-gradient(circle 2px at 50% 70%, rgba(255,215,0,0.2)  100%, transparent),
-        radial-gradient(circle 2px at 25% 80%, rgba(255,215,0,0.3)  100%, transparent),
-        radial-gradient(circle 2px at 90% 55%, rgba(255,215,0,0.15) 100%, transparent);
+        radial-gradient(circle 3px at 15% 25%, rgba(255,230,100,0.55) 100%, transparent),
+        radial-gradient(circle 4px at 80% 15%, rgba(255,215,0,0.45)  100%, transparent),
+        radial-gradient(circle 3px at 50% 70%, rgba(255,255,200,0.4) 100%, transparent),
+        radial-gradient(circle 4px at 25% 80%, rgba(255,215,0,0.5)   100%, transparent),
+        radial-gradient(circle 3px at 90% 55%, rgba(255,230,100,0.35) 100%, transparent),
+        radial-gradient(circle 2px at 45% 15%, rgba(255,255,255,0.5) 100%, transparent),
+        radial-gradient(circle 2px at 70% 45%, rgba(255,255,255,0.4) 100%, transparent),
+        radial-gradient(circle 2px at 10% 60%, rgba(255,255,255,0.35) 100%, transparent);
     pointer-events: none;
+    animation: sparkleFloat 6s ease-in-out infinite alternate;
+}
+@keyframes sparkleFloat {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(-8px); }
 }
 
 .mc-hero {
@@ -64,29 +73,31 @@ body {
 }
 
 .mc-mascot {
-    height: clamp(120px, 28vh, 220px);
+    height: clamp(160px, 35vh, 300px);
     object-fit: contain;
-    filter: drop-shadow(0 6px 20px rgba(0,0,0,0.5));
+    filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5));
     animation: mascotBounce 2.2s ease-in-out infinite;
     display: block;
-    margin: 0 auto 10px;
+    margin: 0 auto 12px;
 }
 @keyframes mascotBounce {
-    0%, 100% { transform: translateY(0) rotate(-2deg); }
-    50%       { transform: translateY(-10px) rotate(2deg); }
+    0%, 100% { transform: translateY(0) rotate(-3deg) scale(1); }
+    50%       { transform: translateY(-14px) rotate(3deg) scale(1.03); }
 }
 
 .mc-title {
-    font-size: clamp(2.4rem, 10vw, 3.8rem);
-    color: #FFD700;
+    font-size: clamp(2.6rem, 11vw, 4rem);
+    color: #fff;
     text-shadow:
-        0 4px 0 #7f5700,
-        0 0 24px rgba(255,180,0,0.7),
-        0 0 50px rgba(255,120,0,0.4);
+        0 4px 0 #b85400,
+        0 0 20px rgba(255,200,50,0.8),
+        0 0 50px rgba(255,150,0,0.5),
+        0 0 80px rgba(255,100,0,0.3);
     animation: titleBounce 2.4s ease-in-out infinite;
     margin-bottom: 10px;
     line-height: 1.15;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.04em;
+    -webkit-text-stroke: 1px rgba(180,80,0,0.3);
 }
 @keyframes titleBounce {
     0%, 100% { transform: translateY(0) scale(1); }
@@ -94,20 +105,20 @@ body {
 }
 
 .mc-sub {
-    color: rgba(255,255,255,0.85);
-    font-size: clamp(1rem, 3.5vw, 1.3rem);
-    letter-spacing: 0.03em;
-    text-shadow: 0 2px 6px rgba(0,0,0,0.65);
+    color: #FFECB3;
+    font-size: clamp(1.05rem, 3.5vw, 1.35rem);
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.55);
     font-weight: bold;
 }
 
 .mc-buttons {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding: 10px 18px 28px;
+    gap: 18px;
+    padding: 10px 20px 32px;
     width: 100%;
-    max-width: 500px;
+    max-width: 520px;
     margin: 0 auto;
     flex: 1;
     justify-content: center;
@@ -142,12 +153,20 @@ body {
 .mc-btn:active { transform: translateY(5px);  box-shadow: 0 3px 0 rgba(0,0,0,0.4); }
 
 .slash-btn {
-    background: linear-gradient(135deg, #ff7043 0%, #e53935 100%);
+    background: linear-gradient(135deg, #FF6B35 0%, #FF4444 50%, #E53935 100%);
     color: #fff;
+    border-color: rgba(255,200,150,0.5);
+}
+.slash-btn:hover {
+    background: linear-gradient(135deg, #FF8A5C 0%, #FF5555 50%, #EF4444 100%);
 }
 .flap-btn {
-    background: linear-gradient(135deg, #42a5f5 0%, #1565c0 100%);
+    background: linear-gradient(135deg, #4FC3F7 0%, #2196F3 50%, #1976D2 100%);
     color: #fff;
+    border-color: rgba(150,210,255,0.5);
+}
+.flap-btn:hover {
+    background: linear-gradient(135deg, #6BD4FF 0%, #42A5F5 50%, #2196F3 100%);
 }
 
 .mc-icon {
@@ -1076,12 +1095,12 @@ body {
     .mc-buttons { padding: 8px 12px 20px; gap: 10px; }
 }
 @media (orientation: landscape) and (max-height: 500px) {
-    .mc-hero    { padding: 10px 20px 6px; }
-    .mc-mascot  { height: clamp(80px, 18vh, 140px); }
-    .mc-title   { font-size: 1.8rem; animation: none; }
-    .mc-buttons { padding: 6px 16px 14px; gap: 8px; }
-    .mc-btn     { padding: 16px 20px; border-radius: 20px; }
-    .mc-icon    { font-size: 2.4rem; }
+    .mc-hero    { padding: 8px 20px 4px; }
+    .mc-mascot  { height: clamp(90px, 22vh, 160px); }
+    .mc-title   { font-size: 2rem; }
+    .mc-buttons { padding: 4px 16px 10px; gap: 10px; }
+    .mc-btn     { padding: 18px 22px; border-radius: 22px; }
+    .mc-icon    { font-size: 2.6rem; }
 }
 
 /* ============================================================
@@ -1270,9 +1289,10 @@ body {
 /* ── Mode chooser — updated hero & button styles ─────────── */
 #modeChooser {
     background:
-        radial-gradient(ellipse at 30% 20%, rgba(90,180,60,0.35) 0%, transparent 55%),
-        radial-gradient(ellipse at 75% 80%, rgba(30,100,20,0.5) 0%, transparent 55%),
-        linear-gradient(160deg, #0d2b08 0%, #1a4a0f 45%, #2d6a1f 100%);
+        radial-gradient(ellipse at 20% 10%, rgba(255,220,100,0.4) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 90%, rgba(255,140,50,0.3) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(255,255,200,0.15) 0%, transparent 60%),
+        linear-gradient(160deg, #1a6b3a 0%, #2d8a4e 35%, #44a864 70%, #3d9a55 100%);
 }
 
 /* ── Enhanced battle overlay for campaign mode ───────────── */
