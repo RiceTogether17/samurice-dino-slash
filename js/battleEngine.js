@@ -5,8 +5,6 @@
 // - Added speech-synthesis tile pronunciation on hover/click.
 // - Added live tile feedback flashes (correct/incorrect) + colour-coded tiles.
 // - Added streak multiplier + speed/accuracy based slash-type scoring.
-// Step 4 (Progression & Content): equipped shop effects now influence
-// battle damage and companion safety perks; exposes run accuracy stats.
 // ============================================================
 // BATTLE ENGINE — js/battleEngine.js
 // One-word-at-a-time phonics combat.
@@ -391,7 +389,7 @@ class BattleEngine {
   // ── Adaptive queue: weak phonemes get served earlier ─────────────────
   _buildAdaptiveWordQueue() {
     const words = [...(this.stage.words || [])];
-    const weakMap = this.progress?.getWeakPhonemes?.(this.stage.id) || this.progress?.getWeakSounds?.(this.stage.id) || {};
+    const weakMap = this.progress?.getWeakPhonemes?.(this.stage.id) || {};
     const scored = words.map(w => ({ word: w, score: this._getWordWeaknessScore(w, weakMap) + Math.random() * 0.35 }));
     scored.sort((a, b) => b.score - a.score);
     return scored.map(x => x.word);
@@ -408,8 +406,8 @@ class BattleEngine {
     const u = new SpeechSynthesisUtterance(phoneme);
     u.rate = 0.86;
     u.pitch = 1.12;
-    // Avoid interrupting long instructional speech if already speaking.
-    if (!window.speechSynthesis.speaking) window.speechSynthesis.speak(u);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
   }
 
   // ── Visual tile categories (colour-coded phonics groups) ─────────────
@@ -442,8 +440,7 @@ class BattleEngine {
     }
 
     // keep pressure but lighter than full-word failure
-    const pokeRaw = Math.max(2, Math.floor(this.stage.bossAttack * 0.12));
-    const pokeDmg = this._applyIncomingDamage(pokeRaw, 'tile-wrong');
+    const pokeDmg = Math.max(2, Math.floor(this.stage.bossAttack * 0.12));
     this.rikuHp = Math.max(0, this.rikuHp - pokeDmg);
     this._rikuShake = 5;
     this._currentBuilt = [];
@@ -452,34 +449,6 @@ class BattleEngine {
     this._renderCurrentWordTiles();
     this._renderBlanks();
     if (this.rikuHp <= 0) this._lose();
-  }
-
-
-  _applyIncomingDamage(baseDmg, label = 'blocked') {
-    // Starter shield from companion blocks one incoming hit.
-    if (this._starterShield) {
-      this._starterShield = false;
-      this.damagePops.push(new DamagePop(Math.round(this.W * 0.24), Math.round(this.H * 0.30), '🛡️ BLOCK!', '#80D8FF'));
-      this._setFeedback('🛡️ Companion shield blocked the hit!', '#80D8FF');
-      return 0;
-    }
-    // Companion mercy grants a few free mistakes before HP damage.
-    if (this._companionMercy > 0) {
-      this._companionMercy--;
-      this.damagePops.push(new DamagePop(Math.round(this.W * 0.24), Math.round(this.H * 0.33), '🐾 SAVE!', '#C5E1A5'));
-      this._setFeedback('🐾 Companion helped! No damage this time.', '#C5E1A5');
-      return 0;
-    }
-    return baseDmg;
-  }
-
-  _getSwordDamageMult() {
-    return this._equippedEffects.swordDamageMult || 1;
-  }
-
-  getAccuracyPercent() {
-    if (this._attemptedBlends <= 0) return 100;
-    return Math.max(0, Math.min(100, Math.round((this._correctBlends / this._attemptedBlends) * 100)));
   }
 
   // ── Wrong order: let player try again ────────────────────────
@@ -608,7 +577,7 @@ class BattleEngine {
     const timeBonus = Math.max(0, this._blendTimeLeft / BLEND_TIME);
     const accuracyPct = this._attemptedBlends > 0 ? (this._correctBlends / this._attemptedBlends) : 1;
     // Streak multiplier grows steadily for clean chains.
-    const streakMult = 1 + Math.min(this._streak, 8) * 0.12 + (this._equippedEffects.comboBonus || 0);
+    const streakMult = 1 + Math.min(this._streak, 8) * 0.12;
     // Phase damage multiplier — reward surviving to later boss phases
     const phaseMult = this._bossPhase === 3 ? 1.2 :
                       this._bossPhase === 2 ? 1.1 : 1.0;
@@ -619,8 +588,7 @@ class BattleEngine {
     if (timeBonus > 0.72 && accuracyPct >= 0.85) { slashType = '⚡ Speed Slash'; slashMult = 1.28; }
     if (timeBonus > 0.82 && accuracyPct >= 0.93) { slashType = '🌈 Precision Slash'; slashMult = 1.45; }
 
-    const swordMult = this._getSwordDamageMult();
-    const damage = Math.floor(wordObj.damage * streakMult * (0.72 + timeBonus * 0.28) * phaseMult * slashMult * swordMult);
+    const damage = Math.floor(wordObj.damage * streakMult * (0.72 + timeBonus * 0.28) * phaseMult * slashMult);
 
     this._combo++;
     this._streak++;

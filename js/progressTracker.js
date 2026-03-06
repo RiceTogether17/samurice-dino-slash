@@ -2,8 +2,6 @@
 // === CHANGE LOG ===
 // Step 2 (Phonics & Battle System): added weak-phoneme tracking so
 // battle word selection can adapt to learner needs over time.
-// Step 4 (Progression & Content): shop equipment now exposes real gameplay
-// effects (sword damage, double-jump, companion perks) for engines to consume.
 // ============================================================
 // PROGRESS TRACKER — js/progressTracker.js
 // All player progress, shop, achievements, daily challenges.
@@ -136,7 +134,6 @@ class ProgressTracker {
       bestCombo: 0,
       totalRunDistance: 0,
       weakPhonemesByStage: {},
-      tutorialCompleted: false,
     };
   }
 
@@ -169,7 +166,6 @@ class ProgressTracker {
     if (typeof d.totalRunDistance !== 'number') d.totalRunDistance = 0;
     if (typeof d.totalPerfectBlends !== 'number') d.totalPerfectBlends = 0;
     if (!d.weakPhonemesByStage || typeof d.weakPhonemesByStage !== 'object') d.weakPhonemesByStage = {};
-    if (typeof d.tutorialCompleted !== 'boolean') d.tutorialCompleted = false;
     Object.keys(d.stages || {}).forEach(id => {
       const st = d.stages[id] || (d.stages[id] = this._freshStage(false));
       if (!st.mastery || typeof st.mastery !== 'object') st.mastery = { noHit:false, speedClear:false, bestClearSec:null };
@@ -331,15 +327,6 @@ class ProgressTracker {
 
   // ── Blend stats ───────────────────────────────────────────────
   recordBlend(stageId, word, success, isPerfect = false, phonemes = []) {
-    // Merge-compat: allow object signature recordBlend({ stageId, word, success, isPerfect, phonemes }).
-    if (typeof stageId === 'object' && stageId !== null) {
-      const payload = stageId;
-      stageId = payload.stageId;
-      word = payload.word;
-      success = payload.success;
-      isPerfect = payload.isPerfect || false;
-      phonemes = payload.phonemes || [];
-    }
     if (stageId && this.data.stages[stageId]) {
       const s = this.data.stages[stageId];
       s.totalBlends++;
@@ -385,11 +372,6 @@ class ProgressTracker {
   getWeakPhonemes(stageId) {
     const key = String(stageId || '');
     return { ...(this.data.weakPhonemesByStage?.[key] || {}) };
-  }
-
-  // Merge-compat alias used by some battle-selection implementations.
-  getWeakSounds(stageId) {
-    return this.getWeakPhonemes(stageId);
   }
 
 
