@@ -587,7 +587,7 @@ class PhonemeCoin {
     // Phoneme text — scaled to coin radius
     const text   = this.phoneme.toUpperCase();
     const fsize  = text.length > 2 ? Math.round(r * 0.5) : text.length > 1 ? Math.round(r * 0.62) : Math.round(r * 0.72);
-    ctx.font        = `bold ${fsize}px "Comic Sans MS", system-ui, sans-serif`;
+    ctx.font        = `bold ${fsize}px "Nunito", "Comic Sans MS", system-ui, sans-serif`;
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle   = '#5D4037';
@@ -953,7 +953,7 @@ class QuestionBlock {
 
     // Question mark or empty
     if (!this.hit) {
-      ctx.font        = `bold ${Math.round(h * 0.58 + pulse * h)}px "Comic Sans MS", system-ui`;
+      ctx.font        = `bold ${Math.round(h * 0.58 + pulse * h)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.textAlign   = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle   = '#fff';
@@ -1372,7 +1372,7 @@ class RunnerParticle {
     ctx.globalAlpha = Math.max(0, this.life);
     ctx.translate(this.x, this.y);
     ctx.scale(this.scale, this.scale);
-    ctx.font        = 'bold 18px "Comic Sans MS", system-ui';
+    ctx.font        = 'bold 18px "Nunito", "Comic Sans MS", system-ui';
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
@@ -2230,7 +2230,7 @@ class RunnerEngine {
 
     // ── Timer (top-center)
     const urgent = this.timeLeft < 15;
-    ctx.font        = `bold ${urgent ? '26px' : '22px'} "Comic Sans MS", system-ui`;
+    ctx.font        = `bold ${urgent ? '26px' : '22px'} "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle   = urgent ? '#FF5252' : '#FFFFFF';
     ctx.textAlign   = 'center';
     ctx.shadowColor = urgent ? '#FF000088' : 'rgba(0,0,0,0.8)';
@@ -2240,7 +2240,7 @@ class RunnerEngine {
     ctx.shadowBlur  = 0;
 
     // ── Score (top-center, below timer)
-    ctx.font      = `bold 13px "Comic Sans MS", system-ui`;
+    ctx.font      = `bold 13px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 2;
     ctx.fillText(`⭐ ${this.score.toLocaleString()}`, this.W / 2, 38);
@@ -2249,13 +2249,13 @@ class RunnerEngine {
     // ── Coins collected (top-right)
     const total     = this.coins.length;
     const collected = this.coins.filter(c => c.collected).length;
-    ctx.font      = 'bold 16px "Comic Sans MS", system-ui';
+    ctx.font      = 'bold 16px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'right';
     ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 3;
     ctx.fillText(`🪙 ${collected}/${total}`, this.W - 12, 14);
     // Lives remaining
-    ctx.font      = '14px "Comic Sans MS", system-ui';
+    ctx.font      = '14px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = '#fff';
     ctx.fillText(`✕${this.lives} 🍙`, this.W - 12, 34);
     ctx.shadowBlur  = 0;
@@ -2282,7 +2282,7 @@ class RunnerEngine {
       ctx.beginPath(); ctx.roundRect(bx, by, bw * pct, 14, 4); ctx.fill();
 
       ctx.fillStyle   = '#fff';
-      ctx.font        = 'bold 15px "Comic Sans MS", system-ui';
+      ctx.font        = 'bold 15px "Nunito", "Comic Sans MS", system-ui';
       ctx.textAlign   = 'center';
       ctx.fillText(p.powerUp === 'chili' ? '🌶️ CHILI RUSH!' : '⚡ BLEND BOOST!',
         this.W / 2, by - 7);
@@ -2293,7 +2293,7 @@ class RunnerEngine {
       const pulse = 0.8 + 0.2 * Math.sin(this._age * 0.25);
       ctx.save();
       ctx.globalAlpha = pulse;
-      ctx.font        = `bold ${14 + this._stompCombo * 3}px "Comic Sans MS", system-ui`;
+      ctx.font        = `bold ${14 + this._stompCombo * 3}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle   = '#FFD700';
       ctx.textAlign   = 'right';
       ctx.shadowColor = '#FF6F00'; ctx.shadowBlur = 8;
@@ -2302,7 +2302,7 @@ class RunnerEngine {
     }
 
     // ── Stage label (bottom-left)
-    ctx.font      = 'bold 16px "Comic Sans MS", system-ui';
+    ctx.font      = 'bold 16px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.textAlign = 'left';
     ctx.fillText(`Stage ${this.stage.id}: ${this.stage.name}`, 12, this.H - R_GROUND_H - 12);
@@ -2338,7 +2338,7 @@ class RunnerEngine {
     // Title
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Comic Sans MS", system-ui`;
+    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle    = '#FFD700';
     ctx.shadowColor  = '#FF6F00'; ctx.shadowBlur = 14;
     ctx.fillText('⏸ PAUSED', cx, py + 34);
@@ -2349,7 +2349,7 @@ class RunnerEngine {
     ctx.fillStyle = 'rgba(50,180,80,0.85)';
     ctx.strokeStyle = '#7CFC9A'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.roundRect(px + 20, resumeY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
     ctx.fillText('▶ RESUME', cx, resumeY + btnH / 2);
     this._pauseResumeBtnRect = { x: px + 20, y: resumeY, w: btnW, h: btnH };
@@ -2358,7 +2358,7 @@ class RunnerEngine {
     ctx.fillStyle = 'rgba(180,50,20,0.75)';
     ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.roundRect(px + 20, quitY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD9D0';
     ctx.fillText('🗺 Quit to Map', cx, quitY + btnH / 2);
     this._pauseQuitBtnRect = { x: px + 20, y: quitY, w: btnW, h: btnH };

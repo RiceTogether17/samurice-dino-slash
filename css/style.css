@@ -10,7 +10,7 @@
 
 body {
     background: #2d8a4e;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     text-align: center;
     color: #333;
     overflow: hidden;
@@ -135,7 +135,7 @@ body {
     cursor: pointer;
     text-align: left;
     font-family: inherit;
-    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s;
+    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s, filter 0.2s;
     box-shadow: 0 8px 0 rgba(0,0,0,0.45), 0 6px 24px rgba(0,0,0,0.4);
     position: relative;
     overflow: hidden;
@@ -159,6 +159,7 @@ body {
 }
 .slash-btn:hover {
     background: linear-gradient(135deg, #FF8A5C 0%, #FF5555 50%, #EF4444 100%);
+    filter: drop-shadow(0 0 16px rgba(255,80,60,0.7));
 }
 .flap-btn {
     background: linear-gradient(135deg, #4FC3F7 0%, #2196F3 50%, #1976D2 100%);
@@ -167,6 +168,7 @@ body {
 }
 .flap-btn:hover {
     background: linear-gradient(135deg, #6BD4FF 0%, #42A5F5 50%, #2196F3 100%);
+    filter: drop-shadow(0 0 16px rgba(33,150,243,0.7));
 }
 
 .mc-icon {
@@ -583,7 +585,7 @@ body {
     pointer-events: none;
 }
 .rotate-icon { font-size: 3rem; animation: rotatePulse 1.5s ease-in-out infinite; }
-.rotate-text { color: #fff; font-size: 1.1rem; font-family: 'Comic Sans MS', system-ui, sans-serif; text-align: center; padding: 0 24px; }
+.rotate-text { color: #fff; font-size: 1.1rem; font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif; text-align: center; padding: 0 24px; }
 @keyframes rotatePulse {
     0%,100% { transform: rotate(0deg)  scale(1); }
     50%      { transform: rotate(15deg) scale(1.1); }
@@ -791,7 +793,7 @@ body {
     border: 2.5px dashed rgba(255,215,0,0.7);
     border-radius: 10px;
     font-size: 1rem;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     font-weight: bold;
     color: transparent;   /* empty — just shows the box */
     transition: background 0.15s, border-color 0.15s;
@@ -825,7 +827,7 @@ body {
 .be-build-placeholder {
     color: rgba(255,255,255,0.28);
     font-size: 0.88rem;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     font-style: italic;
     pointer-events: none;
 }
@@ -837,7 +839,7 @@ body {
     color: #3E2723;
     font-weight: bold;
     font-size: 1.05rem;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     border-radius: 10px;
     padding: 5px 12px;
     min-width: 36px;
@@ -899,7 +901,7 @@ body {
     color: #3E2000;
     font-weight: 900;
     font-size: clamp(0.9rem, 4vw, 1.1rem);
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     border: 2px solid #C89000;
     border-bottom-color: #7f5700;
     border-right-color: #a07000;
@@ -1015,7 +1017,7 @@ body {
     height: 48px;
     padding: 0 20px;
     font-size: 1rem;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     font-weight: bold;
     border: none;
     border-radius: 12px;
@@ -1064,7 +1066,7 @@ body {
 .be-feedback {
     min-height: 20px;
     font-size: clamp(0.8rem, 3.5vw, 0.98rem);
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     font-weight: bold;
     color: #FFD700;
     text-align: center;

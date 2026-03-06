@@ -88,7 +88,7 @@ class DamagePop {
     ctx.globalAlpha = Math.max(0, this.life);
     ctx.translate(this.x, this.y);
     ctx.scale(this.scale, this.scale);
-    ctx.font        = 'bold 28px "Comic Sans MS", system-ui';
+    ctx.font        = 'bold 28px "Nunito", "Comic Sans MS", system-ui';
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = '#000';
@@ -149,6 +149,7 @@ class BattleEngine {
 
     // Animations
     this.slashParticles = [];
+    this._gradeFloat    = null;
     this.damagePops     = [];
     this._bossShake     = 0;
     this._rikuShake     = 0;
@@ -373,6 +374,19 @@ class BattleEngine {
     this._usedTileIdx.add(tileIdx);
     tileEl.classList.add('be-tile-used');
     this._flashTileFeedback(tileEl, 'ok');
+
+    // Emit slash sparks from tile's canvas-space position
+    if (this.canvas) {
+      const cr  = this.canvas.getBoundingClientRect();
+      const tr  = tileEl.getBoundingClientRect();
+      const scx = this.W / cr.width;
+      const scy = this.H / cr.height;
+      const tx  = (tr.left + tr.width  / 2 - cr.left) * scx;
+      const ty  = (tr.top  + tr.height / 2 - cr.top)  * scy;
+      for (let i = 0; i < 4; i++) {
+        this.slashParticles.push(new SlashParticle(tx, ty));
+      }
+    }
 
     this._renderBlanks();
     this._setFeedback('✅ Nice sound! Keep blending…', '#7CFC9A');
@@ -652,6 +666,12 @@ class BattleEngine {
 
     this.damagePops.push(new DamagePop(bossX, bossY - 40, `-${damage}`, '#FFD700'));
     this.damagePops.push(new DamagePop(bossX, bossY - 80, `${slashType} • ${gradeText}`, '#fff'));
+
+    // ── Grade floater: large centered text with scale+fade ────
+    const gfColor = this._combo >= 5 ? '#FF4081' :
+                    this._combo >= 3 ? '#FF9800' :
+                    timeBonus > 0.7  ? '#76FF03' : '#FFFFFF';
+    this._gradeFloat = { text: gradeText, life: 1.0, color: gfColor };
     this._setFeedback(`⚔️ "${wordObj.word.toUpperCase()}" — ${slashType} • ${gradeText} (${damage} dmg, acc ${Math.round(accuracyPct * 100)}%)`, '#FFD700');
 
     this._checkBossPhase();
@@ -814,7 +834,7 @@ class BattleEngine {
         const bannerAlpha = (this._phaseFlash - 40) / 40;
         ctx.save();
         ctx.globalAlpha = bannerAlpha;
-        ctx.font        = `bold ${Math.min(32, this.W * 0.065)}px "Comic Sans MS", system-ui`;
+        ctx.font        = `bold ${Math.min(32, this.W * 0.065)}px "Nunito", "Comic Sans MS", system-ui`;
         ctx.textAlign   = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle   = this._bossPhase === 3 ? '#FF1744' : '#FF8F00';
@@ -832,7 +852,7 @@ class BattleEngine {
       const pulse = 0.8 + 0.2 * Math.sin(this._age * 0.2);
       ctx.save();
       ctx.globalAlpha = pulse;
-      ctx.font        = `bold ${16 + this._combo * 2}px "Comic Sans MS", system-ui`;
+      ctx.font        = `bold ${16 + this._combo * 2}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle   = '#FFD700';
       ctx.textAlign   = 'right';
       ctx.shadowColor = '#FF6F00';
@@ -846,7 +866,7 @@ class BattleEngine {
       const pulse = 0.7 + 0.3 * Math.sin(this._age * 0.3);
       ctx.save();
       ctx.globalAlpha = pulse;
-      ctx.font        = `bold 18px "Comic Sans MS", system-ui`;
+      ctx.font        = `bold 18px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle   = '#FF4081';
       ctx.textAlign   = 'left';
       ctx.shadowColor = '#FF1744'; ctx.shadowBlur = 10;
@@ -859,7 +879,7 @@ class BattleEngine {
       const phaseColor = this._bossPhase === 3 ? '#FF1744' : '#FF8F00';
       const phaseLabel = this._bossPhase === 3 ? '🔥 BERSERK' : '💢 RAGE';
       ctx.save();
-      ctx.font      = 'bold 12px "Comic Sans MS", system-ui';
+      ctx.font      = 'bold 12px "Nunito", "Comic Sans MS", system-ui';
       ctx.fillStyle = phaseColor;
       ctx.textAlign = 'center';
       ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
@@ -867,6 +887,36 @@ class BattleEngine {
       ctx.globalAlpha = alpha;
       ctx.fillText(phaseLabel, Math.round(this.W * 0.72), Math.round(this.H * 0.04));
       ctx.restore();
+    }
+
+    // ── Grade floater: large centered PERFECT!/GREAT! ───────────
+    if (this._gradeFloat) {
+      const gf = this._gradeFloat;
+      gf.life -= 0.022;
+      if (gf.life <= 0) {
+        this._gradeFloat = null;
+      } else {
+        const fadeIn  = Math.min(1, (1 - gf.life) * 8);   // snappy pop-in
+        const fadeOut = gf.life < 0.35 ? gf.life / 0.35 : 1;
+        const alpha   = Math.min(fadeIn, fadeOut);
+        const scale   = 0.5 + 0.6 * Math.min(1, (1 - gf.life) * 5); // pop from small
+        const fontSize = Math.min(64, this.W * 0.12);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(this.W / 2, this.H * 0.38);
+        ctx.scale(scale, scale);
+        ctx.font        = `900 ${fontSize}px "Nunito", "Comic Sans MS", system-ui`;
+        ctx.textAlign   = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur  = 20;
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth   = fontSize * 0.07;
+        ctx.strokeText(gf.text, 0, 0);
+        ctx.fillStyle   = gf.color;
+        ctx.fillText(gf.text, 0, 0);
+        ctx.restore();
+      }
     }
 
     // ── Pause overlay ────────────────────────────────────────────
@@ -919,7 +969,7 @@ class BattleEngine {
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 18); ctx.fill(); ctx.stroke();
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Comic Sans MS", system-ui`;
+    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle    = '#FFD700';
     ctx.shadowColor  = '#FF6F00'; ctx.shadowBlur = 14;
     ctx.fillText('⏸ PAUSED', cx, py + 32);
@@ -930,7 +980,7 @@ class BattleEngine {
     ctx.fillStyle = 'rgba(50,180,80,0.85)';
     ctx.strokeStyle = '#7CFC9A'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.roundRect(px + 20, resumeY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
     ctx.fillText('▶ RESUME', cx, resumeY + btnH / 2);
     this._pauseResumeBtnRect = { x: px + 20, y: resumeY, w: btnW, h: btnH };
@@ -939,7 +989,7 @@ class BattleEngine {
     ctx.fillStyle = 'rgba(180,50,20,0.75)';
     ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.roundRect(px + 20, quitY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD9D0';
     ctx.fillText('🗺 Quit to Map', cx, quitY + btnH / 2);
     this._pauseQuitBtnRect = { x: px + 20, y: quitY, w: btnW, h: btnH };
@@ -1065,7 +1115,7 @@ class BattleEngine {
     ctx.restore();
 
     const nameY = bFeetY - bH + bob - 12;
-    ctx.font        = `bold ${Math.max(13, Math.floor(this.W * 0.027))}px "Comic Sans MS", system-ui`;
+    ctx.font        = `bold ${Math.max(13, Math.floor(this.W * 0.027))}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle   = '#fff';
     ctx.textAlign   = 'center';
     ctx.shadowColor = '#000';
@@ -1216,7 +1266,7 @@ class BattleEngine {
         ctx.fillStyle = 'rgba(255,255,255,0.22)';
         ctx.beginPath(); ctx.roundRect(x + 2, barY + 2, barW * pct - 4, barH * 0.4, (barH * 0.4) / 2); ctx.fill();
       }
-      ctx.font = 'bold 11px "Comic Sans MS", system-ui';
+      ctx.font = 'bold 11px "Nunito", "Comic Sans MS", system-ui';
       ctx.fillStyle = '#fff';
       ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
       ctx.textAlign = textRight ? 'right' : 'left';

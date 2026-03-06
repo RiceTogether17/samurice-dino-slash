@@ -276,7 +276,7 @@ class SlashGame {
     const dots = ['', '.', '..', '...'][Math.floor(this._age / 12) % 4];
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold ${Math.min(32, W * 0.07)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.min(32, W * 0.07)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 12;
     ctx.fillText(`🍚 Loading${dots}`, W / 2, H / 2 - 20);
@@ -504,7 +504,7 @@ class SlashGame {
     ctx.beginPath(); ctx.roundRect(px, py, panelW, panelH, 14); ctx.fill();
     ctx.strokeStyle = '#FFD54F'; ctx.lineWidth = 2; ctx.stroke();
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = 'bold 14px "Comic Sans MS", system-ui';
+    ctx.font = 'bold 14px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = '#FFD54F';
     ctx.fillText(`📘 Tutorial (${Math.ceil(t.leftSec)}s)`, W / 2, py + 8);
     ctx.font = '13px system-ui';
@@ -602,6 +602,19 @@ class SlashGame {
     this.audio.sfxVictory();
     this.state = 'stage-win';
     this._resultBtnRects = [];
+    // Spawn confetti particles
+    this._confetti = Array.from({length: 55}, () => ({
+      x: Math.random() * this.W,
+      y: Math.random() * -this.H,
+      vx: (Math.random() - 0.5) * 2.5,
+      vy: 1.6 + Math.random() * 2.2,
+      rot: Math.random() * Math.PI * 2,
+      rotV: (Math.random() - 0.5) * 0.18,
+      w: 6 + Math.random() * 8,
+      h: 4 + Math.random() * 5,
+      color: ['#FFD700','#FF4081','#00E5FF','#76FF03','#FF9800','#E040FB','#fff'][Math.floor(Math.random()*7)],
+      emoji: Math.random() < 0.18 ? ['🎉','⭐','🍚','✨','🏆'][Math.floor(Math.random()*5)] : null,
+    }));
   }
   // ── STAGE LOSE ───────────────────────────────────────────────
   _onStageLose() {
@@ -828,7 +841,7 @@ class SlashGame {
     // ── Game title — big, bold, gold with outline ────────────────
     const titleY = rikuY + rikuH + 18 + bounce * 0.3;
     const titleSz = Math.round(Math.min(36, W * 0.08));
-    ctx.font = `900 ${titleSz}px "Comic Sans MS", system-ui`;
+    ctx.font = `900 ${titleSz}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.textAlign = 'center';
     // Title shadow/outline for readability
     ctx.shadowColor = 'rgba(0,0,0,0.8)';
@@ -847,7 +860,7 @@ class SlashGame {
     ctx.shadowBlur = 0;
     // ── Subtitle ─────────────────────────────────────────────────
     const subY = titleY + titleSz * 2 + 22;
-    ctx.font = `bold ${Math.round(Math.min(13, W * 0.031))}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.round(Math.min(13, W * 0.031))}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = 'rgba(200,240,200,0.82)';
     ctx.fillText('Phonics Adventure · 6 Stages · Short Vowels → Blends', W / 2, subY);
     // ── Animated dino emojis left/right of card ──────────────────
@@ -869,7 +882,7 @@ class SlashGame {
     const tagY = dinoY + 36;
     const tagPul = 0.75 + 0.25 * Math.sin(t * 0.06);
     ctx.globalAlpha = tagPul;
-    ctx.font = `bold ${Math.round(Math.min(15, W * 0.036))}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.round(Math.min(15, W * 0.036))}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'center';
     ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 8;
@@ -901,7 +914,7 @@ class SlashGame {
     ctx.shadowBlur = 0;
     // Button text
     const tapSz = Math.round(Math.min(20, W * 0.046));
-    ctx.font = `900 ${tapSz}px "Comic Sans MS", system-ui`;
+    ctx.font = `900 ${tapSz}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -937,7 +950,7 @@ class SlashGame {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
     // Header
-    ctx.font = `bold ${Math.min(22, W * 0.055)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.min(22, W * 0.055)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -986,11 +999,11 @@ class SlashGame {
       ctx.fillStyle = stage.accentColor + '55';
       ctx.beginPath(); ctx.roundRect(x, y, cw, 6, [14, 14, 0, 0]); ctx.fill();
       // Stage number + name
-      ctx.font = `bold ${Math.min(15, cw * 0.12)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(15, cw * 0.12)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#FFD700';
       ctx.textAlign = 'center';
       ctx.fillText(`Stage ${stageId}`, x + cw / 2, y + 22);
-      ctx.font = `bold ${Math.min(13, cw * 0.1)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(13, cw * 0.1)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#fff';
       ctx.fillText(stage.name, x + cw / 2, y + 40);
       // Pattern label
@@ -1063,13 +1076,13 @@ class SlashGame {
     // ── Title ────────────────────────────────────────────────────
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(22, W * 0.052)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.min(22, W * 0.052)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 10;
     ctx.fillText('🗺 World Map', W / 2, 10);
     ctx.shadowBlur = 0;
     // Rice points display
-    ctx.font = `bold 13px "Comic Sans MS", system-ui`;
+    ctx.font = `bold 13px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFF176';
     ctx.fillText(`🍚 ${this.progress.getRicePoints()} Rice Points`, W / 2, 38);
     // Map/List view toggle hint
@@ -1159,7 +1172,7 @@ class SlashGame {
         ctx.fillText('🔒', n.cx, cy);
       } else {
         // Stage number
-        ctx.font = `bold ${Math.round(nodeR * 0.52)}px "Comic Sans MS", system-ui`;
+        ctx.font = `bold ${Math.round(nodeR * 0.52)}px "Nunito", "Comic Sans MS", system-ui`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = sel ? '#FFD700' : '#fff';
         ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
@@ -1179,7 +1192,7 @@ class SlashGame {
         ctx.globalAlpha = 1;
       }
       // Stage name label below
-      ctx.font = `bold ${Math.max(9, Math.round(W * 0.022))}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.max(9, Math.round(W * 0.022))}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.3)';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
@@ -1221,7 +1234,7 @@ class SlashGame {
       ctx.fillStyle = 'rgba(0,0,0,0.78)';
       ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 14); ctx.fill();
       ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.font = `bold ${Math.min(14, W * 0.032)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(14, W * 0.032)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#FFD700';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.fillText(`${selStage.name} — ${selStage.pattern}`, W / 2, panY + 8);
@@ -1240,7 +1253,7 @@ class SlashGame {
       ctx.beginPath(); ctx.roundRect(btnX, btnY, playBtnW, playBtnH, playBtnH / 2); ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1.5; ctx.stroke();
       ctx.shadowBlur = 0;
-      ctx.font = `bold ${Math.min(16, W * 0.038)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(16, W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('▶ PLAY', W / 2, btnY + playBtnH / 2);
@@ -1327,7 +1340,7 @@ class SlashGame {
     ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 16;
     lines.forEach((line, i) => {
       const size = i === 0 ? Math.min(28, W * 0.06) : Math.min(20, W * 0.04);
-      ctx.font = `bold ${size}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${size}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = i === 0 ? '#FFD700' : '#fff';
       ctx.fillText(line, W / 2, H / 2 + (i - (lines.length - 1) / 2) * (size + 10));
     });
@@ -1359,13 +1372,27 @@ class SlashGame {
     grad.addColorStop(1, '#8BC34A');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
-    // Confetti
-    for (let i = 0; i < 20; i++) {
-      const x = ((i * 173 + this._age * 1.5) % W);
-      const y = (this._age * 1.2 + i * 45) % H;
-      ctx.font = '16px serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(['🎉','⭐','🍚','✨','🏆'][i % 5], x, y);
+    // Confetti — colored rect particles + emoji sprinkles
+    if (this._confetti) {
+      for (const p of this._confetti) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rot += p.rotV;
+        if (p.y > H + 20) { p.y = -20; p.x = Math.random() * W; }
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        if (p.emoji) {
+          ctx.font = '18px serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(p.emoji, 0, 0);
+        } else {
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        }
+        ctx.restore();
+      }
     }
     // Panel
     const pw = Math.min(360, W - 40);
@@ -1376,10 +1403,10 @@ class SlashGame {
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 22); ctx.fill();
     ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 3; ctx.stroke();
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(28, W * 0.062)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.min(28, W * 0.062)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.fillText('🎉 VICTORY!', W / 2, py + 20);
-    ctx.font = `bold 16px "Comic Sans MS", system-ui`;
+    ctx.font = `bold 16px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
     ctx.fillText(`Stage ${this.stageId}: ${stage.name}`, W / 2, py + 66);
     // Stars earned
@@ -1456,10 +1483,10 @@ class SlashGame {
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 20); ctx.fill();
     ctx.strokeStyle = '#F44336'; ctx.lineWidth = 2; ctx.stroke();
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(26, W * 0.058)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.min(26, W * 0.058)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FF5252';
     ctx.fillText('💦 Rice Spilled…', W / 2, py + 22);
-    ctx.font = '15px "Comic Sans MS", system-ui';
+    ctx.font = '15px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.fillText("Riku needs more practice!", W / 2, py + 72);
     ctx.fillText("Collect more phoneme coins in the runner", W / 2, py + 96);
@@ -1484,7 +1511,7 @@ class SlashGame {
       ctx.strokeStyle = '#ff6633'; ctx.lineWidth = 1.5; ctx.stroke();
       // Label
       ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.min(14, btn.w * 0.08)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(14, btn.w * 0.08)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + btn.h / 2);
