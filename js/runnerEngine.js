@@ -43,10 +43,14 @@ const R_STAR_DUR       = 480;  // 8 seconds of star invincibility (60 fps)
 class SpriteAnimator {
   constructor(sheetMeta) { this.sheet = sheetMeta || null; }
   draw(ctx, animName, x, y, w, h, age, fps = 9) {
-    if (!this.sheet || !this.sheet.image || !this.sheet.animations) return false;
+    // If the sprite sheet is missing and we generated a placeholder, do NOT draw it
+    // for gameplay characters. Returning false lets the caller fall back to the
+    // per-frame PNG sprites so Riku always renders in campaign runner mode.
+    if (!this.sheet || this.sheet.placeholder || !this.sheet.image || !this.sheet.animations) return false;
     const frames = this.sheet.animations[animName];
     if (!frames || !frames.length) return false;
     const img = this.sheet.image;
+    if (typeof img.naturalWidth === 'number' && img.naturalWidth <= 0) return false;
     const cols = Math.max(1, Math.floor((img.naturalWidth || img.width) / this.sheet.frameW));
     const idx = frames[Math.floor(age / Math.max(1, Math.floor(60 / fps))) % frames.length];
     const sx = (idx % cols) * this.sheet.frameW;
