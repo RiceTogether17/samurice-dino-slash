@@ -60,7 +60,7 @@ const SLASH_SPRITES = {
   'stegosaurus-hurt': 'assets/dinosaurs/stegosaurus-hurt.png',
   'brachiosaurus-attack': 'assets/dinosaurs/brachiosaurus-attack.png',
   'brachiosaurus-hurt': 'assets/dinosaurs/brachisaurus-hurt.png',
-  'pteranodon-attack': 'assets/dinosaurs/pteradonon-attack.png',
+  'pteranodon-attack': 'assets/dinosaurs/pteranodon-attack.png',
   'pteranodon-hurt': 'assets/dinosaurs/pteranodon-hurt.png',
   'ankylosaurus-attack': 'assets/dinosaurs/ankylosaurus-attack.png',
   'ankylosaurus-hurt': 'assets/dinosaurs/ankylosaurus-hurt.png',
@@ -163,10 +163,13 @@ class SlashGame {
     // Input for menus
     this._menuSel = 0;
     this._bindMenuInput();
-    // Load sprites and preload core audio (non-blocking)
+    // Load sprites then kick off background audio preload.
+    // Audio readiness is NOT a gate — the game uses tone-synthesis + TTS fallbacks
+    // immediately, so buffers streaming in the background is sufficient. This removes
+    // a multi-second loading-screen stall on slower mobile connections.
+    this._audioReady = true;
     this._loadSprites();
-    if (this.audio.preloadAllGameAudio) this.audio.preloadAllGameAudio().finally(() => { this._audioReady = true; });
-    else this._audioReady = true;
+    if (this.audio.preloadAllGameAudio) this.audio.preloadAllGameAudio(); // background only
     // RAF loop
     this._loop = this._loop.bind(this);
     this._rafId = requestAnimationFrame(this._loop);
@@ -185,8 +188,12 @@ class SlashGame {
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.W = W;
       this.H = H;
-      // Propagate new dimensions to active sub-engine
-      if (this.battle) { this.battle.W = W; this.battle.H = H; }
+      // Propagate new dimensions to all active sub-engines so draw calls
+      // use the correct logical size after orientation change or resize.
+      if (this.battle)        { this.battle.W = W;        this.battle.H = H;        }
+      if (this.runner)        { this.runner.W = W;        this.runner.H = H;        }
+      if (this.endlessRunner) { this.endlessRunner.W = W; this.endlessRunner.H = H; }
+      if (this.endlessBattle) { this.endlessBattle.W = W; this.endlessBattle.H = H; }
     };
     resize();
     window.addEventListener('resize', resize);
@@ -1733,6 +1740,8 @@ class SlashGame {
     }
   }
   _startEndlessBattle() {
+    // Guard: if a battle is already live (e.g. callback fired mid-frame), bail out.
+    if (this.endlessBattle) return;
     const runner = this.endlessRunner;
     const gateData = runner.getPendingGate();
     if (!gateData || !gateData.word) {
@@ -1759,8 +1768,11 @@ class SlashGame {
     // Draw runner background + battle FX on canvas
     if (this.endlessRunner) this.endlessRunner.draw();
     battle.drawFX();
-    if (battle.isDone()) {
-      // Will have called onDone callback already
+    // isDone() returns true only after the onDone callback has already fired from
+    // within update(). The state should now be 'endless-runner'. If for any reason
+    // the callback wasn't invoked (defensive), force cleanup here.
+    if (battle.isDone() && this.state === 'endless-battle') {
+      this._onEndlessBattleDone('miss', 0);
     }
   }
   _onEndlessBattleDone(result, timeUsed) {
