@@ -949,6 +949,20 @@ class BattleEngine {
     ctx.fillRect(0, fy, this.W, 2);
   }
 
+
+  _resolveBossSpriteKey() {
+    const stageSprite = this.sprites[this.stage.bossFile];
+    const src = stageSprite && typeof stageSprite.src === 'string' ? stageSprite.src : '';
+    const match = src.match(/\/([A-Za-z0-9_-]+)\.png(?:$|[?#])/);
+    const rawBase = match ? match[1] : '';
+    const species = rawBase.replace(/-(attack|hurt)$/, '');
+
+    if (this.state === 'boss-attack' && species && this.sprites[`${species}-attack`]) return `${species}-attack`;
+    if ((this.state === 'riku-attack' || this._bossShake > 0) && species && this.sprites[`${species}-hurt`]) return `${species}-hurt`;
+    if (species && this.sprites[species]) return species;
+    return this.stage.bossFile;
+  }
+
   _drawBoss(ctx) {
     const fy     = this._floorY();
     const bH     = Math.round(fy * 0.90);
@@ -962,7 +976,8 @@ class BattleEngine {
     const bob    = this._bossBobOffset;
     const scale  = 1 + Math.min(0.25, this._bossShake * 0.012);
     const hpPct  = this.bossHp / this.bossMaxHp;
-    const sp     = this.sprites[this.stage.bossFile];
+    const spKey  = this._resolveBossSpriteKey();
+    const sp     = this.sprites[spKey] || this.sprites[this.stage.bossFile];
 
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.20)';

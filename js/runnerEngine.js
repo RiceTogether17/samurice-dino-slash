@@ -1075,8 +1075,8 @@ class PowerUpItem {
 class FlyingEnemy {
   constructor(worldX, worldY, sprite = null) {
     this.worldX   = worldX;
-    this.w        = 68;
-    this.h        = 52;
+    this.w        = 112;
+    this.h        = 84;
     this._baseY   = worldY;
     this.worldY   = worldY;
     this.vx       = -1.4;
@@ -1122,6 +1122,21 @@ class FlyingEnemy {
     const x = this.sx;
     const y = this.worldY;
     const wingFlap = Math.sin(this._age * 0.22) * 0.4;
+
+    if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
+      ctx.save();
+      if (this.defeated) {
+        ctx.globalAlpha = Math.max(0, 1 - this.deathFrames / 50);
+        ctx.translate(x + this.w / 2, y + this.h / 2);
+        ctx.rotate(this.deathFrames * 0.18);
+      } else {
+        ctx.translate(x + this.w / 2, y + this.h / 2);
+        ctx.scale(this.vx < 0 ? 1 : -1, 1);
+      }
+      ctx.drawImage(this._sprite, -this.w / 2, -this.h / 2, this.w, this.h);
+      ctx.restore();
+      return;
+    }
 
     ctx.save();
     if (this.defeated) {
@@ -1182,7 +1197,7 @@ class FlyingEnemy {
 // SPRING PAD — launches player into the air on contact
 // ─────────────────────────────────────────────────────────────
 class SpringPad {
-  constructor(worldX, groundY) {
+  constructor(worldX, groundY, sprite = null) {
     this.worldX  = worldX;
     this.groundY = groundY;
     this.w       = 42;
@@ -1190,6 +1205,7 @@ class SpringPad {
     this.sx      = 0;
     this._age    = 0;
     this._bounce = 0; // animation frames
+    this._sprite = sprite;
   }
 
   updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
@@ -1217,6 +1233,13 @@ class SpringPad {
     const compress = this._bounce > 0 ? Math.sin(this._bounce / 16 * Math.PI) * 0.45 : 0;
     const h        = Math.round(this.h * (1 - compress * 0.5));
     const baseY    = this.groundY;
+
+    if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
+      const drawH = this.h + 10;
+      const drawY = baseY - drawH + Math.round(compress * 8);
+      ctx.drawImage(this._sprite, x - 3, drawY, this.w + 6, drawH);
+      return;
+    }
 
     ctx.save();
     // Coil (zigzag spring)
@@ -1249,12 +1272,13 @@ class SpringPad {
 // CHECKPOINT FLAG — mid-level save point
 // ─────────────────────────────────────────────────────────────
 class CheckpointFlag {
-  constructor(worldX, groundY) {
+  constructor(worldX, groundY, sprite = null) {
     this.worldX    = worldX;
     this.groundY   = groundY;
     this.sx        = 0;
     this.activated = false;
     this._age      = 0;
+    this._sprite   = sprite;
   }
 
   updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
@@ -1272,6 +1296,23 @@ class CheckpointFlag {
     const x        = this.sx;
     const waveAmt  = Math.sin(this._age * 0.14) * 7;
     const color    = this.activated ? '#00E676' : '#FFD600';
+
+    if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
+      const drawW = 54;
+      const drawH = 84;
+      ctx.drawImage(this._sprite, x - 6, groundY - drawH, drawW, drawH);
+      if (this.activated) {
+        ctx.save();
+        const pulse = 0.22 + 0.14 * Math.sin(this._age * 0.25);
+        const glow  = ctx.createRadialGradient(x + 14, groundY - 44, 2, x + 14, groundY - 44, 30);
+        glow.addColorStop(0, `rgba(0,230,118,${pulse})`);
+        glow.addColorStop(1, 'rgba(0,230,118,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(x + 14, groundY - 44, 30, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      return;
+    }
 
     ctx.save();
     // Pole
@@ -1385,6 +1426,9 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
   const difficulty = stageData.id - 1;             // 0-5
   const minionSp   = sprites && sprites['minion-dino'];
+  const flyingSp   = sprites && sprites['flying-enemy'];
+  const springSp   = sprites && sprites['spring-pad'];
+  const checkpointSp = sprites && sprites['checkpoint-flag'];
   const minionSize = Math.max(96, Math.round(canvasH * 0.22));
   const items      = {
     platforms: [], coins: [], minions: [], flag: null,
@@ -1444,17 +1488,17 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
     if (difficulty >= 1 && wIdx % 3 === 2) {
       const flyX = wx + platW / 2;
       const flyY = elevated ? platformH - 80 : groundY - Math.round(canvasH * 0.38);
-      items.flyingEnemies.push(new FlyingEnemy(flyX, flyY, null));
+      items.flyingEnemies.push(new FlyingEnemy(flyX, flyY, flyingSp));
     }
 
     // Spring pads in stage 3+ (before elevated word clusters)
     if (difficulty >= 2 && wIdx % 3 === 1 && wIdx > 0) {
-      items.springs.push(new SpringPad(wx - 70, groundY));
+      items.springs.push(new SpringPad(wx - 70, groundY, springSp));
     }
 
     // Checkpoint at mid-level (after the 3rd word)
     if (wIdx === 3) {
-      items.checkpoint = new CheckpointFlag(wx - 80, groundY);
+      items.checkpoint = new CheckpointFlag(wx - 80, groundY, checkpointSp);
     }
 
     // Extra bridge platform in higher stages
@@ -1483,6 +1527,10 @@ class RunnerEngine {
     this.stage      = stageData;
     this.sprites    = sprites || {};
     this.spriteSheets = spriteSheets || {};
+    this.sprites.tiles = this.sprites.tiles || {
+      rice: this.sprites['tile-rice'] || null,
+      dojo: this.sprites['tile-dojo'] || null,
+    };
     this.audio      = audio;
     this.progress   = progress;
 
