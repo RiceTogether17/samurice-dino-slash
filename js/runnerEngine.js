@@ -2739,6 +2739,8 @@ class EndlessRunnerEngine {
     // World state
     this._worldX   = 0;  // how far we've scrolled (world units)
     this._distM    = 0;  // distance in meters (worldX / 60)
+    this._lastMilestoneM = 0;  // last milestone distance awarded
+    this._milestoneBanner = null; // { text, life }
     this._speed    = E_BASE_SPEED;
     this._age      = 0;
 
@@ -3261,7 +3263,21 @@ class EndlessRunnerEngine {
     this._scrollAll(dx);
     this._worldX += dx;
     this._distM   = Math.round(this._worldX / 60);
-    this.score   += Math.round(dx * (0.5 + Math.max(0, this._riceScoreMult - 1) * 0.2)); // distance score
+    this.score   += Math.round(dx * (0.5 + Math.max(0, this._riceScoreMult - 1) * 0.2));
+
+    // ── Distance milestones ──────────────────────────────────
+    const _milestones = [250, 500, 750, 1000, 1500, 2000, 3000];
+    for (const m of _milestones) {
+      if (this._distM >= m && this._lastMilestoneM < m) {
+        this._lastMilestoneM = m;
+        const bonus = Math.floor(m / 50);
+        this.progress?.addRiceGrains?.(bonus);
+        this.score += bonus * 100;
+        if (this.audio) this.audio.sfxVictory?.();
+        this._milestoneBanner = { text: `🏁 ${m}m! +${bonus} 🍚`, life: 1.0 };
+        break;
+      }
+    } // distance score
 
     // Generate new chunks
     if (this._nextChunkX - this._worldX < this.W + E_CHUNK_W) {
@@ -3544,6 +3560,34 @@ class EndlessRunnerEngine {
       ctx.strokeText(this._zoneLabel, W/2, H*0.4);
       ctx.fillText(this._zoneLabel, W/2, H*0.4);
       ctx.restore();
+    }
+
+    // ── Milestone banner ──────────────────────────────────────
+    if (this._milestoneBanner) {
+      const mb = this._milestoneBanner;
+      mb.life -= 0.018;
+      if (mb.life <= 0) {
+        this._milestoneBanner = null;
+      } else {
+        const fadeIn  = Math.min(1, (1 - mb.life) * 8);
+        const fadeOut = mb.life < 0.3 ? mb.life / 0.3 : 1;
+        const alpha   = Math.min(fadeIn, fadeOut);
+        const scale   = 0.6 + 0.5 * Math.min(1, (1 - mb.life) * 6);
+        const fsize   = Math.min(44, W * 0.09);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(W / 2, H * 0.25);
+        ctx.scale(scale, scale);
+        ctx.font = `900 ${fsize}px "Nunito", "Comic Sans MS", system-ui`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+        ctx.lineWidth = fsize * 0.08;
+        ctx.strokeText(mb.text, 0, 0);
+        ctx.fillStyle = '#FFD700';
+        ctx.fillText(mb.text, 0, 0);
+        ctx.restore();
+      }
     }
   }
 
