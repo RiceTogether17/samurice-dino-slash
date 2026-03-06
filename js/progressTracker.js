@@ -1,4 +1,7 @@
 'use strict';
+// === CHANGE LOG ===
+// Step 2 (Phonics & Battle System): added weak-phoneme tracking so
+// battle word selection can adapt to learner needs over time.
 // ============================================================
 // PROGRESS TRACKER — js/progressTracker.js
 // All player progress, shop, achievements, daily challenges.
@@ -130,6 +133,7 @@ class ProgressTracker {
       loginRewardClaimed: false,
       bestCombo: 0,
       totalRunDistance: 0,
+      weakPhonemesByStage: {},
     };
   }
 
@@ -161,6 +165,7 @@ class ProgressTracker {
     if (typeof d.bestCombo !== 'number') d.bestCombo = 0;
     if (typeof d.totalRunDistance !== 'number') d.totalRunDistance = 0;
     if (typeof d.totalPerfectBlends !== 'number') d.totalPerfectBlends = 0;
+    if (!d.weakPhonemesByStage || typeof d.weakPhonemesByStage !== 'object') d.weakPhonemesByStage = {};
     Object.keys(d.stages || {}).forEach(id => {
       const st = d.stages[id] || (d.stages[id] = this._freshStage(false));
       if (!st.mastery || typeof st.mastery !== 'object') st.mastery = { noHit:false, speedClear:false, bestClearSec:null };
@@ -287,7 +292,7 @@ class ProgressTracker {
   }
 
   // ── Blend stats ───────────────────────────────────────────────
-  recordBlend(stageId, word, success, isPerfect = false) {
+  recordBlend(stageId, word, success, isPerfect = false, phonemes = []) {
     if (stageId && this.data.stages[stageId]) {
       const s = this.data.stages[stageId];
       s.totalBlends++;
@@ -304,6 +309,20 @@ class ProgressTracker {
       }
       this.data.stages[stageId] = s;
     }
+
+    // Track weak phonemes for adaptive battle word selection.
+    if (stageId) {
+      const key = String(stageId);
+      if (!this.data.weakPhonemesByStage[key]) this.data.weakPhonemesByStage[key] = {};
+      const weak = this.data.weakPhonemesByStage[key];
+      (phonemes || []).forEach((ph) => {
+        const phKey = String(ph || '').toLowerCase();
+        if (!phKey) return;
+        const cur = weak[phKey] || 0;
+        weak[phKey] = success ? Math.max(0, cur - 1) : Math.min(12, cur + 2);
+      });
+    }
+
     if (success) {
       this.data.totalWordsBlended = (this.data.totalWordsBlended || 0) + 1;
       if (isPerfect) this.data.totalPerfectBlends = (this.data.totalPerfectBlends || 0) + 1;
@@ -315,6 +334,12 @@ class ProgressTracker {
   }
 
   recordPerfectBlends(count) { if (count >= 10) this.unlock('perfect-10'); }
+
+  getWeakPhonemes(stageId) {
+    const key = String(stageId || '');
+    return { ...(this.data.weakPhonemesByStage?.[key] || {}) };
+  }
+
 
   // ── Daily ─────────────────────────────────────────────────────
   getDailyProgress()  { return this.data.dailyProgress || 0; }
