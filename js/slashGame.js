@@ -84,15 +84,13 @@ const SLASH_SPRITES = {
 // Preload only startup-critical sprites before leaving loading screen.
 // Non-critical assets continue streaming in the background.
 const CRITICAL_SPRITE_KEYS = new Set([
+  // Keep startup gate intentionally small so players can begin quickly.
+  // Non-critical stage content continues loading in the background.
   'riku-idle', 'riku-walk-1', 'riku-walk-2', 'riku-walk-3', 'riku-walk-4',
-  'riku-run', 'riku-jump', 'riku-jump-1', 'riku-hurt', 'riku-victory',
-  'minion-dino', 'dino-minion',
-  'stage-1-rex', 'stage-1-tri', 'stage-2-rapi', 'stage-2-stego',
-  'stage-3-brachio', 'stage-3-ptera', 'stage-4-anky', 'stage-5-spino',
-  'stage-5-pachy', 'stage-6-dilo',
-  'stage-1-rice-paddy', 'stage-2-bamboo', 'stage-3-cherry-temple',
-  'stage-4-ruins', 'stage-5-mountain-terraces', 'stage-6-volcanic',
-  'victory-golden-harvest',
+  'riku-run', 'riku-jump', 'riku-jump-1', 'riku-hurt',
+  'dino-minion', 'flying-enemy', 'tile-dojo', 'tile-rice',
+  // Stage 1 first-play assets
+  'stage-1-rice-paddy', 'stage-1-rex', 'trex-attack', 'trex-hurt', 'stage-1-tri',
 ]);
 
 // Sprite sheets for animated canvas entities. These are optional and gracefully
