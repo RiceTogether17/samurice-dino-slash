@@ -357,7 +357,16 @@ class BattleEngine {
     });
     this._hearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._hearBtn.click(); });
 
-    controls.append(this._clearBtn, this._undoBtn, this._hearBtn);
+    // Phase 8: explicit Hint button — reveals the next correct tile on demand
+    this._hintBtn = document.createElement('button');
+    this._hintBtn.className   = 'be-btn be-btn-hint';
+    this._hintBtn.innerHTML   = '💡 Hint';
+    this._hintBtn.title       = 'Highlight the next correct tile';
+    this._hintBtn.setAttribute('aria-label', 'Show a hint — highlight the next tile');
+    this._hintBtn.addEventListener('click', () => this._useHint());
+    this._hintBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._useHint(); });
+
+    controls.append(this._clearBtn, this._undoBtn, this._hearBtn, this._hintBtn);
     this.overlay.appendChild(controls);
 
     // ── 2. Target hint (emoji + blank slots) ────────────────
@@ -371,7 +380,11 @@ class BattleEngine {
     this._blanksEl = document.createElement('div');
     this._blanksEl.className = 'be-blanks';
 
-    this._targetEl.append(this._targetEmojiEl, this._blanksEl);
+    // Phase 8: live word preview — "SH · I · P = SHIP" shown as tiles are placed
+    this._wordPreviewEl = document.createElement('div');
+    this._wordPreviewEl.className = 'be-word-preview';
+
+    this._targetEl.append(this._targetEmojiEl, this._blanksEl, this._wordPreviewEl);
     this.overlay.appendChild(this._targetEl);
 
     // ── 3. Tile pool ─────────────────────────────────────────
@@ -413,6 +426,9 @@ class BattleEngine {
     this._renderTargetHint();
     this._renderCurrentWordTiles();
     this._setFeedback('');
+    // Phase 8: reset hint button so it's available for each new word
+    if (this._hintBtn) { this._hintBtn.disabled = false; }
+    if (this._wordPreviewEl) this._wordPreviewEl.textContent = '';
 
     // Speak the word as an audio hint (delayed so the tile animation settles first)
     setTimeout(() => {
@@ -437,6 +453,22 @@ class BattleEngine {
       return `<span class="be-blank"></span>`;
     }).join('');
     this._blanksEl.innerHTML = html;
+
+    // Phase 8: live word preview — show built phonemes joined, fading to target word
+    if (this._wordPreviewEl) {
+      if (this._currentBuilt.length === 0) {
+        this._wordPreviewEl.textContent = '';
+      } else {
+        const joined = this._currentBuilt.map(p => p.toUpperCase()).join(' · ');
+        const full   = this._currentWord.word.toUpperCase();
+        // Show "SH · I · P = SHIP" once all phonemes are placed, otherwise "SH · I ···"
+        const isComplete = this._currentBuilt.length === this._currentWord.phonemes.length;
+        this._wordPreviewEl.textContent = isComplete
+          ? `${joined} = ${full}!`
+          : `${joined} ···`;
+        this._wordPreviewEl.style.color = isComplete ? '#76FF03' : '#FFD700';
+      }
+    }
   }
 
   // ── Render tiles for current word only ───────────────────────
@@ -908,6 +940,16 @@ class BattleEngine {
     this._renderBlanks();
     this._setFeedback('');
     this.state = 'idle';
+  }
+
+  // ── Phase 8: explicit hint — reveal the next correct tile ───
+  _useHint() {
+    if (this.done || !this._currentWord) return;
+    // Disable button so it can't be spammed mid-word
+    if (this._hintBtn) this._hintBtn.disabled = true;
+    this._showFirstHint = true;
+    this._renderCurrentWordTiles();
+    this._setFeedback('💡 Hint: look for the glowing tile!', '#FFD700');
   }
 
   // ── Undo: remove the last placed tile ───────────────────────

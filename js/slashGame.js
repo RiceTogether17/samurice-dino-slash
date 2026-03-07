@@ -165,6 +165,8 @@ class SlashGame {
     this._stageStartedAt = 0;
     this._lastRunnerHp = null;
     this._stageWinMastery = null;
+    this._battleResults   = null;  // Phase 8: summary captured before battle destroy
+    this._brStars         = null;  // Phase 8: star-field particles for results card
     this._tutorial = null; // first-play interactive runner tutorial
     // World map animation
     this._mapPlayerPos = null; // { x, y } animated player dot on map
@@ -492,6 +494,11 @@ class SlashGame {
       this._onboardingTutorial.handleClick(mx, my);
       return;
     }
+    // Phase 8: tap anywhere on battle-results screen to skip ahead
+    if (this.state === 'battle-results') {
+      this._advanceToStageWin();
+      return;
+    }
     // ── Paused overlay touch targets ───────────────────────────
     // Check runner pause overlay buttons before any state dispatch.
     if (this.state === 'runner' && this.runner?._paused) {
@@ -615,6 +622,8 @@ class SlashGame {
     this._stageStartedAt = Date.now();
     this._lastRunnerHp = null;
     this._stageWinMastery = null;
+    this._battleResults   = null;
+    this._brStars         = null;  // regenerate at current canvas size
     this._tutorial = null;
     // PHASE 6: show full onboarding before first-ever play of stage 1
     if (id === 1 && this.progress.shouldShowTutorial()) {
@@ -826,14 +835,39 @@ class SlashGame {
     };
     const masteryReward = this.progress.recordStageMastery(this.stageId, masteryResult);
     this._stageWinMastery = { ...masteryReward.mastery, bonus: masteryReward.bonus, newly: masteryReward.newlyEarned, clearSec };
+
+    // Phase 8: capture battle summary before destroying the engine
+    const riceEarned = this.progress.getStars(this.stageId) * 50 + 20 + (masteryReward.bonus || 0);
+    this._battleResults = {
+      wordsBlended: this.battle?._correctBlends  ?? 0,
+      bestStreak:   this.battle?._streak         ?? 0,
+      accuracy:     this._lastBattleAccuracy     ?? 0,
+      riceEarned,
+      stageId: this.stageId,
+    };
+
     this.overlay.classList.remove('active');
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
     if (this.battle) { this.battle.destroy(); this.battle = null; }
     this.audio.sfxVictory();
+
+    // Phase 8: show animated battle-results card for 2.5s before stage-win
+    this.state = 'battle-results';
+    this._battleResultsAge = 0;
+    this._battleResultsDone = false;
+    this._resultBtnRects = [];
+    setTimeout(() => {
+      if (this.state === 'battle-results') this._advanceToStageWin();
+    }, 2800);
+  }
+
+  // Phase 8: called when battle-results card is tapped or times out
+  _advanceToStageWin() {
+    if (this._battleResultsDone) return;
+    this._battleResultsDone = true;
     this.state = 'stage-win';
     this._resultBtnRects = [];
-    // Spawn confetti particles
     this._confetti = Array.from({length: 55}, () => ({
       x: Math.random() * this.W,
       y: Math.random() * -this.H,
@@ -924,6 +958,7 @@ class SlashGame {
       case 'runner': this._updateRunner(); break;
       case 'transition': this._updateTransition(); break;
       case 'battle': this._updateBattle(); break;
+      case 'battle-results': this._drawBattleResults(); break;  // Phase 8
       case 'stage-win': this._drawStageWin(); break;
       case 'stage-lose': this._drawStageLose(); break;
       case 'endless-runner': this._updateEndlessRunner(); break;
@@ -1615,6 +1650,134 @@ class SlashGame {
     if (this.battle.outcome === 'victory') this._onStageWin();
     else this._onStageLose();
   }
+  // ── PHASE 8: POST-BATTLE REWARDS SCREEN ──────────────────────
+  // Shown for 2.8s after a victory before the full stage-win panel appears.
+  // Tap anywhere to skip ahead immediately.
+  _drawBattleResults() {
+    const ctx = this.ctx;
+    const W = this.W; const H = this.H;
+    this._battleResultsAge = (this._battleResultsAge || 0) + 1;
+    const t = this._battleResultsAge;
+
+    // Dark purple → black background
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0d0024');
+    bg.addColorStop(1, '#1a0038');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle star field
+    if (!this._brStars) {
+      this._brStars = Array.from({length: 40}, () => ({
+        x: Math.random() * W, y: Math.random() * H,
+        r: Math.random() * 1.8 + 0.4,
+        p: Math.random() * Math.PI * 2,
+      }));
+    }
+    this._brStars.forEach(s => {
+      ctx.globalAlpha = 0.4 + 0.3 * Math.sin(t * 0.06 + s.p);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // Card slide-in from below
+    const slideIn = Math.min(1, t / 18);           // 0→1 in 18 frames
+    const slideEase = 1 - Math.pow(1 - slideIn, 3); // ease-out cubic
+    const cardW = Math.min(340, W - 40);
+    const cardH = 310;
+    const cardX = (W - cardW) / 2;
+    const cardY = H / 2 - cardH / 2 + (1 - slideEase) * 80;
+
+    // Card shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(cardX + 4, cardY + 8, cardW, cardH, 22); ctx.fill();
+
+    // Card body — gradient border glow
+    const cardGrd = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH);
+    cardGrd.addColorStop(0, 'rgba(40,10,70,0.97)');
+    cardGrd.addColorStop(1, 'rgba(20,5,40,0.97)');
+    ctx.fillStyle = cardGrd;
+    ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 22); ctx.fill();
+    const borderPulse = 0.7 + 0.3 * Math.sin(t * 0.15);
+    ctx.strokeStyle = `rgba(180,80,255,${borderPulse})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 22); ctx.stroke();
+
+    // Title
+    const titleAlpha = Math.min(1, (t - 4) / 10);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, titleAlpha);
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font        = `900 ${Math.min(26, W * 0.058)}px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.fillStyle   = '#FFD700';
+    ctx.shadowColor = '#FF8C00'; ctx.shadowBlur = 16;
+    ctx.fillText('⚔️ Battle Results!', W / 2, cardY + 18);
+    ctx.restore();
+
+    // Stats — each row counts up from 0 to final value
+    const stats = this._battleResults || {};
+    const rows = [
+      { emoji: '📖', label: 'Words Blended',  val: stats.wordsBlended ?? 0, color: '#76FF03', unit: '' },
+      { emoji: '🔥', label: 'Best Streak',    val: stats.bestStreak   ?? 0, color: '#FF9800', unit: '×' },
+      { emoji: '🎯', label: 'Accuracy',        val: stats.accuracy     ?? 0, color: '#00E5FF', unit: '%' },
+      { emoji: '🍚', label: 'Rice Earned',     val: stats.riceEarned   ?? 0, color: '#FFD700', unit: '' },
+    ];
+
+    rows.forEach((row, i) => {
+      const rowDelay = 10 + i * 12;
+      const rowAlpha = Math.min(1, Math.max(0, (t - rowDelay) / 8));
+      // Count-up: animate from 0 → val over 20 frames after rowDelay
+      const countProg = Math.min(1, Math.max(0, (t - rowDelay) / 20));
+      const displayVal = Math.round(row.val * countProg);
+
+      const rowY = cardY + 72 + i * 52;
+      ctx.save();
+      ctx.globalAlpha = rowAlpha;
+
+      // Row background pill
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.beginPath(); ctx.roundRect(cardX + 12, rowY - 8, cardW - 24, 42, 10); ctx.fill();
+
+      // Emoji + label
+      ctx.font = `bold 15px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillText(`${row.emoji}  ${row.label}`, cardX + 24, rowY + 13);
+
+      // Value (counts up)
+      const scale = 1 + 0.15 * Math.max(0, Math.sin((t - rowDelay - 20) * 0.4)) * (countProg < 1 ? 1 : 0);
+      ctx.textAlign = 'right';
+      ctx.save();
+      ctx.translate(cardX + cardW - 24, rowY + 13);
+      ctx.scale(scale, scale);
+      ctx.font = `900 ${Math.min(22, W * 0.048)}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillStyle = row.color;
+      ctx.shadowColor = row.color; ctx.shadowBlur = 8;
+      ctx.fillText(`${row.unit}${displayVal}${row.unit === '%' ? '' : row.unit === '×' ? '' : ''}`, 0, 0);
+      ctx.restore();
+
+      ctx.restore();
+    });
+
+    // "Tap to continue" hint fades in at t=55
+    const tapAlpha = Math.min(1, Math.max(0, (t - 55) / 15)) * (0.6 + 0.4 * Math.sin(t * 0.14));
+    ctx.save();
+    ctx.globalAlpha = tapAlpha;
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font        = `bold 14px "Nunito", system-ui`;
+    ctx.fillStyle   = 'rgba(255,255,255,0.75)';
+    ctx.fillText('Tap to continue →', W / 2, cardY + cardH - 22);
+    ctx.restore();
+
+    ctx.textBaseline = 'alphabetic';
+  }
+
   // ── STAGE WIN SCREEN ─────────────────────────────────────────
   _drawStageWin() {
     const ctx = this.ctx;
