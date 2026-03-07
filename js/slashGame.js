@@ -36,7 +36,7 @@ const SLASH_SPRITES = {
   'tile-dojo': 'assets/sprites/tile-dojo.png',
   'tile-rice': 'assets/sprites/tile-rice.png',
   // ── Minion dino ───────────────────────────────────────────
-  'minion-dino': 'assets/sprites/minion-dino.png',
+  'minion-dino': 'assets/sprites/dino-minion.png',
   'dino-minion': 'assets/sprites/dino-minion.png',
   // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex': 'assets/dinosaurs/trex.png',
@@ -98,30 +98,8 @@ const CRITICAL_SPRITE_KEYS = new Set([
 // Sprite sheets for animated canvas entities. These are optional and gracefully
 // fall back to existing per-frame sprites if files are missing.
 const SLASH_SPRITE_SHEETS = {
-  rikuSheet: {
-    key: 'sheet-riku',
-    url: 'assets/riku_sprites.png',
-    frameW: 256,
-    frameH: 256,
-    animations: {
-      run: [0, 1, 2, 3],
-      jump: [4, 5],
-      slash: [6, 7, 8],
-      idle: [9, 10],
-    },
-  },
-  dinoSheet: {
-    key: 'sheet-dino',
-    url: 'assets/dino_sprites.png',
-    frameW: 256,
-    frameH: 256,
-  },
-  particlesSheet: {
-    key: 'sheet-particles',
-    url: 'assets/particles.png',
-    frameW: 128,
-    frameH: 128,
-  },
+  // Optional sheet assets were removed from the repo; keep this empty so we
+  // don't issue 404s for non-existent files on startup.
 };
 // ─────────────────────────────────────────────────────────────
 // SLASH GAME
