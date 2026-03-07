@@ -178,8 +178,50 @@ class BattleEngine {
     this.outcome   = null;  // 'victory' | 'defeat'
     this._destroyed = false; // guards against orphaned setTimeout callbacks after destroy()
 
+    // ── Keyboard tile selection ──────────────────────────────
+    this._kbHandler = (e) => this._onKeyDown(e);
+    document.addEventListener('keydown', this._kbHandler);
+
     // Kick off first word after a short delay (let canvas settle)
     setTimeout(() => { if (!this._destroyed) { this._startNextWord(); this._startBlendTimer(); } }, 400);
+  }
+
+  // ── Keyboard tile selection ─────────────────────────────────
+  // Letter keys select the first non-used tile whose phoneme starts
+  // with that letter; Backspace undoes the last placed tile.
+  _onKeyDown(e) {
+    if (this._paused || this.done) return;
+    if (this.state !== 'idle' && this.state !== 'blending') return;
+    // Ignore modifier combos (Ctrl+R reload etc.)
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    const key = e.key;
+    if (key === 'Backspace' || key === 'Delete') {
+      e.preventDefault();
+      this._undoLastTile();
+      return;
+    }
+    if (key === 'Escape') {
+      e.preventDefault();
+      this._clearBuild();
+      return;
+    }
+    // Single printable character → match tile
+    if (key.length !== 1) return;
+    const k = key.toLowerCase();
+    // Prefer exact-match first, then startsWith
+    for (const pass of ['exact', 'prefix']) {
+      for (let i = 0; i < this._shuffledPh.length; i++) {
+        if (this._usedTileIdx.has(i)) continue;
+        const ph = this._shuffledPh[i].toLowerCase();
+        const match = pass === 'exact' ? ph === k : ph.startsWith(k);
+        if (match) {
+          e.preventDefault();
+          this._onTileClick(this._shuffledPh[i], this._tileEls[i], i);
+          return;
+        }
+      }
+    }
   }
 
   // ── Utility: Fisher-Yates shuffle ───────────────────────────
@@ -208,14 +250,16 @@ class BattleEngine {
     this._clearBtn = document.createElement('button');
     this._clearBtn.className   = 'be-btn be-btn-clear';
     this._clearBtn.innerHTML   = '✕ Clear';
-    this._clearBtn.title       = 'Clear your answer';
+    this._clearBtn.title       = 'Clear your answer (Escape)';
+    this._clearBtn.setAttribute('aria-label', 'Clear answer (Escape key)');
     this._clearBtn.addEventListener('click', () => this._clearBuild());
     this._clearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._clearBuild(); });
 
     this._undoBtn = document.createElement('button');
     this._undoBtn.className   = 'be-btn be-btn-undo';
     this._undoBtn.innerHTML   = '↩ Undo';
-    this._undoBtn.title       = 'Undo last tile';
+    this._undoBtn.title       = 'Undo last tile (Backspace)';
+    this._undoBtn.setAttribute('aria-label', 'Undo last tile (Backspace key)');
     this._undoBtn.addEventListener('click', () => this._undoLastTile());
     this._undoBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._undoLastTile(); });
 
@@ -223,6 +267,7 @@ class BattleEngine {
     this._hearBtn.className   = 'be-btn be-btn-hear';
     this._hearBtn.innerHTML   = '🔊 Hear';
     this._hearBtn.title       = 'Hear the word';
+    this._hearBtn.setAttribute('aria-label', 'Hear the word pronounced');
     this._hearBtn.addEventListener('click', () => {
       if (this._currentWord) {
         this.audio?.playBlendSequence(this._currentWord.phonemes, this._currentWord.word);
@@ -332,6 +377,10 @@ class BattleEngine {
       tile.textContent      = ph.toUpperCase();
       tile.dataset.phoneme  = ph;
       tile.dataset.idx      = idx;
+      tile.setAttribute('role', 'button');
+      tile.setAttribute('aria-label', `Phoneme tile ${ph.toUpperCase()}${isUsed ? ', used' : ''}`);
+      tile.setAttribute('aria-disabled', isUsed ? 'true' : 'false');
+      tile.setAttribute('title', `${ph.toUpperCase()} — press '${ph[0].toUpperCase()}' key`);
 
       if (!isUsed) {
         tile.addEventListener('click', () => this._onTileClick(ph, tile, idx));
@@ -692,15 +741,17 @@ class BattleEngine {
     }, delay);
   }
 
-  // ── Timer ────────────────────────────────────────────────────
+  // ── Timer (performance.now()-based: no drift) ───────────────
   _startBlendTimer() {
     this._stopBlendTimer();
-    this._blendTimeLeft = this._blendTime;
+    this._blendTimeLeft   = this._blendTime;
+    this._timerStartedAt  = performance.now();  // absolute start time
     this._timerBar.style.width = '100%';
     this._timerBar.className = 'be-timer-fill';
     this._blendTimer = setInterval(() => {
-      this._blendTimeLeft -= 0.1;
-      const pct = Math.max(0, this._blendTimeLeft / this._blendTime);
+      const elapsed = (performance.now() - this._timerStartedAt) / 1000;
+      this._blendTimeLeft = Math.max(0, this._blendTime - elapsed);
+      const pct = this._blendTimeLeft / this._blendTime;
       this._timerBar.style.width  = (pct * 100) + '%';
       this._timerBar.className = 'be-timer-fill' +
         (pct < 0.25 ? ' be-timer-urgent' : pct < 0.5 ? ' be-timer-warn' : '');
@@ -708,11 +759,13 @@ class BattleEngine {
         this._stopBlendTimer();
         this._bossAutoAttack();
       }
-    }, 100);
+    }, 50); // 50ms poll for smoother bar
   }
 
   _stopBlendTimer() {
     if (this._blendTimer) { clearInterval(this._blendTimer); this._blendTimer = null; }
+    // Record remaining time so _resumeBlendTimer can pick up exactly here
+    this._timerPausedLeft = this._blendTimeLeft;
   }
 
   _bossAutoAttack() {
@@ -939,12 +992,17 @@ class BattleEngine {
     }
   }
 
-  // Restart blend-timer interval without resetting _blendTimeLeft
+  // Resume blend-timer from where it was paused (no reset)
   _resumeBlendTimer() {
     this._stopBlendTimer();
+    // Re-anchor start time so remaining time counts from now
+    const resumeFrom = this._timerPausedLeft ?? this._blendTimeLeft;
+    this._blendTimeLeft  = resumeFrom;
+    this._timerStartedAt = performance.now() - (this._blendTime - resumeFrom) * 1000;
     this._blendTimer = setInterval(() => {
-      this._blendTimeLeft -= 0.1;
-      const pct = Math.max(0, this._blendTimeLeft / this._blendTime);
+      const elapsed = (performance.now() - this._timerStartedAt) / 1000;
+      this._blendTimeLeft = Math.max(0, this._blendTime - elapsed);
+      const pct = this._blendTimeLeft / this._blendTime;
       this._timerBar.style.width  = (pct * 100) + '%';
       this._timerBar.className = 'be-timer-fill' +
         (pct < 0.25 ? ' be-timer-urgent' : pct < 0.5 ? ' be-timer-warn' : '');
@@ -952,7 +1010,7 @@ class BattleEngine {
         this._stopBlendTimer();
         this._bossAutoAttack();
       }
-    }, 100);
+    }, 50);
   }
 
   _drawPauseOverlay(ctx) {
@@ -1294,6 +1352,10 @@ class BattleEngine {
   destroy() {
     this._destroyed = true;
     this._stopBlendTimer();
+    if (this._kbHandler) {
+      document.removeEventListener('keydown', this._kbHandler);
+      this._kbHandler = null;
+    }
     this.overlay.innerHTML = '';
   }
 }
@@ -1341,6 +1403,10 @@ class EndlessBattleEngine {
 
     // Build overlay
     this._buildOverlay();
+
+    // ── Keyboard tile selection for EndlessBattle ────────────
+    this._kbHandler = (e) => this._onKeyDownEBE(e);
+    document.addEventListener('keydown', this._kbHandler);
 
     // Auto-blend mode (power-up)
     if (this._autoBlend) {
@@ -1414,8 +1480,13 @@ class EndlessBattleEngine {
     const shuffled = this._shuffledPhonemes();
     for (const { ph, i } of shuffled) {
       const btn = document.createElement('button');
-      btn.className = 'ebe-tile' + (this._usedIdx.has(i) ? ' ebe-tile-used' : '');
+      const _isUsedEbe = this._usedIdx.has(i);
+      btn.className = 'ebe-tile' + (_isUsedEbe ? ' ebe-tile-used' : '');
       btn.textContent = ph.toUpperCase();
+      btn.setAttribute('role', 'button');
+      btn.setAttribute('aria-label', `Phoneme ${ph.toUpperCase()}${_isUsedEbe ? ', used' : ''}`);
+      btn.setAttribute('aria-disabled', _isUsedEbe ? 'true' : 'false');
+      btn.setAttribute('title', `${ph.toUpperCase()} — press '${ph[0].toUpperCase()}' key`);
       if (!this._usedIdx.has(i)) {
         const tap = (e) => { e.preventDefault(); this._onTap(ph, i, btn); };
         btn.addEventListener('touchstart', tap, { passive: false });
@@ -1567,10 +1638,36 @@ class EndlessBattleEngine {
 
   _dismiss() {
     this._state = 'done';
+    if (this._kbHandler) {
+      document.removeEventListener('keydown', this._kbHandler);
+      this._kbHandler = null;
+    }
     const timeUsed = (performance.now() - this._startTime) / 1000;
     this.overlay.classList.remove('active');
     this.overlay.innerHTML = '';
     if (this.onDone) this.onDone(this._result, timeUsed);
+  }
+
+  _onKeyDownEBE(e) {
+    if (this._state !== 'blend') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const key = e.key;
+    if (key.length !== 1) return;
+    const k = key.toLowerCase();
+    // Find matching tile in the rendered order: exact first, then prefix
+    const phonemes = this.word.phonemes;
+    for (const pass of ['exact', 'prefix']) {
+      for (let i = 0; i < phonemes.length; i++) {
+        if (this._usedIdx.has(i)) continue;
+        const ph = phonemes[i].toLowerCase();
+        const match = pass === 'exact' ? ph === k : ph.startsWith(k);
+        if (match && this._tileEls[i]) {
+          e.preventDefault();
+          this._onTap(phonemes[i], i, this._tileEls[i]);
+          return;
+        }
+      }
+    }
   }
 
   _doAutoBlend() {
