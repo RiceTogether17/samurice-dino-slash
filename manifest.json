@@ -1,0 +1,20 @@
+{
+  "name": "Samurice Dino Slash",
+  "short_name": "DinoSlash",
+  "description": "Phonics runner game — slash dinosaurs with the power of words!",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0f1e",
+  "theme_color": "#1a237e",
+  "icons": [
+    {
+      "src": "assets/sprites/riku-idle.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "education"],
+  "lang": "en"
+}

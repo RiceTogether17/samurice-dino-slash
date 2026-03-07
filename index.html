@@ -12,6 +12,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap">
     <link rel="stylesheet" href="css/style.css">
+    <!-- Phase 9: PWA manifest -->
+    <link rel="manifest" href="manifest.json">
     <!-- ctx.roundRect polyfill for older browsers -->
     <script>
     (function() {
@@ -188,6 +190,69 @@ document.addEventListener('touchend', function(e) {
   if (now - lastTap < 300) e.preventDefault();
   lastTap = now;
 }, { passive: false });
+</script>
+
+<!-- Phase 9: PWA install banner (hidden until beforeinstallprompt fires) -->
+<div id="pwa-install-banner" aria-live="polite" role="complementary">
+  <div class="pwa-text">
+    ⚔️ <strong>Play offline!</strong>
+    <small>Add Samurice Dino Slash to your home screen</small>
+  </div>
+  <button id="pwa-install-btn" aria-label="Add to home screen">Install</button>
+  <button id="pwa-dismiss-btn" aria-label="Dismiss install prompt">✕</button>
+</div>
+
+<!-- Phase 9: Service worker registration + PWA install prompt logic -->
+<script>
+(function() {
+  'use strict';
+  // Register service worker for offline support
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {/* silent */});
+    });
+  }
+
+  // Intercept the browser's native install prompt so we can show our own banner
+  let _deferredPrompt = null;
+  const banner  = document.getElementById('pwa-install-banner');
+  const installBtn = document.getElementById('pwa-install-btn');
+  const dismissBtn = document.getElementById('pwa-dismiss-btn');
+
+  // Don't show banner if user already dismissed it in a previous session
+  if (localStorage.getItem('pwa-dismissed') === '1') return;
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();          // stop the browser default mini-infobar
+    _deferredPrompt = e;
+    // Show our banner with a short delay so the game canvas has settled
+    setTimeout(() => banner.classList.add('visible'), 3000);
+  });
+
+  if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+      if (!_deferredPrompt) return;
+      banner.classList.remove('visible');
+      _deferredPrompt.prompt();
+      const { outcome } = await _deferredPrompt.userChoice;
+      if (outcome === 'accepted') localStorage.setItem('pwa-dismissed', '1');
+      _deferredPrompt = null;
+    });
+  }
+
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', () => {
+      banner.classList.remove('visible');
+      localStorage.setItem('pwa-dismissed', '1');
+      _deferredPrompt = null;
+    });
+  }
+
+  // Hide banner if the app is already installed (display-mode: standalone)
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    localStorage.setItem('pwa-dismissed', '1');
+  }
+})();
 </script>
 </body>
 </html>

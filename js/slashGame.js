@@ -567,6 +567,14 @@ class SlashGame {
     if (this.state === 'leaderboard') {
       this.state = 'mode-select'; return;
     }
+    // Phase 9: Dashboard back button
+    if (this.state === 'dashboard') {
+      const r = this._dashBackRect;
+      if (r && mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        this.state = 'mode-select';
+      }
+      return;
+    }
     if (this.state === 'menu') {
       this.state = 'world-map';
       return;
@@ -968,6 +976,7 @@ class SlashGame {
       case 'daily': this._updateDaily(); break;
       case 'achievements': this._updateAchievements(); break;
       case 'leaderboard': this._updateLeaderboard(); break;
+      case 'dashboard':   this._drawDashboard(); break;  // Phase 9
     }
     // Achievement popup on top of everything
     this._drawAchievementPopup();
@@ -2125,6 +2134,7 @@ class SlashGame {
       { label:'🏪 SHOP', sub:'Spend your rice grains', col:'#FF80FF', action:'shop' },
       { label:'🏆 LEADERBOARD', sub:'Challenge the world', col:'#FF8C00', action:'leaderboard' },
       { label:'🥇 ACHIEVEMENTS', sub:`${this.progress.data.achievements.length}/${ACHIEVEMENTS.length} unlocked`, col:'#00CCFF', action:'achievements' },
+      { label:'📊 PROGRESS', sub:'Parent / teacher view', col:'#69F0AE', action:'dashboard' },  // Phase 9
     ];
     const btnH = Math.min(62, (H - 120) / (modes.length + 0.5));
     const btnW = Math.min(W - 40, 400);
@@ -2185,6 +2195,7 @@ class SlashGame {
         if (r.action === 'shop') { this._startShop(); }
         if (r.action === 'leaderboard') { this.state = 'leaderboard'; }
         if (r.action === 'achievements') { this.state = 'achievements'; }
+        if (r.action === 'dashboard')    { this.state = 'dashboard'; this._dashScroll = 0; }  // Phase 9
         if (r.action === 'back') { this.state = 'title'; }
         return;
       }
@@ -2816,6 +2827,122 @@ class SlashGame {
       }
     }
   }
+  // ── PHASE 9: PARENT / TEACHER DASHBOARD ──────────────────────
+  // Shows per-stage stats, weak phonemes, and lifetime totals so
+  // parents and teachers can see where a child needs more practice.
+  _drawDashboard() {
+    const ctx = this.ctx, W = this.W, H = this.H, p = this.progress;
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0a1628'); bg.addColorStop(1, '#1b2b4a');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    // Header
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `bold ${Math.min(22, W * 0.052)}px "Nunito", system-ui`;
+    ctx.fillStyle = '#69F0AE'; ctx.shadowColor = '#00C853'; ctx.shadowBlur = 10;
+    ctx.fillText('📊 Progress Report', W / 2, 14);
+    ctx.shadowBlur = 0;
+    ctx.font = `12px system-ui`; ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillText('Parent / teacher view — shows learning data stored on this device', W / 2, 44);
+
+    // ── Global stats row ────────────────────────────────────────
+    const gStats = [
+      { label: 'Words blended', val: p.data.totalWordsBlended ?? 0 },
+      { label: 'Best combo',    val: p.data.bestCombo         ?? 0 },
+      { label: 'Daily streak',  val: p.data.dailyStreak       ?? 0, suffix: ' days' },
+      { label: 'Rice grains',   val: p.getRicePoints()        ?? 0, suffix: ' 🍚' },
+    ];
+    const gsW = (W - 24) / gStats.length;
+    gStats.forEach((gs, i) => {
+      const gx = 12 + i * gsW, gy = 64;
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.beginPath(); ctx.roundRect(gx, gy, gsW - 6, 46, 8); ctx.fill();
+      ctx.fillStyle = '#69F0AE'; ctx.font = `bold ${Math.min(18, gsW * 0.3)}px "Nunito", system-ui`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(`${gs.val}${gs.suffix || ''}`, gx + (gsW - 6) / 2, gy + 6);
+      ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = `10px system-ui`;
+      ctx.fillText(gs.label, gx + (gsW - 6) / 2, gy + 30);
+    });
+
+    // ── Per-stage breakdown ──────────────────────────────────────
+    const stages = PHONICS_DATA.stageList || [];
+    const rowH = 84, topY = 122;
+    stages.forEach((stage, idx) => {
+      const s     = p.getStage(stage.id);
+      const acc   = s.totalBlends > 0 ? Math.round(s.correctBlends / s.totalBlends * 100) : null;
+      const stars = p.getStars(stage.id);
+      const mastered = (s.wordsMastered || []).length;
+      const ry = topY + idx * (rowH + 8);
+
+      // Row bg
+      ctx.fillStyle = s.unlocked ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.03)';
+      ctx.beginPath(); ctx.roundRect(10, ry, W - 20, rowH, 10); ctx.fill();
+
+      // Stage name + stars
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.font = `bold ${Math.min(14, W * 0.033)}px "Nunito", system-ui`;
+      ctx.fillStyle = s.unlocked ? '#fff' : 'rgba(255,255,255,0.35)';
+      ctx.fillText(`${stage.icon || '🦕'} Stage ${stage.id}: ${stage.name}`, 20, ry + 9);
+      ctx.font = '14px serif';
+      for (let si = 0; si < 3; si++) {
+        ctx.globalAlpha = si < stars ? 1 : 0.2;
+        ctx.fillText('⭐', 20 + si * 18, ry + 30);
+      }
+      ctx.globalAlpha = 1;
+
+      if (!s.unlocked) {
+        ctx.font = '11px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillText('Locked — complete earlier stages', W / 2, ry + rowH / 2);
+        ctx.textAlign = 'left';
+        return;
+      }
+
+      // Stats pills
+      const pills = [
+        { t: acc !== null ? `🎯 ${acc}%` : '🎯 —',   col: acc >= 80 ? '#76FF03' : acc >= 60 ? '#FFD700' : '#FF5252' },
+        { t: `📖 ${mastered} mastered`,               col: '#4FC3F7' },
+        { t: s.mastery?.noHit    ? '✅ No-Hit' : '⬜ No-Hit',   col: s.mastery?.noHit    ? '#00E676' : 'rgba(255,255,255,0.35)' },
+        { t: s.mastery?.speedClear ? '✅ Speed' : '⬜ Speed',   col: s.mastery?.speedClear ? '#FFD700' : 'rgba(255,255,255,0.35)' },
+      ];
+      let px2 = 20;
+      pills.forEach(pill => {
+        ctx.font = `bold 11px "Nunito", system-ui`;
+        const tw = ctx.measureText(pill.t).width + 14;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.roundRect(px2, ry + 52, tw, 22, 6); ctx.fill();
+        ctx.fillStyle = pill.col;
+        ctx.fillText(pill.t, px2 + 7, ry + 59);
+        px2 += tw + 6;
+      });
+
+      // Weak phonemes
+      const weak = p.getWeakPhonemes(stage.id);
+      const weakKeys = Object.entries(weak)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([ph]) => ph.toUpperCase());
+      if (weakKeys.length) {
+        ctx.font = '10px system-ui'; ctx.fillStyle = '#FF8A80'; ctx.textAlign = 'right';
+        ctx.fillText(`Needs work: ${weakKeys.join(', ')}`, W - 18, ry + 62);
+      }
+      ctx.textAlign = 'left';
+    });
+
+    // ── Back button ──────────────────────────────────────────────
+    const totalH = topY + stages.length * (rowH + 8) + 16;
+    const backY = Math.max(H - 36, totalH);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 14px "Nunito", system-ui';
+    ctx.fillStyle = 'rgba(105,240,174,0.85)';
+    ctx.fillText('← Back', W / 2, backY + 14);
+    this._dashBackRect = { x: W/2 - 60, y: backY, w: 120, h: 30 };
+
+    ctx.textBaseline = 'alphabetic';
+  }
+
   _queueAchievementPopup(ach) {
     if (!this._achPopupQueue) this._achPopupQueue = [];
     this._achPopupQueue.push({ ...ach, life: 1 });
