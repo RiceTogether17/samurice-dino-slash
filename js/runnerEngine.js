@@ -3516,6 +3516,28 @@ class EndlessRunnerEngine {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
+    // Scenic endless backdrop: cycle campaign maps (including bonus map)
+    // as distance increases so more environment art gets used in gameplay.
+    const bgCycle = [
+      'stage-1-rice-paddy', 'stage-2-bamboo', 'stage-3-cherry-temple',
+      'stage-4-ruins', 'stage-5-mountain-terraces', 'stage-6-volcanic',
+      'bonus-training',
+    ];
+    const bgKey = bgCycle[Math.floor(this._distM / 220) % bgCycle.length];
+    const bgSp = this.sprites[bgKey];
+    if (bgSp && bgSp.complete && bgSp.naturalWidth > 0) {
+      const ar = bgSp.naturalWidth / bgSp.naturalHeight;
+      const drawH = this.groundY;
+      const drawW = drawH * ar;
+      const scrollX = -((this._worldX * 0.22) % drawW);
+      ctx.save();
+      ctx.globalAlpha = 0.40;
+      for (let x = scrollX; x < W + drawW; x += drawW) {
+        ctx.drawImage(bgSp, x, 0, drawW, drawH);
+      }
+      ctx.restore();
+    }
+
     // Zone transition overlay
     if (this._zoneFlash > 60) {
       ctx.fillStyle = `rgba(255,255,255,${(this._zoneFlash - 60) / 120})`;

@@ -77,6 +77,7 @@ const SLASH_SPRITES = {
   'stage-4-ruins': 'assets/backgrounds/stage-4.jpg',
   'stage-5-mountain-terraces':'assets/backgrounds/stage-5.jpg',
   'stage-6-volcanic': 'assets/backgrounds/stage-6.jpg',
+  'bonus-training': 'assets/backgrounds/bonus.jpg',
   'victory-golden-harvest': 'assets/backgrounds/victory.jpg',
 };
 
