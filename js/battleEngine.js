@@ -70,6 +70,86 @@ class SlashParticle {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SLASH TRAIL  (Phase 7)
+// Bezier arc drawn from a phoneme tile to the boss when the player
+// taps the correct tile.  Fades out over ~25 frames.
+// ─────────────────────────────────────────────────────────────
+class SlashTrail {
+  /**
+   * @param {number} tx  tile canvas-space X
+   * @param {number} ty  tile canvas-space Y
+   * @param {number} bx  boss canvas-space X
+   * @param {number} by  boss canvas-space Y
+   */
+  constructor(tx, ty, bx, by) {
+    this.tx = tx; this.ty = ty;
+    this.bx = bx; this.by = by;
+    // Control point arcs upward so the trail curves like a sword stroke
+    this.cpx = (tx + bx) / 2;
+    this.cpy = Math.min(ty, by) - 60;
+    this.life = 1.0;  // 0→dead
+  }
+  update() { this.life -= 0.04; }  // ~25 frames
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.life) * 0.85;
+    const grd = ctx.createLinearGradient(this.tx, this.ty, this.bx, this.by);
+    grd.addColorStop(0, 'rgba(255,255,255,0.9)');
+    grd.addColorStop(0.5, 'rgba(255,215,0,0.7)');
+    grd.addColorStop(1, 'rgba(255,100,0,0.1)');
+    ctx.strokeStyle = grd;
+    ctx.lineWidth   = 3 + this.life * 4;
+    ctx.lineCap     = 'round';
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur  = 14 * this.life;
+    ctx.beginPath();
+    ctx.moveTo(this.tx, this.ty);
+    ctx.quadraticCurveTo(this.cpx, this.cpy, this.bx, this.by);
+    ctx.stroke();
+    ctx.restore();
+  }
+  isDead() { return this.life <= 0; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMBO RING  (Phase 7)
+// Expanding ring that radiates from the boss on streak milestones
+// (combo ≥ 3 or ≥ 5).  Signals the player they've hit a hot streak.
+// ─────────────────────────────────────────────────────────────
+class ComboRing {
+  /**
+   * @param {number} x     centre X (boss position)
+   * @param {number} y     centre Y (boss position)
+   * @param {string} color ring colour (gold for ×3, magenta for ×5)
+   */
+  constructor(x, y, color) {
+    this.x = x; this.y = y;
+    this.color  = color;
+    this.radius = 20;
+    this.life   = 1.0;
+  }
+  update() {
+    this.radius += 7;  // ring grows outward
+    this.life   -= 0.045;
+  }
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.life) * 0.7;
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth   = 3 + this.life * 3;
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur  = 18 * this.life;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  isDead() { return this.life <= 0; }
+}
+
+// ─────────────────────────────────────────────────────────────
 // DAMAGE POP
 // ─────────────────────────────────────────────────────────────
 class DamagePop {
@@ -150,6 +230,8 @@ class BattleEngine {
 
     // Animations
     this.slashParticles = [];
+    this._slashTrails   = [];   // Phase 7: bezier arcs from tile → boss
+    this._comboRings    = [];   // Phase 7: expanding rings at boss on streak milestones
     this._gradeFloat    = null;
     this.damagePops     = [];
     this._bossShake     = 0;
@@ -425,7 +507,7 @@ class BattleEngine {
     tileEl.classList.add('be-tile-used');
     this._flashTileFeedback(tileEl, 'ok');
 
-    // Emit slash sparks from tile's canvas-space position
+    // Emit slash sparks + slash trail from tile's canvas-space position → boss
     if (this.canvas) {
       const cr  = this.canvas.getBoundingClientRect();
       const tr  = tileEl.getBoundingClientRect();
@@ -436,6 +518,10 @@ class BattleEngine {
       for (let i = 0; i < 4; i++) {
         this.slashParticles.push(new SlashParticle(tx, ty));
       }
+      // Phase 7: bezier arc from tile → boss (drawn behind particles)
+      const bossX = Math.round(this.W * 0.72);
+      const bossY = Math.round(this.H * 0.58 * 0.50);
+      this._slashTrails.push(new SlashTrail(tx, ty, bossX, bossY));
     }
 
     this._renderBlanks();
@@ -684,6 +770,19 @@ class BattleEngine {
     // Mark special as ready at combo 5
     if (this._combo >= 5) this._specialReady = true;
 
+    // Phase 7: combo burst rings radiate from boss at streak milestones
+    if (this._combo === 3 || this._combo === 5) {
+      const ringColor = this._combo >= 5 ? '#FF4081' : '#FFD700';
+      const ringX = Math.round(this.W * 0.72);
+      const ringY = Math.round(this.H * 0.58 * 0.50);
+      for (let r = 0; r < (this._combo >= 5 ? 3 : 2); r++) {
+        // Stagger rings slightly so they visually separate
+        const ring = new ComboRing(ringX, ringY, ringColor);
+        ring.radius = 20 + r * 18;  // pre-offset so rings don't stack identically
+        this._comboRings.push(ring);
+      }
+    }
+
     if (this.progress) this.progress.recordBlend(this.stage.id, wordObj.word, true, timeBonus > 0.82, wordObj.phonemes);
     if (this.audio)    this.audio.sfxSlash();
     if (this.audio)    this.audio.sfxBlendChime?.();
@@ -859,6 +958,10 @@ class BattleEngine {
 
     this.slashParticles.forEach(p => p.update());
     this.slashParticles = this.slashParticles.filter(p => !p.isDead());
+    this._slashTrails.forEach(t => t.update());
+    this._slashTrails = this._slashTrails.filter(t => !t.isDead());
+    this._comboRings.forEach(r => r.update());
+    this._comboRings = this._comboRings.filter(r => !r.isDead());
     this.damagePops.forEach(p => p.update());
     this.damagePops = this.damagePops.filter(p => !p.isDead());
   }
@@ -874,6 +977,10 @@ class BattleEngine {
     this._drawRiku(ctx);
     this._drawHPBars(ctx);
 
+    // Phase 7: slash trails drawn behind particles (tile → boss arcs)
+    this._slashTrails.forEach(t => t.draw(ctx));
+    // Phase 7: combo burst rings expand around boss at streak milestones
+    this._comboRings.forEach(r => r.draw(ctx));
     this.slashParticles.forEach(p => p.draw(ctx));
     this.damagePops.forEach(p => p.draw(ctx));
 
