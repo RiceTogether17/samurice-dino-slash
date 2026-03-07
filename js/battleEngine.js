@@ -599,10 +599,16 @@ class BattleEngine {
 
   // ── Tile pronunciation helper using speech synthesis ─────────────────
   _pronounceTile(phoneme) {
+    // Reuse AudioManager's UK-female voice preference when available.
+    if (this.audio?.speak) {
+      this.audio.speak(phoneme, 0.86, 1.12);
+      return;
+    }
     if (!window.speechSynthesis) return;
     const u = new SpeechSynthesisUtterance(phoneme);
     u.rate = 0.86;
     u.pitch = 1.12;
+    u.lang = 'en-GB';
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(u);
   }
