@@ -1282,8 +1282,9 @@ class BattleEngine {
     const bFeetY = fy;
     const bCY    = bFeetY - bH / 2;
 
-    const shakeX = this._bossShake > 0 ? (Math.random() - 0.5) * 14 : 0;
-    const shakeY = this._bossShake > 0 ? (Math.random() - 0.5) * 8  : 0;
+    // Phase 9: suppress shake for prefers-reduced-motion
+    const shakeX = (this._bossShake > 0 && !window.REDUCED_MOTION) ? (Math.random() - 0.5) * 14 : 0;
+    const shakeY = (this._bossShake > 0 && !window.REDUCED_MOTION) ? (Math.random() - 0.5) * 8  : 0;
     const bob    = this._bossBobOffset;
     const scale  = 1 + Math.min(0.25, this._bossShake * 0.012);
     const hpPct  = this.bossHp / this.bossMaxHp;
@@ -1401,8 +1402,8 @@ class BattleEngine {
     const rFeetY = fy;
     const rCY    = rFeetY - rH / 2;
 
-    const shakeX = this._rikuShake > 0 ? (Math.random() - 0.5) * 10 : 0;
-    const shakeY = this._rikuShake > 0 ? (Math.random() - 0.5) * 5  : 0;
+    const shakeX = (this._rikuShake > 0 && !window.REDUCED_MOTION) ? (Math.random() - 0.5) * 10 : 0;
+    const shakeY = (this._rikuShake > 0 && !window.REDUCED_MOTION) ? (Math.random() - 0.5) * 5  : 0;
     const bob    = this.state === 'idle' ? Math.sin(this._age * 0.05) * 3 : 0;
 
     ctx.save();

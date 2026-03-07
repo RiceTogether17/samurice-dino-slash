@@ -2080,7 +2080,8 @@ class RunnerEngine {
 
     // Screen shake transform
     let shakeX = 0, shakeY = 0;
-    if (this._screenShake > 0) {
+    // Phase 9: skip screen shake if user prefers reduced motion
+    if (this._screenShake > 0 && !window.REDUCED_MOTION) {
       shakeX = (Math.random() - 0.5) * this._screenShake * 1.2;
       shakeY = (Math.random() - 0.5) * this._screenShake * 0.7;
     }
