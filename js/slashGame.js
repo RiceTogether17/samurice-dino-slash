@@ -218,9 +218,31 @@ class SlashGame {
           if (criticalLoaded >= criticalTotal) this._spritesReady = true;
         }
       };
+
+      // Retry failed image loads a couple of times (with cache-busting) so
+      // transient CDN/network hiccups don't permanently lock gameplay actors
+      // (bosses, minions, attack poses) into procedural fallback art.
+      let attempts = 0;
+      const maxAttempts = 3;
+      const loadAttempt = () => {
+        attempts++;
+        img.src = attempts === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${Date.now()}-${attempts}`;
+      };
+
       img.onload = done;
-      img.onerror = done;
-      img.src = url;
+      img.onerror = () => {
+        if (attempts < maxAttempts) {
+          loadAttempt();
+          return;
+        }
+        // Keep engine resilient if a specific asset is truly unavailable.
+        if (key === 'minion-dino' && this.sprites['dino-minion']) this.sprites[key] = this.sprites['dino-minion'];
+        if (key === 'dino-minion' && this.sprites['minion-dino']) this.sprites[key] = this.sprites['minion-dino'];
+        if (key === 'riku-run' && this.sprites['riku-idle']) this.sprites[key] = this.sprites['riku-idle'];
+        done();
+      };
+
+      loadAttempt();
       this.sprites[key] = img;
     });
 
