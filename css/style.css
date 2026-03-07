@@ -781,13 +781,13 @@ body {
     flex-wrap: wrap;
 }
 
-/* Empty slot */
+/* Empty slot — Phase 8: bumped from 40×44 to 48×52 to match larger tiles */
 .be-blank {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 40px;
-    height: 44px;
+    min-width: 48px;
+    height: 52px;
     padding: 0 6px;
     background: rgba(0,0,0,0.5);
     border: 2.5px dashed rgba(255,215,0,0.7);
@@ -888,19 +888,19 @@ body {
 }
 
 /* Individual tile — Mario question-block style
-   Min 56px × 56px for WCAG 2.5.5 touch-target compliance (kids 4-8) */
+   Phase 8: bumped base from 56px → 64px for easier tapping (WCAG 2.5.5 kids 4-8) */
 .be-tile {
     box-shadow: 0 5px 0 rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08), 0 0 20px rgba(255,193,7,0.12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 56px;
-    height: 56px;
+    min-width: 64px;
+    height: 64px;
     padding: 0 10px;
     background: linear-gradient(160deg, #FFF9C4, #FFD600);
     color: #3E2000;
     font-weight: 900;
-    font-size: clamp(0.9rem, 4vw, 1.1rem);
+    font-size: clamp(1rem, 4.2vw, 1.25rem);
     font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     border: 2px solid #C89000;
     border-bottom-color: #7f5700;
@@ -1060,6 +1060,40 @@ body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 .be-btn-hear:hover { background: rgba(33,150,243,0.9); color: #fff; }
+
+/* Phase 8: Hint button — glowing gold when available, dimmed once used */
+.be-btn-hint {
+    background: rgba(255,193,7,0.22);
+    border-color: rgba(255,193,7,0.6);
+    color: #FFD700;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.4), 0 0 8px rgba(255,215,0,0.25);
+    transition: background 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+.be-btn-hint:hover:not(:disabled) {
+    background: rgba(255,215,0,0.45);
+    border-color: #FFD700;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.4), 0 0 14px rgba(255,215,0,0.6);
+    color: #3E2000;
+}
+.be-btn-hint:disabled {
+    opacity: 0.32;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Phase 8: live word preview — phoneme sequence built so far */
+.be-word-preview {
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
+    font-weight: 900;
+    font-size: clamp(0.8rem, 3.5vw, 1.05rem);
+    color: #FFD700;
+    letter-spacing: 0.05em;
+    min-height: 1.3em;
+    text-align: center;
+    text-shadow: 0 0 10px rgba(255,215,0,0.5);
+    transition: color 0.2s;
+    padding: 0 4px;
+}
 
 
 /* ── Feedback flash ──────────────────────────────────────── */
