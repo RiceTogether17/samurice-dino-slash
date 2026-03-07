@@ -36,7 +36,7 @@ const SLASH_SPRITES = {
   'tile-dojo': 'assets/sprites/tile-dojo.png',
   'tile-rice': 'assets/sprites/tile-rice.png',
   // ── Minion dino ───────────────────────────────────────────
-  'minion-dino': 'assets/sprites/minion-dino.png',
+  'minion-dino': 'assets/sprites/dino-minion.png',
   'dino-minion': 'assets/sprites/dino-minion.png',
   // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex': 'assets/dinosaurs/trex.png',
@@ -98,30 +98,8 @@ const CRITICAL_SPRITE_KEYS = new Set([
 // Sprite sheets for animated canvas entities. These are optional and gracefully
 // fall back to existing per-frame sprites if files are missing.
 const SLASH_SPRITE_SHEETS = {
-  rikuSheet: {
-    key: 'sheet-riku',
-    url: 'assets/riku_sprites.png',
-    frameW: 256,
-    frameH: 256,
-    animations: {
-      run: [0, 1, 2, 3],
-      jump: [4, 5],
-      slash: [6, 7, 8],
-      idle: [9, 10],
-    },
-  },
-  dinoSheet: {
-    key: 'sheet-dino',
-    url: 'assets/dino_sprites.png',
-    frameW: 256,
-    frameH: 256,
-  },
-  particlesSheet: {
-    key: 'sheet-particles',
-    url: 'assets/particles.png',
-    frameW: 128,
-    frameH: 128,
-  },
+  // Optional sheet assets were removed from the repo; keep this empty so we
+  // don't issue 404s for non-existent files on startup.
 };
 // ─────────────────────────────────────────────────────────────
 // SLASH GAME
@@ -240,9 +218,31 @@ class SlashGame {
           if (criticalLoaded >= criticalTotal) this._spritesReady = true;
         }
       };
+
+      // Retry failed image loads a couple of times (with cache-busting) so
+      // transient CDN/network hiccups don't permanently lock gameplay actors
+      // (bosses, minions, attack poses) into procedural fallback art.
+      let attempts = 0;
+      const maxAttempts = 3;
+      const loadAttempt = () => {
+        attempts++;
+        img.src = attempts === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${Date.now()}-${attempts}`;
+      };
+
       img.onload = done;
-      img.onerror = done;
-      img.src = url;
+      img.onerror = () => {
+        if (attempts < maxAttempts) {
+          loadAttempt();
+          return;
+        }
+        // Keep engine resilient if a specific asset is truly unavailable.
+        if (key === 'minion-dino' && this.sprites['dino-minion']) this.sprites[key] = this.sprites['dino-minion'];
+        if (key === 'dino-minion' && this.sprites['minion-dino']) this.sprites[key] = this.sprites['minion-dino'];
+        if (key === 'riku-run' && this.sprites['riku-idle']) this.sprites[key] = this.sprites['riku-idle'];
+        done();
+      };
+
+      loadAttempt();
       this.sprites[key] = img;
     });
 
