@@ -141,6 +141,18 @@ class SlashGame {
     this._spritesReady = false;
     this._sheetsReady = false;
     this._audioReady = false;
+    // PHASE 6: preloader progress tracking
+    this._loadProgress = { loaded: 0, total: 0 };
+    this._loadMsgs = [
+      "Sharpening Riku's sword…",
+      'Waking up the dinos…',
+      'Gathering rice grains…',
+      'Polishing the DinoGates…',
+      'Teaching Riku new phonics tricks…',
+      'Preparing word battles…',
+    ];
+    this._loadMsgIdx = 0;
+    this._loadMsgAge  = 0;
     this._targetFrameMs = 1000 / 60;
     this._fpsSamples = [];
     this._debugOverlay = false;
@@ -207,13 +219,20 @@ class SlashGame {
   }
   // ── Sprite loading ───────────────────────────────────────────
   _loadSprites() {
-    const entries = Object.entries(SLASH_SPRITES);
+    const entries      = Object.entries(SLASH_SPRITES);
+    const sheetEntries = Object.entries(SLASH_SPRITE_SHEETS);
+    // PHASE 6: track total across sprites + sheets for progress bar
+    this._loadProgress.total  = entries.length + sheetEntries.length;
+    this._loadProgress.loaded = 0;
+    const _tick = () => { this._loadProgress.loaded++; };
+
     let criticalLoaded = 0;
     const criticalTotal = entries.reduce((n, [key]) => n + (CRITICAL_SPRITE_KEYS.has(key) ? 1 : 0), 0);
     this._spritesReady = criticalTotal === 0;
     entries.forEach(([key, url]) => {
       const img = new Image();
       const done = () => {
+        _tick();
         if (CRITICAL_SPRITE_KEYS.has(key)) {
           criticalLoaded++;
           if (criticalLoaded >= criticalTotal) this._spritesReady = true;
@@ -227,10 +246,10 @@ class SlashGame {
 
     // Load optional sprite sheets. Missing files are replaced by generated
     // placeholder sheets so animation code can run without runtime branching.
-    const sheetEntries = Object.entries(SLASH_SPRITE_SHEETS);
     let loadedSheets = 0;
     this._sheetsReady = sheetEntries.length === 0;
     const onSheetDone = () => {
+      _tick();
       loadedSheets++;
       if (loadedSheets >= sheetEntries.length) this._sheetsReady = true;
     };
@@ -266,28 +285,160 @@ class SlashGame {
     g.fillText(`${label} missing`, c.width / 2, c.height / 2);
     return c;
   }
-  // ── Loading screen (shown while sprites stream in) ───────────
+  // ── Loading screen — PHASE 6: rice-grain progress bar ────────
   _drawLoading() {
     const ctx = this.ctx;
-    const W = this.W; const H = this.H;
+    const W = this.W, H = this.H;
+    const t = this._age;
+
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#0d1117';
+
+    // ── Background: deep forest gradient ──────────────────────
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#040c18');
+    bg.addColorStop(0.55, '#0a1e3a');
+    bg.addColorStop(1, '#0a2010');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
-    const dots = ['', '.', '..', '...'][Math.floor(this._age / 12) % 4];
-    ctx.textAlign = 'center';
+
+    // ── Floating rice grain particles (atmospheric) ────────────
+    const grainSeeds = [0.08,0.22,0.38,0.54,0.68,0.82,0.14,0.46,0.76,0.92];
+    grainSeeds.forEach((s, i) => {
+      const speed = 0.35 + s * 0.25;
+      const gx    = W * s;
+      const gy    = ((H + 80) - ((t * speed * 0.7 + i * (H / grainSeeds.length) * 1.1) % (H + 100)));
+      ctx.save();
+      ctx.globalAlpha = 0.12 + s * 0.18;
+      ctx.fillStyle   = '#FFD700';
+      ctx.translate(gx, gy);
+      ctx.rotate(-0.35 + s * 0.5);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 3, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+
+    // ── Riku character (sprite or procedural fallback) ─────────
+    const rikuSize = Math.min(W * 0.22, 108);
+    const rikuX   = W / 2;
+    const rikuY   = H * 0.30;
+    const bob     = Math.sin(t * 0.09) * 9;
+    const rikuSpr = this.sprites['riku-idle'] || this.sprites['riku-walk-1'] || this.sprites['riku-run'];
+    if (rikuSpr && rikuSpr.complete && rikuSpr.naturalWidth > 0) {
+      ctx.save();
+      ctx.translate(rikuX, rikuY + bob);
+      ctx.drawImage(rikuSpr, -rikuSize / 2, -rikuSize / 2, rikuSize, rikuSize);
+      ctx.restore();
+    } else {
+      // Procedural fallback: simple chibi silhouette
+      ctx.save();
+      ctx.translate(rikuX, rikuY + bob);
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath(); ctx.arc(0, -rikuSize * 0.27, rikuSize * 0.17, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#FF6F00';
+      ctx.fillRect(-rikuSize * 0.11, -rikuSize * 0.1, rikuSize * 0.22, rikuSize * 0.34);
+      ctx.restore();
+    }
+
+    // ── Title ─────────────────────────────────────────────────
+    const titleSz = Math.min(W * 0.075, 34);
+    ctx.font        = `900 ${titleSz}px "Nunito", sans-serif`;
+    ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold ${Math.min(32, W * 0.07)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFD700';
-    ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 12;
-    ctx.fillText(`🍚 Loading${dots}`, W / 2, H / 2 - 20);
-    ctx.shadowBlur = 0;
-    ctx.font = `${Math.min(15, W * 0.034)}px system-ui`;
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.fillText("Preparing Riku's moves!", W / 2, H / 2 + 22);
+    ctx.shadowColor = 'rgba(255,180,0,0.6)';
+    ctx.shadowBlur  = 18;
+    ctx.fillStyle   = '#FFD700';
+    ctx.fillText('🍚 Loading…', W / 2, H * 0.51);
+    ctx.shadowBlur  = 0;
+
+    // ── Progress bar ──────────────────────────────────────────
+    const pct  = this._loadProgress.total > 0
+      ? Math.min(1, this._loadProgress.loaded / this._loadProgress.total)
+      : (t % 120) / 120; // animated pulse fallback
+    const barW = Math.min(W * 0.74, 380);
+    const barH = 26;
+    const barX = W / 2 - barW / 2;
+    const barY = H * 0.60;
+
+    // Track (outer shell)
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(barX - 3, barY - 3, barW + 6, barH + 6, 17); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 14); ctx.fill();
+
+    // Fill
+    if (pct > 0.01) {
+      const fillW = Math.max(barH, barW * pct);
+      const barGrad = ctx.createLinearGradient(barX, barY, barX + fillW, barY);
+      barGrad.addColorStop(0,   '#E65100');
+      barGrad.addColorStop(0.45,'#FFD700');
+      barGrad.addColorStop(1,   '#FFEE58');
+      ctx.fillStyle = barGrad;
+      ctx.beginPath(); ctx.roundRect(barX, barY, fillW, barH, 14); ctx.fill();
+
+      // Shine overlay on fill
+      const shine = ctx.createLinearGradient(barX, barY, barX, barY + barH);
+      shine.addColorStop(0,   'rgba(255,255,255,0.28)');
+      shine.addColorStop(0.5, 'rgba(255,255,255,0)');
+      ctx.fillStyle = shine;
+      ctx.beginPath(); ctx.roundRect(barX, barY, fillW, barH / 2, [14,14,0,0]); ctx.fill();
+
+      // Rice grain texture inside fill
+      const grainCount = Math.floor(fillW / 16);
+      for (let i = 0; i < grainCount; i++) {
+        const gx = barX + 9 + i * 16;
+        const gy = barY + barH / 2;
+        ctx.save();
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle   = '#fff';
+        ctx.translate(gx, gy); ctx.rotate(-0.35);
+        ctx.beginPath(); ctx.ellipse(0, 0, 3, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Leading edge glow
+    if (pct > 0.02 && pct < 0.99) {
+      const ex = barX + barW * pct;
+      const eglow = ctx.createRadialGradient(ex, barY + barH / 2, 0, ex, barY + barH / 2, 18);
+      eglow.addColorStop(0,   'rgba(255,235,80,0.7)');
+      eglow.addColorStop(1,   'rgba(255,200,0,0)');
+      ctx.fillStyle = eglow;
+      ctx.beginPath(); ctx.arc(ex, barY + barH / 2, 18, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // ── Percentage label ──────────────────────────────────────
+    const pctTxt = Math.round(pct * 100) + '%';
+    ctx.font     = `bold ${Math.min(W * 0.042, 18)}px "Nunito", sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(pctTxt, W / 2, barY + barH + 10);
+
+    // ── Rotating fun messages ─────────────────────────────────
+    this._loadMsgAge = (this._loadMsgAge || 0) + 1;
+    if (this._loadMsgAge > 100) {
+      this._loadMsgAge = 0;
+      this._loadMsgIdx = (this._loadMsgIdx + 1) % this._loadMsgs.length;
+    }
+    const msgFade = this._loadMsgAge < 12
+      ? this._loadMsgAge / 12
+      : this._loadMsgAge > 88 ? (100 - this._loadMsgAge) / 12 : 1;
+    ctx.save();
+    ctx.globalAlpha = msgFade * 0.75;
+    ctx.font = `italic ${Math.min(W * 0.036, 16)}px "Nunito", sans-serif`;
+    ctx.fillStyle   = '#FFECB3';
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(this._loadMsgs[this._loadMsgIdx], W / 2, barY + barH + 34);
+    ctx.restore();
   }
   // ── Menu input (keyboard) ─────────────────────────────────────
   _bindMenuInput() {
     this._menuKd = (e) => {
+      // PHASE 6: forward arrow / enter / escape keys to onboarding tutorial
+      if (this.state === 'onboarding' && this._onboardingTutorial) {
+        if (this._onboardingTutorial.handleKey(e.key)) { e.preventDefault(); return; }
+      }
       // Step 6 debug overlay toggle (` or ~)
       if (e.key === '`' || e.key === '~') { this._debugOverlay = !this._debugOverlay; return; }
       if (this.state === 'stage-select' || this.state === 'world-map') {
@@ -336,6 +487,11 @@ class SlashGame {
     document.addEventListener('visibilitychange', this._visibilityHandler);
   }
   _handleCanvasClick(mx, my) {
+    // PHASE 6: onboarding tutorial click routing
+    if (this.state === 'onboarding' && this._onboardingTutorial) {
+      this._onboardingTutorial.handleClick(mx, my);
+      return;
+    }
     // ── Paused overlay touch targets ───────────────────────────
     // Check runner pause overlay buttons before any state dispatch.
     if (this.state === 'runner' && this.runner?._paused) {
@@ -459,9 +615,78 @@ class SlashGame {
     this._stageStartedAt = Date.now();
     this._lastRunnerHp = null;
     this._stageWinMastery = null;
-    this._tutorial = null; // first-play interactive runner tutorial
-    this._startRunner();
-    this._maybeStartTutorial();
+    this._tutorial = null;
+    // PHASE 6: show full onboarding before first-ever play of stage 1
+    if (id === 1 && this.progress.shouldShowTutorial()) {
+      this._startOnboarding(() => {
+        this._startRunner();
+        this._maybeStartTutorial();
+      });
+    } else {
+      this._startRunner();
+      this._maybeStartTutorial();
+    }
+  }
+
+  // PHASE 6: full-screen onboarding tutorial (canvas-drawn)
+  _startOnboarding(onComplete) {
+    this._onboardingTutorial = new Tutorial(this.W, this.H, () => {
+      this.progress.markTutorialComplete();
+      this._onboardingTutorial = null;
+      if (onComplete) onComplete();
+    });
+    this.state = 'onboarding';
+  }
+
+  _updateOnboarding() {
+    if (!this._onboardingTutorial) { this.state = 'world-map'; return; }
+    if (this._onboardingTutorial.isDone) { this.state = 'world-map'; return; }
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.W, this.H);
+    this._drawOnboardingBg(ctx);
+    this._onboardingTutorial.draw(ctx, this.sprites);
+  }
+
+  _drawOnboardingBg(ctx) {
+    const W = this.W, H = this.H;
+    const t = this._age;
+    // Deep space-to-forest gradient
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0,    '#03080f');
+    sky.addColorStop(0.45, '#0a1c38');
+    sky.addColorStop(0.72, '#0d2a12');
+    sky.addColorStop(1,    '#081a09');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+    // Twinkling stars
+    const starSeeds = [0.10,0.28,0.52,0.71,0.86,0.18,0.63,0.80,0.39,0.95];
+    starSeeds.forEach((s, i) => {
+      const tw = 0.35 + 0.45 * Math.sin(t * 0.055 + i * 1.8);
+      const sz = 1.2 + Math.sin(t * 0.04 + i * 2.3) * 0.6;
+      ctx.save(); ctx.globalAlpha = tw * 0.55;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(s * W, (0.04 + i * 0.026) * H, sz, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+
+    // Silhouette bamboo stalks
+    const bambooX = [0.04, 0.12, 0.82, 0.92];
+    bambooX.forEach((bx, i) => {
+      const sway = Math.sin(t * 0.025 + i * 0.8) * 4;
+      ctx.strokeStyle = `rgba(20,60,20,${0.35 + i * 0.05})`;
+      ctx.lineWidth   = 5 + i;
+      ctx.beginPath(); ctx.moveTo(bx * W + sway, H); ctx.lineTo(bx * W - 8 + sway, H * 0.22); ctx.stroke();
+      // Segments
+      for (let seg = 0; seg < 5; seg++) {
+        ctx.strokeStyle = `rgba(30,70,30,0.3)`;
+        ctx.lineWidth   = 1;
+        ctx.beginPath(); ctx.moveTo(bx * W - 6 + sway, H - seg * H * 0.15); ctx.lineTo(bx * W + 6 + sway, H - seg * H * 0.15); ctx.stroke();
+      }
+    });
+
+    // Dark semi-transparent overlay so tutorial card pops
+    ctx.fillStyle = 'rgba(0,5,15,0.55)';
+    ctx.fillRect(0, 0, W, H);
   }
 
   _maybeStartTutorial() {
@@ -690,6 +915,7 @@ class SlashGame {
     // Tick achievement popup
     this._tickAchievementPopup();
     switch (this.state) {
+      case 'onboarding': this._updateOnboarding(); break; // PHASE 6
       case 'title': this._updateTitle(); break;
       case 'mode-select': this._updateModeSelect(); break;
       case 'menu': this._updateMenu(); break;
