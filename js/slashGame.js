@@ -36,7 +36,7 @@ const SLASH_SPRITES = {
   'tile-dojo': 'assets/sprites/tile-dojo.png',
   'tile-rice': 'assets/sprites/tile-rice.png',
   // ── Minion dino ───────────────────────────────────────────
-  'minion-dino': 'assets/sprites/minion-dino.png',
+  'minion-dino': 'assets/sprites/dino-minion.png',
   'dino-minion': 'assets/sprites/dino-minion.png',
   // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex': 'assets/dinosaurs/trex.png',
@@ -77,6 +77,7 @@ const SLASH_SPRITES = {
   'stage-4-ruins': 'assets/backgrounds/stage-4.jpg',
   'stage-5-mountain-terraces':'assets/backgrounds/stage-5.jpg',
   'stage-6-volcanic': 'assets/backgrounds/stage-6.jpg',
+  'bonus-training': 'assets/backgrounds/bonus.jpg',
   'victory-golden-harvest': 'assets/backgrounds/victory.jpg',
 };
 
@@ -84,44 +85,20 @@ const SLASH_SPRITES = {
 // Preload only startup-critical sprites before leaving loading screen.
 // Non-critical assets continue streaming in the background.
 const CRITICAL_SPRITE_KEYS = new Set([
+  // Keep startup gate intentionally small so players can begin quickly.
+  // Non-critical stage content continues loading in the background.
   'riku-idle', 'riku-walk-1', 'riku-walk-2', 'riku-walk-3', 'riku-walk-4',
-  'riku-run', 'riku-jump', 'riku-jump-1', 'riku-hurt', 'riku-victory',
-  'minion-dino', 'dino-minion',
-  'stage-1-rex', 'stage-1-tri', 'stage-2-rapi', 'stage-2-stego',
-  'stage-3-brachio', 'stage-3-ptera', 'stage-4-anky', 'stage-5-spino',
-  'stage-5-pachy', 'stage-6-dilo',
-  'stage-1-rice-paddy', 'stage-2-bamboo', 'stage-3-cherry-temple',
-  'stage-4-ruins', 'stage-5-mountain-terraces', 'stage-6-volcanic',
-  'victory-golden-harvest',
+  'riku-run', 'riku-jump', 'riku-jump-1', 'riku-hurt',
+  'dino-minion', 'flying-enemy', 'tile-dojo', 'tile-rice',
+  // Stage 1 first-play assets
+  'stage-1-rice-paddy', 'stage-1-rex', 'trex-attack', 'trex-hurt', 'stage-1-tri',
 ]);
 
 // Sprite sheets for animated canvas entities. These are optional and gracefully
 // fall back to existing per-frame sprites if files are missing.
 const SLASH_SPRITE_SHEETS = {
-  rikuSheet: {
-    key: 'sheet-riku',
-    url: 'assets/riku_sprites.png',
-    frameW: 256,
-    frameH: 256,
-    animations: {
-      run: [0, 1, 2, 3],
-      jump: [4, 5],
-      slash: [6, 7, 8],
-      idle: [9, 10],
-    },
-  },
-  dinoSheet: {
-    key: 'sheet-dino',
-    url: 'assets/dino_sprites.png',
-    frameW: 256,
-    frameH: 256,
-  },
-  particlesSheet: {
-    key: 'sheet-particles',
-    url: 'assets/particles.png',
-    frameW: 128,
-    frameH: 128,
-  },
+  // Optional sheet assets were removed from the repo; keep this empty so we
+  // don't issue 404s for non-existent files on startup.
 };
 // ─────────────────────────────────────────────────────────────
 // SLASH GAME
@@ -240,9 +217,31 @@ class SlashGame {
           if (criticalLoaded >= criticalTotal) this._spritesReady = true;
         }
       };
+
+      // Retry failed image loads a couple of times (with cache-busting) so
+      // transient CDN/network hiccups don't permanently lock gameplay actors
+      // (bosses, minions, attack poses) into procedural fallback art.
+      let attempts = 0;
+      const maxAttempts = 3;
+      const loadAttempt = () => {
+        attempts++;
+        img.src = attempts === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${Date.now()}-${attempts}`;
+      };
+
       img.onload = done;
-      img.onerror = done;
-      img.src = url;
+      img.onerror = () => {
+        if (attempts < maxAttempts) {
+          loadAttempt();
+          return;
+        }
+        // Keep engine resilient if a specific asset is truly unavailable.
+        if (key === 'minion-dino' && this.sprites['dino-minion']) this.sprites[key] = this.sprites['dino-minion'];
+        if (key === 'dino-minion' && this.sprites['minion-dino']) this.sprites[key] = this.sprites['minion-dino'];
+        if (key === 'riku-run' && this.sprites['riku-idle']) this.sprites[key] = this.sprites['riku-idle'];
+        done();
+      };
+
+      loadAttempt();
       this.sprites[key] = img;
     });
 

@@ -82,6 +82,13 @@ class AudioManager {
 
     // Music player (created after ctx)
     this._music = this.ctx ? new MusicPlayer(this.ctx) : null;
+
+    // Cache a preferred TTS voice (female UK) when voices become available.
+    this._preferredVoice = null;
+    this._refreshPreferredVoice();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.addEventListener('voiceschanged', () => this._refreshPreferredVoice());
+    }
   }
 
   // ── Mute toggle ─────────────────────────────────────────────
@@ -163,16 +170,45 @@ class AudioManager {
   }
 
   // ── TTS speech fallback ──────────────────────────────────────
+  _refreshPreferredVoice() {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+
+    // Prefer female UK English voices to match packaged word-audio tone.
+    const ukFemaleName = /libby|sonia|hazel|susan|google uk english female/i;
+    const femaleHints  = /female|woman|girl|libby|sonia|hazel|susan|samantha|karen|moira|tessa/i;
+    const ukVoices = voices.filter(v => /^en[-_]gb$/i.test(v.lang || ''));
+
+    this._preferredVoice =
+      ukVoices.find(v => ukFemaleName.test(v.name || '')) ||
+      ukVoices.find(v => femaleHints.test(v.name || '')) ||
+      ukVoices[0] ||
+      voices.find(v => /^en/i.test(v.lang || '') && femaleHints.test(v.name || '')) ||
+      voices.find(v => /^en/i.test(v.lang || '')) ||
+      voices[0] ||
+      null;
+    return this._preferredVoice;
+  }
+
   _speak(text, rate = 0.85, pitch = 1.1) {
     if (this.muted || !window.speechSynthesis) return;
     const u = new SpeechSynthesisUtterance(text);
     u.rate  = rate;
     u.pitch = pitch;
-    // Prefer a child-friendly voice if available
-    const voices = speechSynthesis.getVoices();
-    const kid = voices.find(v => /Samantha|Karen|Moira|Tessa/i.test(v.name));
-    if (kid) u.voice = kid;
-    speechSynthesis.speak(u);
+    const voice = this._preferredVoice || this._refreshPreferredVoice();
+    if (voice) {
+      u.voice = voice;
+      if (!u.lang) u.lang = voice.lang || 'en-GB';
+    } else {
+      u.lang = 'en-GB';
+    }
+    window.speechSynthesis.speak(u);
+  }
+
+  // Public wrapper so other modules can use the same voice profile.
+  speak(text, rate = 0.85, pitch = 1.1) {
+    this._speak(text, rate, pitch);
   }
 
   // ── PRIVATE: Play a single indivisible phoneme (no blend splitting) ─
