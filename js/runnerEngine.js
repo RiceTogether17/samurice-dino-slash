@@ -1386,6 +1386,49 @@ class RunnerParticle {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SHOCKWAVE RING  (Phase 7)
+// Expanding ground ring spawned on hard landing (landSquash===10)
+// and ground-pound impact.  Radiates outward and fades.
+// ─────────────────────────────────────────────────────────────
+class ShockwaveRing {
+  /**
+   * @param {number} x      centre X (player feet mid-point)
+   * @param {number} y      centre Y (ground level / feet)
+   * @param {string} color  ring tint ('rgba(255,160,0,…)' for normal land,
+   *                                   '#FF4500' for ground-pound)
+   */
+  constructor(x, y, color = 'rgba(255,180,80,1)') {
+    this.x      = x;
+    this.y      = y;
+    this.color  = color;
+    this.radius = 4;   // starts small, grows outward
+    this.life   = 1.0;
+    this.scaleY = 0.25; // flattened so it hugs the ground plane
+  }
+  update() {
+    this.radius += 6;
+    this.life   -= 0.05; // ~20-frame life
+  }
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.life) * 0.65;
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth   = 2 + this.life * 3;
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur  = 12 * this.life;
+    // Scale vertically so the ring looks like an ellipse lying on the ground
+    ctx.translate(this.x, this.y);
+    ctx.scale(1, this.scaleY);
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  isDead() { return this.life <= 0; }
+}
+
+// ─────────────────────────────────────────────────────────────
 // DUST PARTICLE — running puffs and landing cloud
 // ─────────────────────────────────────────────────────────────
 class DustParticle {
@@ -1586,7 +1629,8 @@ class RunnerEngine {
     this.done    = false;
     this.outcome = null;
     this._paused = false;
-    this.dustParticles = [];
+    this.dustParticles   = [];
+    this._shockwaveRings = [];   // Phase 7: ground rings on landing / ground-pound
     this.fx = new ParticleSystem();
     this._dpadAbort = null;
   }
@@ -1711,6 +1755,11 @@ class RunnerEngine {
         this.dustParticles.push(new DustParticle(
           this.player.screenX + this.player.w / 2, pFeet));
       }
+      // Phase 7: shockwave ring on any hard landing
+      this._shockwaveRings.push(new ShockwaveRing(
+        this.player.screenX + this.player.w / 2, pFeet,
+        'rgba(220,170,80,1)',
+      ));
     }
     // Running trail every 5 frames when moving fast enough
     if (this.player.onGround && Math.abs(this.player.vx) > 1.8 && this._age % 5 === 0) {
@@ -1763,6 +1812,13 @@ class RunnerEngine {
       this.particles.push(new RunnerParticle(
         this.player.screenX + this.player.w / 2,
         this.player.y + this.player.h, '💥 POUND!', '#FF6F00', -3));
+      // Phase 7: large shockwave ring on ground-pound impact (2 staggered rings)
+      const gpFeet = this.player.y + this.player.h;
+      for (let r = 0; r < 2; r++) {
+        const ring = new ShockwaveRing(poundX, gpFeet, '#FF4500');
+        ring.radius = 8 + r * 22;   // stagger so rings don't perfectly stack
+        this._shockwaveRings.push(ring);
+      }
     }
 
     // Question blocks — head-butt detection
@@ -1897,6 +1953,10 @@ class RunnerEngine {
     // Dust particles
     this.dustParticles.forEach(p => p.update());
     this.dustParticles = this.dustParticles.filter(p => !p.isDead());
+
+    // Phase 7: shockwave rings
+    this._shockwaveRings.forEach(r => r.update());
+    this._shockwaveRings = this._shockwaveRings.filter(r => !r.isDead());
   }
 
   // ── Stomp an enemy (shared for ground + flying) ──────────────
@@ -2063,6 +2123,9 @@ class RunnerEngine {
     if (this.flag.sx < this.W + 100 && this.flag.sx > -100) {
       this.flag.draw(ctx, this.groundY);
     }
+
+    // Phase 7: shockwave rings drawn behind dust (ground-level ellipses)
+    this._shockwaveRings.forEach(r => r.draw(ctx));
 
     // Dust particles (at player feet, behind player)
     this.dustParticles.forEach(p => p.draw(ctx));
