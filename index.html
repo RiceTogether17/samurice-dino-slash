@@ -49,14 +49,14 @@
         <p class="mc-sub">Learn to read! Slash dinos with WORD POWER!</p>
     </div>
     <div class="mc-buttons">
-        <button class="mc-btn slash-btn" onclick="launchSlashGame()">
+        <button class="mc-btn slash-btn" id="launchSlashBtn">
             <span class="mc-icon">⚔️</span>
             <div class="mc-text">
                 <span class="mc-name">Dino Slash Adventure!</span>
                 <span class="mc-desc">Run, jump, spell words & fight dino bosses!</span>
             </div>
         </button>
-        <button class="mc-btn flap-btn" onclick="launchFlappyGame()">
+        <button class="mc-btn flap-btn" id="launchFlappyBtn">
             <span class="mc-icon">🦕</span>
             <div class="mc-text">
                 <span class="mc-name">Dino Dash!</span>
@@ -82,17 +82,14 @@
         <!-- Exit button -->
         <button id="slashExitBtn"
                 class="slash-exit-btn"
-                onclick="exitSlash()"
                 title="Back to menu">✕</button>
         <!-- Fullscreen toggle -->
         <button id="slashFsBtn"
                 class="slash-fs-btn game-fs-btn"
-                onclick="toggleFullscreen()"
                 title="Fullscreen">⛶</button>
         <!-- Pause button — visible only during active runner / battle -->
         <button id="slashPauseBtn"
                 class="slash-pause-btn hidden"
-                onclick="_slashPause()"
                 title="Pause (P)">⏸</button>
         <!-- Runner D-pad controls (touch only) -->
         <!-- In endless mode, left/right are hidden; only JUMP shown -->
@@ -117,8 +114,8 @@
     <div id="flappyWrapper">
         <canvas id="flappyCanvas"></canvas>
         <button id="muteBtn" class="fd-btn fd-mute flappy-overlay-btn">🔊</button>
-        <button id="flappyBackBtn" class="fd-btn fd-back flappy-overlay-btn" onclick="exitFlappy()">✕</button>
-        <button id="flappyFsBtn" class="fd-btn fd-fs flappy-overlay-btn game-fs-btn" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
+        <button id="flappyBackBtn" class="fd-btn fd-back flappy-overlay-btn">✕</button>
+        <button id="flappyFsBtn" class="fd-btn fd-fs flappy-overlay-btn game-fs-btn" title="Fullscreen">⛶</button>
         <div id="skinPicker" class="fd-skin-picker">
             <button id="prevSkin" class="fd-skin-arrow flappy-overlay-btn">◀</button>
             <span id="skinName" class="fd-skin-name">Velociraptor</span>
@@ -152,13 +149,29 @@
 <script src="js/slashGame.js"></script>
 <script src="js/game.js"></script>
 <script>
-// ── Fullscreen toggle ──────────────────────────────────────────
-function toggleFullscreen() {
+// ── Button event listeners (replaces inline onclick attributes) ──
+document.addEventListener('DOMContentLoaded', function() {
+  // Mode chooser
+  document.getElementById('launchSlashBtn')?.addEventListener('click', () => launchSlashGame());
+  document.getElementById('launchFlappyBtn')?.addEventListener('click', () => launchFlappyGame());
+  // Slash game controls
+  document.getElementById('slashExitBtn')?.addEventListener('click', () => exitSlash());
+  document.getElementById('slashFsBtn')?.addEventListener('click', () => toggleFullscreen('slashWrapper'));
+  document.getElementById('slashPauseBtn')?.addEventListener('click', () => _slashPause());
+  // Flappy game controls
+  document.getElementById('flappyBackBtn')?.addEventListener('click', () => exitFlappy());
+  document.getElementById('flappyFsBtn')?.addEventListener('click', () => toggleFullscreen('flappyWrapper'));
+});
+
+// ── Fullscreen toggle — targets the active game wrapper ────────
+// Falls back to document.documentElement if wrapper not found.
+function toggleFullscreen(wrapperId) {
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
   if (!fsEl) {
-    const req = document.documentElement.requestFullscreen
-             || document.documentElement.webkitRequestFullscreen;
-    if (req) req.call(document.documentElement).catch(() => {});
+    const target = (wrapperId && document.getElementById(wrapperId))
+                   || document.documentElement;
+    const req = target.requestFullscreen || target.webkitRequestFullscreen;
+    if (req) req.call(target).catch(() => {});
   } else {
     const exit = document.exitFullscreen || document.webkitExitFullscreen;
     if (exit) exit.call(document).catch(() => {});
@@ -173,7 +186,7 @@ function _syncFsIcons() {
 }
 document.addEventListener('fullscreenchange', _syncFsIcons);
 document.addEventListener('webkitfullscreenchange', _syncFsIcons);
-// ── Pause button (visible only during runner / battle) ──────
+// ── Pause helper called by the pause button ──────────────────
 function _slashPause() {
   if (!_slashGameInstance) return;
   const s = _slashGameInstance.state;
@@ -181,15 +194,23 @@ function _slashPause() {
   if (s === 'battle'  && _slashGameInstance.battle)  _slashGameInstance.battle._togglePause();
   if (s === 'endless-runner' && _slashGameInstance.endlessRunner) _slashGameInstance.endlessRunner._togglePause();
 }
-// ── Prevent context menu on long-press (mobile) ─────────────
-document.addEventListener('contextmenu', e => e.preventDefault());
-// ── Prevent double-tap zoom on game elements ────────────────
-let lastTap = 0;
-document.addEventListener('touchend', function(e) {
-  const now = Date.now();
-  if (now - lastTap < 300) e.preventDefault();
-  lastTap = now;
-}, { passive: false });
+// ── Prevent context menu & double-tap zoom on game canvases only ──
+// Scoped to the game wrappers so normal browser behaviour is
+// preserved everywhere else on the page (links, text, PWA banner).
+(function attachGameInputGuards() {
+  const gameWrapperIds = ['slashWrapper', 'flappyWrapper'];
+  gameWrapperIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    let lastTap = 0;
+    el.addEventListener('touchend', function(e) {
+      const now = Date.now();
+      if (now - lastTap < 300) e.preventDefault();
+      lastTap = now;
+    }, { passive: false });
+  });
+})();
 </script>
 
 <!-- Phase 9: PWA install banner (hidden until beforeinstallprompt fires) -->
