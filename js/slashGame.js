@@ -36,12 +36,12 @@ const SLASH_SPRITES = {
   'tile-dojo': 'assets/sprites/tile-dojo.png',
   'tile-rice': 'assets/sprites/tile-rice.png',
   // ── Minion dino ───────────────────────────────────────────
-  'minion-dino': 'assets/sprites/minion-dino.png',
+  'minion-dino': 'assets/sprites/dino-minion.png',
   'dino-minion': 'assets/sprites/dino-minion.png',
   // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex': 'assets/dinosaurs/trex.png',
   'stage-1-tri': 'assets/dinosaurs/triceratops.png',
-  'stage-2-rapi': 'assets/dinosaurs/velociraptor-attack.png',
+  'stage-2-rapi': 'assets/dinosaurs/velociraptor.png',
   'stage-2-stego': 'assets/dinosaurs/stegosaurus.png',
   'stage-3-brachio':'assets/dinosaurs/brachiosaurus.png',
   'stage-3-ptera': 'assets/dinosaurs/pteranodon.png',
@@ -59,15 +59,15 @@ const SLASH_SPRITES = {
   'stegosaurus-attack': 'assets/dinosaurs/stegosaurus-attack.png',
   'stegosaurus-hurt': 'assets/dinosaurs/stegosaurus-hurt.png',
   'brachiosaurus-attack': 'assets/dinosaurs/brachiosaurus-attack.png',
-  'brachiosaurus-hurt': 'assets/dinosaurs/brachisaurus-hurt.png',
-  'pteranodon-attack': 'assets/dinosaurs/pteradonon-attack.png',
+  'brachiosaurus-hurt': 'assets/dinosaurs/brachiosaurus-hurt.png',
+  'pteranodon-attack': 'assets/dinosaurs/pteranodon-attack.png',
   'pteranodon-hurt': 'assets/dinosaurs/pteranodon-hurt.png',
   'ankylosaurus-attack': 'assets/dinosaurs/ankylosaurus-attack.png',
   'ankylosaurus-hurt': 'assets/dinosaurs/ankylosaurus-hurt.png',
   'spinosaurus-attack': 'assets/dinosaurs/spinosaurus-attack.png',
   'spinosaurus-hurt': 'assets/dinosaurs/spinosaurus-hurt.png',
-  'pachycephalosaurus-attack': 'assets/dinosaurs/Pachycephalosaurus-attack.png',
-  'pachycephalosaurus-hurt': 'assets/dinosaurs/Pachycephalosaurus-hurt.png',
+  'pachycephalosaurus-attack': 'assets/dinosaurs/pachycephalosaurus-attack.png',
+  'pachycephalosaurus-hurt': 'assets/dinosaurs/pachycephalosaurus-hurt.png',
   'dilophosaurus-attack': 'assets/dinosaurs/dilophosaurus-attack.png',
   'dilophosaurus-hurt': 'assets/dinosaurs/dilophosaurus-hurt.png',
   // ── Stage backgrounds (.jpg) ──────────────────────────────
@@ -77,6 +77,7 @@ const SLASH_SPRITES = {
   'stage-4-ruins': 'assets/backgrounds/stage-4.jpg',
   'stage-5-mountain-terraces':'assets/backgrounds/stage-5.jpg',
   'stage-6-volcanic': 'assets/backgrounds/stage-6.jpg',
+  'bonus-training': 'assets/backgrounds/bonus.jpg',
   'victory-golden-harvest': 'assets/backgrounds/victory.jpg',
 };
 
@@ -84,44 +85,20 @@ const SLASH_SPRITES = {
 // Preload only startup-critical sprites before leaving loading screen.
 // Non-critical assets continue streaming in the background.
 const CRITICAL_SPRITE_KEYS = new Set([
+  // Keep startup gate intentionally small so players can begin quickly.
+  // Non-critical stage content continues loading in the background.
   'riku-idle', 'riku-walk-1', 'riku-walk-2', 'riku-walk-3', 'riku-walk-4',
-  'riku-run', 'riku-jump', 'riku-jump-1', 'riku-hurt', 'riku-victory',
-  'minion-dino',
-  'stage-1-rex', 'stage-1-tri', 'stage-2-rapi', 'stage-2-stego',
-  'stage-3-brachio', 'stage-3-ptera', 'stage-4-anky', 'stage-5-spino',
-  'stage-5-pachy', 'stage-6-dilo',
-  'stage-1-rice-paddy', 'stage-2-bamboo', 'stage-3-cherry-temple',
-  'stage-4-ruins', 'stage-5-mountain-terraces', 'stage-6-volcanic',
-  'victory-golden-harvest',
+  'riku-run', 'riku-jump', 'riku-jump-1', 'riku-hurt',
+  'dino-minion', 'flying-enemy', 'tile-dojo', 'tile-rice',
+  // Stage 1 first-play assets
+  'stage-1-rice-paddy', 'stage-1-rex', 'trex-attack', 'trex-hurt', 'stage-1-tri',
 ]);
 
 // Sprite sheets for animated canvas entities. These are optional and gracefully
 // fall back to existing per-frame sprites if files are missing.
 const SLASH_SPRITE_SHEETS = {
-  rikuSheet: {
-    key: 'sheet-riku',
-    url: 'assets/riku_sprites.png',
-    frameW: 256,
-    frameH: 256,
-    animations: {
-      run: [0, 1, 2, 3],
-      jump: [4, 5],
-      slash: [6, 7, 8],
-      idle: [9, 10],
-    },
-  },
-  dinoSheet: {
-    key: 'sheet-dino',
-    url: 'assets/dino_sprites.png',
-    frameW: 256,
-    frameH: 256,
-  },
-  particlesSheet: {
-    key: 'sheet-particles',
-    url: 'assets/particles.png',
-    frameW: 128,
-    frameH: 128,
-  },
+  // Optional sheet assets were removed from the repo; keep this empty so we
+  // don't issue 404s for non-existent files on startup.
 };
 // ─────────────────────────────────────────────────────────────
 // SLASH GAME
@@ -141,6 +118,18 @@ class SlashGame {
     this._spritesReady = false;
     this._sheetsReady = false;
     this._audioReady = false;
+    // PHASE 6: preloader progress tracking
+    this._loadProgress = { loaded: 0, total: 0 };
+    this._loadMsgs = [
+      "Sharpening Riku's sword…",
+      'Waking up the dinos…',
+      'Gathering rice grains…',
+      'Polishing the DinoGates…',
+      'Teaching Riku new phonics tricks…',
+      'Preparing word battles…',
+    ];
+    this._loadMsgIdx = 0;
+    this._loadMsgAge  = 0;
     this._targetFrameMs = 1000 / 60;
     this._fpsSamples = [];
     this._debugOverlay = false;
@@ -153,6 +142,8 @@ class SlashGame {
     this._stageStartedAt = 0;
     this._lastRunnerHp = null;
     this._stageWinMastery = null;
+    this._battleResults   = null;  // Phase 8: summary captured before battle destroy
+    this._brStars         = null;  // Phase 8: star-field particles for results card
     this._tutorial = null; // first-play interactive runner tutorial
     // World map animation
     this._mapPlayerPos = null; // { x, y } animated player dot on map
@@ -163,10 +154,13 @@ class SlashGame {
     // Input for menus
     this._menuSel = 0;
     this._bindMenuInput();
-    // Load sprites and preload core audio (non-blocking)
+    // Load sprites then kick off background audio preload.
+    // Audio readiness is NOT a gate — the game uses tone-synthesis + TTS fallbacks
+    // immediately, so buffers streaming in the background is sufficient. This removes
+    // a multi-second loading-screen stall on slower mobile connections.
+    this._audioReady = true;
     this._loadSprites();
-    if (this.audio.preloadAllGameAudio) this.audio.preloadAllGameAudio().finally(() => { this._audioReady = true; });
-    else this._audioReady = true;
+    if (this.audio.preloadAllGameAudio) this.audio.preloadAllGameAudio(); // background only
     // RAF loop
     this._loop = this._loop.bind(this);
     this._rafId = requestAnimationFrame(this._loop);
@@ -185,8 +179,12 @@ class SlashGame {
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.W = W;
       this.H = H;
-      // Propagate new dimensions to active sub-engine
-      if (this.battle) { this.battle.W = W; this.battle.H = H; }
+      // Propagate new dimensions to all active sub-engines so draw calls
+      // use the correct logical size after orientation change or resize.
+      if (this.battle)        { this.battle.W = W;        this.battle.H = H;        }
+      if (this.runner)        { this.runner.W = W;        this.runner.H = H;        }
+      if (this.endlessRunner) { this.endlessRunner.W = W; this.endlessRunner.H = H; }
+      if (this.endlessBattle) { this.endlessBattle.W = W; this.endlessBattle.H = H; }
     };
     resize();
     window.addEventListener('resize', resize);
@@ -200,30 +198,59 @@ class SlashGame {
   }
   // ── Sprite loading ───────────────────────────────────────────
   _loadSprites() {
-    const entries = Object.entries(SLASH_SPRITES);
+    const entries      = Object.entries(SLASH_SPRITES);
+    const sheetEntries = Object.entries(SLASH_SPRITE_SHEETS);
+    // PHASE 6: track total across sprites + sheets for progress bar
+    this._loadProgress.total  = entries.length + sheetEntries.length;
+    this._loadProgress.loaded = 0;
+    const _tick = () => { this._loadProgress.loaded++; };
+
     let criticalLoaded = 0;
     const criticalTotal = entries.reduce((n, [key]) => n + (CRITICAL_SPRITE_KEYS.has(key) ? 1 : 0), 0);
     this._spritesReady = criticalTotal === 0;
     entries.forEach(([key, url]) => {
       const img = new Image();
       const done = () => {
+        _tick();
         if (CRITICAL_SPRITE_KEYS.has(key)) {
           criticalLoaded++;
           if (criticalLoaded >= criticalTotal) this._spritesReady = true;
         }
       };
+
+      // Retry failed image loads a couple of times (with cache-busting) so
+      // transient CDN/network hiccups don't permanently lock gameplay actors
+      // (bosses, minions, attack poses) into procedural fallback art.
+      let attempts = 0;
+      const maxAttempts = 3;
+      const loadAttempt = () => {
+        attempts++;
+        img.src = attempts === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${Date.now()}-${attempts}`;
+      };
+
       img.onload = done;
-      img.onerror = done;
-      img.src = url;
+      img.onerror = () => {
+        if (attempts < maxAttempts) {
+          loadAttempt();
+          return;
+        }
+        // Keep engine resilient if a specific asset is truly unavailable.
+        if (key === 'minion-dino' && this.sprites['dino-minion']) this.sprites[key] = this.sprites['dino-minion'];
+        if (key === 'dino-minion' && this.sprites['minion-dino']) this.sprites[key] = this.sprites['minion-dino'];
+        if (key === 'riku-run' && this.sprites['riku-idle']) this.sprites[key] = this.sprites['riku-idle'];
+        done();
+      };
+
+      loadAttempt();
       this.sprites[key] = img;
     });
 
     // Load optional sprite sheets. Missing files are replaced by generated
     // placeholder sheets so animation code can run without runtime branching.
-    const sheetEntries = Object.entries(SLASH_SPRITE_SHEETS);
     let loadedSheets = 0;
     this._sheetsReady = sheetEntries.length === 0;
     const onSheetDone = () => {
+      _tick();
       loadedSheets++;
       if (loadedSheets >= sheetEntries.length) this._sheetsReady = true;
     };
@@ -259,28 +286,160 @@ class SlashGame {
     g.fillText(`${label} missing`, c.width / 2, c.height / 2);
     return c;
   }
-  // ── Loading screen (shown while sprites stream in) ───────────
+  // ── Loading screen — PHASE 6: rice-grain progress bar ────────
   _drawLoading() {
     const ctx = this.ctx;
-    const W = this.W; const H = this.H;
+    const W = this.W, H = this.H;
+    const t = this._age;
+
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#0d1117';
+
+    // ── Background: deep forest gradient ──────────────────────
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#040c18');
+    bg.addColorStop(0.55, '#0a1e3a');
+    bg.addColorStop(1, '#0a2010');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
-    const dots = ['', '.', '..', '...'][Math.floor(this._age / 12) % 4];
-    ctx.textAlign = 'center';
+
+    // ── Floating rice grain particles (atmospheric) ────────────
+    const grainSeeds = [0.08,0.22,0.38,0.54,0.68,0.82,0.14,0.46,0.76,0.92];
+    grainSeeds.forEach((s, i) => {
+      const speed = 0.35 + s * 0.25;
+      const gx    = W * s;
+      const gy    = ((H + 80) - ((t * speed * 0.7 + i * (H / grainSeeds.length) * 1.1) % (H + 100)));
+      ctx.save();
+      ctx.globalAlpha = 0.12 + s * 0.18;
+      ctx.fillStyle   = '#FFD700';
+      ctx.translate(gx, gy);
+      ctx.rotate(-0.35 + s * 0.5);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 3, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+
+    // ── Riku character (sprite or procedural fallback) ─────────
+    const rikuSize = Math.min(W * 0.22, 108);
+    const rikuX   = W / 2;
+    const rikuY   = H * 0.30;
+    const bob     = Math.sin(t * 0.09) * 9;
+    const rikuSpr = this.sprites['riku-idle'] || this.sprites['riku-walk-1'] || this.sprites['riku-run'];
+    if (rikuSpr && rikuSpr.complete && rikuSpr.naturalWidth > 0) {
+      ctx.save();
+      ctx.translate(rikuX, rikuY + bob);
+      ctx.drawImage(rikuSpr, -rikuSize / 2, -rikuSize / 2, rikuSize, rikuSize);
+      ctx.restore();
+    } else {
+      // Procedural fallback: simple chibi silhouette
+      ctx.save();
+      ctx.translate(rikuX, rikuY + bob);
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath(); ctx.arc(0, -rikuSize * 0.27, rikuSize * 0.17, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#FF6F00';
+      ctx.fillRect(-rikuSize * 0.11, -rikuSize * 0.1, rikuSize * 0.22, rikuSize * 0.34);
+      ctx.restore();
+    }
+
+    // ── Title ─────────────────────────────────────────────────
+    const titleSz = Math.min(W * 0.075, 34);
+    ctx.font        = `900 ${titleSz}px "Nunito", sans-serif`;
+    ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold ${Math.min(32, W * 0.07)}px "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFD700';
-    ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 12;
-    ctx.fillText(`🍚 Loading${dots}`, W / 2, H / 2 - 20);
-    ctx.shadowBlur = 0;
-    ctx.font = `${Math.min(15, W * 0.034)}px system-ui`;
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.fillText("Preparing Riku's moves!", W / 2, H / 2 + 22);
+    ctx.shadowColor = 'rgba(255,180,0,0.6)';
+    ctx.shadowBlur  = 18;
+    ctx.fillStyle   = '#FFD700';
+    ctx.fillText('🍚 Loading…', W / 2, H * 0.51);
+    ctx.shadowBlur  = 0;
+
+    // ── Progress bar ──────────────────────────────────────────
+    const pct  = this._loadProgress.total > 0
+      ? Math.min(1, this._loadProgress.loaded / this._loadProgress.total)
+      : (t % 120) / 120; // animated pulse fallback
+    const barW = Math.min(W * 0.74, 380);
+    const barH = 26;
+    const barX = W / 2 - barW / 2;
+    const barY = H * 0.60;
+
+    // Track (outer shell)
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(barX - 3, barY - 3, barW + 6, barH + 6, 17); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 14); ctx.fill();
+
+    // Fill
+    if (pct > 0.01) {
+      const fillW = Math.max(barH, barW * pct);
+      const barGrad = ctx.createLinearGradient(barX, barY, barX + fillW, barY);
+      barGrad.addColorStop(0,   '#E65100');
+      barGrad.addColorStop(0.45,'#FFD700');
+      barGrad.addColorStop(1,   '#FFEE58');
+      ctx.fillStyle = barGrad;
+      ctx.beginPath(); ctx.roundRect(barX, barY, fillW, barH, 14); ctx.fill();
+
+      // Shine overlay on fill
+      const shine = ctx.createLinearGradient(barX, barY, barX, barY + barH);
+      shine.addColorStop(0,   'rgba(255,255,255,0.28)');
+      shine.addColorStop(0.5, 'rgba(255,255,255,0)');
+      ctx.fillStyle = shine;
+      ctx.beginPath(); ctx.roundRect(barX, barY, fillW, barH / 2, [14,14,0,0]); ctx.fill();
+
+      // Rice grain texture inside fill
+      const grainCount = Math.floor(fillW / 16);
+      for (let i = 0; i < grainCount; i++) {
+        const gx = barX + 9 + i * 16;
+        const gy = barY + barH / 2;
+        ctx.save();
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle   = '#fff';
+        ctx.translate(gx, gy); ctx.rotate(-0.35);
+        ctx.beginPath(); ctx.ellipse(0, 0, 3, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Leading edge glow
+    if (pct > 0.02 && pct < 0.99) {
+      const ex = barX + barW * pct;
+      const eglow = ctx.createRadialGradient(ex, barY + barH / 2, 0, ex, barY + barH / 2, 18);
+      eglow.addColorStop(0,   'rgba(255,235,80,0.7)');
+      eglow.addColorStop(1,   'rgba(255,200,0,0)');
+      ctx.fillStyle = eglow;
+      ctx.beginPath(); ctx.arc(ex, barY + barH / 2, 18, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // ── Percentage label ──────────────────────────────────────
+    const pctTxt = Math.round(pct * 100) + '%';
+    ctx.font     = `bold ${Math.min(W * 0.042, 18)}px "Nunito", sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(pctTxt, W / 2, barY + barH + 10);
+
+    // ── Rotating fun messages ─────────────────────────────────
+    this._loadMsgAge = (this._loadMsgAge || 0) + 1;
+    if (this._loadMsgAge > 100) {
+      this._loadMsgAge = 0;
+      this._loadMsgIdx = (this._loadMsgIdx + 1) % this._loadMsgs.length;
+    }
+    const msgFade = this._loadMsgAge < 12
+      ? this._loadMsgAge / 12
+      : this._loadMsgAge > 88 ? (100 - this._loadMsgAge) / 12 : 1;
+    ctx.save();
+    ctx.globalAlpha = msgFade * 0.75;
+    ctx.font = `italic ${Math.min(W * 0.036, 16)}px "Nunito", sans-serif`;
+    ctx.fillStyle   = '#FFECB3';
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(this._loadMsgs[this._loadMsgIdx], W / 2, barY + barH + 34);
+    ctx.restore();
   }
   // ── Menu input (keyboard) ─────────────────────────────────────
   _bindMenuInput() {
     this._menuKd = (e) => {
+      // PHASE 6: forward arrow / enter / escape keys to onboarding tutorial
+      if (this.state === 'onboarding' && this._onboardingTutorial) {
+        if (this._onboardingTutorial.handleKey(e.key)) { e.preventDefault(); return; }
+      }
       // Step 6 debug overlay toggle (` or ~)
       if (e.key === '`' || e.key === '~') { this._debugOverlay = !this._debugOverlay; return; }
       if (this.state === 'stage-select' || this.state === 'world-map') {
@@ -321,8 +480,64 @@ class SlashGame {
     };
     this.canvas.addEventListener('click', this._canvasClick);
     this.canvas.addEventListener('touchstart', this._canvasTap, { passive: true });
+
+    // ── Page Visibility auto-pause ──────────────────────────
+    this._visibilityHandler = () => {
+      if (document.hidden) this._autoPauseOnHidden();
+    };
+    document.addEventListener('visibilitychange', this._visibilityHandler);
   }
   _handleCanvasClick(mx, my) {
+    // PHASE 6: onboarding tutorial click routing
+    if (this.state === 'onboarding' && this._onboardingTutorial) {
+      this._onboardingTutorial.handleClick(mx, my);
+      return;
+    }
+    // Phase 8: tap anywhere on battle-results screen to skip ahead
+    if (this.state === 'battle-results') {
+      this._advanceToStageWin();
+      return;
+    }
+    // ── Paused overlay touch targets ───────────────────────────
+    // Check runner pause overlay buttons before any state dispatch.
+    if (this.state === 'runner' && this.runner?._paused) {
+      const rr = this.runner._pauseResumeBtnRect;
+      const rq = this.runner._pauseQuitBtnRect;
+      if (rr && mx >= rr.x && mx <= rr.x+rr.w && my >= rr.y && my <= rr.y+rr.h) {
+        this.runner._togglePause(); return;
+      }
+      if (rq && mx >= rq.x && mx <= rq.x+rq.w && my >= rq.y && my <= rq.y+rq.h) {
+        this.runner._paused = false; this.runner = null;
+        this._hidePauseBtn(); this._hideDpad();
+        this.audio.stopMusic(); this.state = 'world-map'; return;
+      }
+      return; // swallow all other taps while paused
+    }
+    if (this.state === 'endless-runner' && this.endlessRunner?._paused) {
+      const rr = this.endlessRunner._pauseResumeBtnRect;
+      const rq = this.endlessRunner._pauseQuitBtnRect;
+      if (rr && mx >= rr.x && mx <= rr.x+rr.w && my >= rr.y && my <= rr.y+rr.h) {
+        this.endlessRunner._togglePause(); return;
+      }
+      if (rq && mx >= rq.x && mx <= rq.x+rq.w && my >= rq.y && my <= rq.y+rq.h) {
+        this.endlessRunner._paused = false; this._stopEndlessRunner();
+        this._hidePauseBtn(); this.audio.stopMusic(); this.state = 'mode-select'; return;
+      }
+      return;
+    }
+    if (this.state === 'battle' && this.battle?._paused) {
+      const rr = this.battle._pauseResumeBtnRect;
+      const rq = this.battle._pauseQuitBtnRect;
+      if (rr && mx >= rr.x && mx <= rr.x+rr.w && my >= rr.y && my <= rr.y+rr.h) {
+        this.battle._togglePause(); return;
+      }
+      if (rq && mx >= rq.x && mx <= rq.x+rq.w && my >= rq.y && my <= rq.y+rq.h) {
+        this.battle._stopBlendTimer(); this.battle._paused = false; this.battle = null;
+        this._hidePauseBtn(); this.overlay.classList.add('hidden'); this.overlay.innerHTML = '';
+        this.audio.stopMusic(); this.state = 'world-map'; return;
+      }
+      return;
+    }
     // Title screen: any click advances
     if (this.state === 'title') {
       this.state = 'mode-select'; return;
@@ -350,6 +565,14 @@ class SlashGame {
     // Leaderboard
     if (this.state === 'leaderboard') {
       this.state = 'mode-select'; return;
+    }
+    // Phase 9: Dashboard back button
+    if (this.state === 'dashboard') {
+      const r = this._dashBackRect;
+      if (r && mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        this.state = 'mode-select';
+      }
+      return;
     }
     if (this.state === 'menu') {
       this.state = 'world-map';
@@ -406,9 +629,80 @@ class SlashGame {
     this._stageStartedAt = Date.now();
     this._lastRunnerHp = null;
     this._stageWinMastery = null;
-    this._tutorial = null; // first-play interactive runner tutorial
-    this._startRunner();
-    this._maybeStartTutorial();
+    this._battleResults   = null;
+    this._brStars         = null;  // regenerate at current canvas size
+    this._tutorial = null;
+    // PHASE 6: show full onboarding before first-ever play of stage 1
+    if (id === 1 && this.progress.shouldShowTutorial()) {
+      this._startOnboarding(() => {
+        this._startRunner();
+        this._maybeStartTutorial();
+      });
+    } else {
+      this._startRunner();
+      this._maybeStartTutorial();
+    }
+  }
+
+  // PHASE 6: full-screen onboarding tutorial (canvas-drawn)
+  _startOnboarding(onComplete) {
+    this._onboardingTutorial = new Tutorial(this.W, this.H, () => {
+      this.progress.markTutorialComplete();
+      this._onboardingTutorial = null;
+      if (onComplete) onComplete();
+    });
+    this.state = 'onboarding';
+  }
+
+  _updateOnboarding() {
+    if (!this._onboardingTutorial) { this.state = 'world-map'; return; }
+    if (this._onboardingTutorial.isDone) { this.state = 'world-map'; return; }
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.W, this.H);
+    this._drawOnboardingBg(ctx);
+    this._onboardingTutorial.draw(ctx, this.sprites);
+  }
+
+  _drawOnboardingBg(ctx) {
+    const W = this.W, H = this.H;
+    const t = this._age;
+    // Deep space-to-forest gradient
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0,    '#03080f');
+    sky.addColorStop(0.45, '#0a1c38');
+    sky.addColorStop(0.72, '#0d2a12');
+    sky.addColorStop(1,    '#081a09');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+    // Twinkling stars
+    const starSeeds = [0.10,0.28,0.52,0.71,0.86,0.18,0.63,0.80,0.39,0.95];
+    starSeeds.forEach((s, i) => {
+      const tw = 0.35 + 0.45 * Math.sin(t * 0.055 + i * 1.8);
+      const sz = 1.2 + Math.sin(t * 0.04 + i * 2.3) * 0.6;
+      ctx.save(); ctx.globalAlpha = tw * 0.55;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(s * W, (0.04 + i * 0.026) * H, sz, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+
+    // Silhouette bamboo stalks
+    const bambooX = [0.04, 0.12, 0.82, 0.92];
+    bambooX.forEach((bx, i) => {
+      const sway = Math.sin(t * 0.025 + i * 0.8) * 4;
+      ctx.strokeStyle = `rgba(20,60,20,${0.35 + i * 0.05})`;
+      ctx.lineWidth   = 5 + i;
+      ctx.beginPath(); ctx.moveTo(bx * W + sway, H); ctx.lineTo(bx * W - 8 + sway, H * 0.22); ctx.stroke();
+      // Segments
+      for (let seg = 0; seg < 5; seg++) {
+        ctx.strokeStyle = `rgba(30,70,30,0.3)`;
+        ctx.lineWidth   = 1;
+        ctx.beginPath(); ctx.moveTo(bx * W - 6 + sway, H - seg * H * 0.15); ctx.lineTo(bx * W + 6 + sway, H - seg * H * 0.15); ctx.stroke();
+      }
+    });
+
+    // Dark semi-transparent overlay so tutorial card pops
+    ctx.fillStyle = 'rgba(0,5,15,0.55)';
+    ctx.fillRect(0, 0, W, H);
   }
 
   _maybeStartTutorial() {
@@ -457,7 +751,7 @@ class SlashGame {
     ctx.beginPath(); ctx.roundRect(px, py, panelW, panelH, 14); ctx.fill();
     ctx.strokeStyle = '#FFD54F'; ctx.lineWidth = 2; ctx.stroke();
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = 'bold 14px "Comic Sans MS", system-ui';
+    ctx.font = 'bold 14px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = '#FFD54F';
     ctx.fillText(`📘 Tutorial (${Math.ceil(t.leftSec)}s)`, W / 2, py + 8);
     ctx.font = '13px system-ui';
@@ -477,6 +771,13 @@ class SlashGame {
     const el = document.getElementById('runnerControls');
     if (el) el.classList.add('hidden');
   }
+  // ── Pause button helpers ───────────────────────────────────────
+  _showPauseBtn() {
+    document.getElementById('slashPauseBtn')?.classList.remove('hidden');
+  }
+  _hidePauseBtn() {
+    document.getElementById('slashPauseBtn')?.classList.add('hidden');
+  }
   // ── RUNNER PHASE ─────────────────────────────────────────────
   _startRunner() {
     if (this.runner) { this.runner.destroy(); this.runner = null; }
@@ -494,6 +795,7 @@ class SlashGame {
     if (dpadMove) dpadMove.style.visibility = '';
     if (dL && dR && dJ) this.runner.bindDpad(dL, dR, dJ);
     this._showDpad();
+    this._showPauseBtn();
     // Start stage music
     this.audio.startMusic(this.stageId);
     this.state = 'runner';
@@ -512,6 +814,7 @@ class SlashGame {
     this.overlay.classList.remove('hidden');
     this.overlay.classList.add('active');
     this.overlay.innerHTML = '';
+    this._showPauseBtn();
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
     this.battle = new BattleEngine(
       this.canvas, this.overlay, stage, collectedPhonemes,
@@ -521,6 +824,7 @@ class SlashGame {
   }
   // ── STAGE WIN ────────────────────────────────────────────────
   _onStageWin() {
+    this._hidePauseBtn();
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
     const battleScore = this.battle ? this.battle.score : 0;
     this._lastBattleAccuracy = this.battle?.getAccuracyPercent?.() ?? null;
@@ -538,16 +842,55 @@ class SlashGame {
     };
     const masteryReward = this.progress.recordStageMastery(this.stageId, masteryResult);
     this._stageWinMastery = { ...masteryReward.mastery, bonus: masteryReward.bonus, newly: masteryReward.newlyEarned, clearSec };
+
+    // Phase 8: capture battle summary before destroying the engine
+    const riceEarned = this.progress.getStars(this.stageId) * 50 + 20 + (masteryReward.bonus || 0);
+    this._battleResults = {
+      wordsBlended: this.battle?._correctBlends  ?? 0,
+      bestStreak:   this.battle?._streak         ?? 0,
+      accuracy:     this._lastBattleAccuracy     ?? 0,
+      riceEarned,
+      stageId: this.stageId,
+    };
+
     this.overlay.classList.remove('active');
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
     if (this.battle) { this.battle.destroy(); this.battle = null; }
     this.audio.sfxVictory();
+
+    // Phase 8: show animated battle-results card for 2.5s before stage-win
+    this.state = 'battle-results';
+    this._battleResultsAge = 0;
+    this._battleResultsDone = false;
+    this._resultBtnRects = [];
+    setTimeout(() => {
+      if (this.state === 'battle-results') this._advanceToStageWin();
+    }, 2800);
+  }
+
+  // Phase 8: called when battle-results card is tapped or times out
+  _advanceToStageWin() {
+    if (this._battleResultsDone) return;
+    this._battleResultsDone = true;
     this.state = 'stage-win';
     this._resultBtnRects = [];
+    this._confetti = Array.from({length: 55}, () => ({
+      x: Math.random() * this.W,
+      y: Math.random() * -this.H,
+      vx: (Math.random() - 0.5) * 2.5,
+      vy: 1.6 + Math.random() * 2.2,
+      rot: Math.random() * Math.PI * 2,
+      rotV: (Math.random() - 0.5) * 0.18,
+      w: 6 + Math.random() * 8,
+      h: 4 + Math.random() * 5,
+      color: ['#FFD700','#FF4081','#00E5FF','#76FF03','#FF9800','#E040FB','#fff'][Math.floor(Math.random()*7)],
+      emoji: Math.random() < 0.18 ? ['🎉','⭐','🍚','✨','🏆'][Math.floor(Math.random()*5)] : null,
+    }));
   }
   // ── STAGE LOSE ───────────────────────────────────────────────
   _onStageLose() {
+    this._hidePauseBtn();
     this.overlay.classList.remove('active');
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
@@ -557,6 +900,7 @@ class SlashGame {
   }
   // ── EXIT ─────────────────────────────────────────────────────
   exit() {
+    this._hidePauseBtn();
     if (this.runner) { this.runner.destroy(); this.runner = null; }
     if (this.battle) { this.battle.destroy(); this.battle = null; }
     this.audio.stopMusic();
@@ -567,8 +911,32 @@ class SlashGame {
     document.removeEventListener('keydown', this._menuKd);
     this.canvas.removeEventListener('click', this._canvasClick);
     this.canvas.removeEventListener('touchstart', this._canvasTap);
+    if (this._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityHandler = null;
+    }
     cancelAnimationFrame(this._rafId);
   }
+  // ── Auto-pause when page becomes hidden ──────────────────────
+  _autoPauseOnHidden() {
+    const s = this.state;
+    const isGameplay = s === 'runner' || s === 'battle' || s === 'endless-runner' || s === 'endless-battle';
+    if (!isGameplay) return;
+    if (s === 'runner' && this.runner && !this.runner._paused) {
+      this.runner._paused = true;
+      this.runner._stopBlendTimer?.();
+    }
+    if (s === 'battle' && this.battle && !this.battle._paused) {
+      this.battle._paused = true;
+      this.battle._stopBlendTimer?.();
+    }
+    if (s === 'endless-runner' && this.endlessRunner && !this.endlessRunner._paused) {
+      this.endlessRunner._paused = true;
+    }
+    // endless-battle has no explicit pause but its timer is performance.now() based;
+    // nothing more to do — user must manually resume via pause button.
+  }
+
   // ── MAIN LOOP ─────────────────────────────────────────────────
   _loop() {
     this._rafId = requestAnimationFrame(this._loop);
@@ -588,6 +956,7 @@ class SlashGame {
     // Tick achievement popup
     this._tickAchievementPopup();
     switch (this.state) {
+      case 'onboarding': this._updateOnboarding(); break; // PHASE 6
       case 'title': this._updateTitle(); break;
       case 'mode-select': this._updateModeSelect(); break;
       case 'menu': this._updateMenu(); break;
@@ -596,6 +965,7 @@ class SlashGame {
       case 'runner': this._updateRunner(); break;
       case 'transition': this._updateTransition(); break;
       case 'battle': this._updateBattle(); break;
+      case 'battle-results': this._drawBattleResults(); break;  // Phase 8
       case 'stage-win': this._drawStageWin(); break;
       case 'stage-lose': this._drawStageLose(); break;
       case 'endless-runner': this._updateEndlessRunner(); break;
@@ -605,6 +975,7 @@ class SlashGame {
       case 'daily': this._updateDaily(); break;
       case 'achievements': this._updateAchievements(); break;
       case 'leaderboard': this._updateLeaderboard(); break;
+      case 'dashboard':   this._drawDashboard(); break;  // Phase 9
     }
     // Achievement popup on top of everything
     this._drawAchievementPopup();
@@ -769,7 +1140,7 @@ class SlashGame {
     // ── Game title — big, bold, gold with outline ────────────────
     const titleY = rikuY + rikuH + 18 + bounce * 0.3;
     const titleSz = Math.round(Math.min(36, W * 0.08));
-    ctx.font = `900 ${titleSz}px "Comic Sans MS", system-ui`;
+    ctx.font = `900 ${titleSz}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.textAlign = 'center';
     // Title shadow/outline for readability
     ctx.shadowColor = 'rgba(0,0,0,0.8)';
@@ -788,7 +1159,7 @@ class SlashGame {
     ctx.shadowBlur = 0;
     // ── Subtitle ─────────────────────────────────────────────────
     const subY = titleY + titleSz * 2 + 22;
-    ctx.font = `bold ${Math.round(Math.min(13, W * 0.031))}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.round(Math.min(13, W * 0.031))}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = 'rgba(200,240,200,0.82)';
     ctx.fillText('Phonics Adventure · 6 Stages · Short Vowels → Blends', W / 2, subY);
     // ── Animated dino emojis left/right of card ──────────────────
@@ -810,7 +1181,7 @@ class SlashGame {
     const tagY = dinoY + 36;
     const tagPul = 0.75 + 0.25 * Math.sin(t * 0.06);
     ctx.globalAlpha = tagPul;
-    ctx.font = `bold ${Math.round(Math.min(15, W * 0.036))}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.round(Math.min(15, W * 0.036))}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'center';
     ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 8;
@@ -842,7 +1213,7 @@ class SlashGame {
     ctx.shadowBlur = 0;
     // Button text
     const tapSz = Math.round(Math.min(20, W * 0.046));
-    ctx.font = `900 ${tapSz}px "Comic Sans MS", system-ui`;
+    ctx.font = `900 ${tapSz}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -878,7 +1249,7 @@ class SlashGame {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
     // Header
-    ctx.font = `bold ${Math.min(22, W * 0.055)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.min(22, W * 0.055)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -927,11 +1298,11 @@ class SlashGame {
       ctx.fillStyle = stage.accentColor + '55';
       ctx.beginPath(); ctx.roundRect(x, y, cw, 6, [14, 14, 0, 0]); ctx.fill();
       // Stage number + name
-      ctx.font = `bold ${Math.min(15, cw * 0.12)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(15, cw * 0.12)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#FFD700';
       ctx.textAlign = 'center';
       ctx.fillText(`Stage ${stageId}`, x + cw / 2, y + 22);
-      ctx.font = `bold ${Math.min(13, cw * 0.1)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(13, cw * 0.1)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#fff';
       ctx.fillText(stage.name, x + cw / 2, y + 40);
       // Pattern label
@@ -1004,13 +1375,13 @@ class SlashGame {
     // ── Title ────────────────────────────────────────────────────
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(22, W * 0.052)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.min(22, W * 0.052)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 10;
     ctx.fillText('🗺 World Map', W / 2, 10);
     ctx.shadowBlur = 0;
     // Rice points display
-    ctx.font = `bold 13px "Comic Sans MS", system-ui`;
+    ctx.font = `bold 13px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFF176';
     ctx.fillText(`🍚 ${this.progress.getRicePoints()} Rice Points`, W / 2, 38);
     // Map/List view toggle hint
@@ -1100,7 +1471,7 @@ class SlashGame {
         ctx.fillText('🔒', n.cx, cy);
       } else {
         // Stage number
-        ctx.font = `bold ${Math.round(nodeR * 0.52)}px "Comic Sans MS", system-ui`;
+        ctx.font = `bold ${Math.round(nodeR * 0.52)}px "Nunito", "Comic Sans MS", system-ui`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = sel ? '#FFD700' : '#fff';
         ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
@@ -1120,7 +1491,7 @@ class SlashGame {
         ctx.globalAlpha = 1;
       }
       // Stage name label below
-      ctx.font = `bold ${Math.max(9, Math.round(W * 0.022))}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.max(9, Math.round(W * 0.022))}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.3)';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
@@ -1162,7 +1533,7 @@ class SlashGame {
       ctx.fillStyle = 'rgba(0,0,0,0.78)';
       ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 14); ctx.fill();
       ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.font = `bold ${Math.min(14, W * 0.032)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(14, W * 0.032)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#FFD700';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.fillText(`${selStage.name} — ${selStage.pattern}`, W / 2, panY + 8);
@@ -1181,7 +1552,7 @@ class SlashGame {
       ctx.beginPath(); ctx.roundRect(btnX, btnY, playBtnW, playBtnH, playBtnH / 2); ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1.5; ctx.stroke();
       ctx.shadowBlur = 0;
-      ctx.font = `bold ${Math.min(16, W * 0.038)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(16, W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('▶ PLAY', W / 2, btnY + playBtnH / 2);
@@ -1268,7 +1639,7 @@ class SlashGame {
     ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 16;
     lines.forEach((line, i) => {
       const size = i === 0 ? Math.min(28, W * 0.06) : Math.min(20, W * 0.04);
-      ctx.font = `bold ${size}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${size}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = i === 0 ? '#FFD700' : '#fff';
       ctx.fillText(line, W / 2, H / 2 + (i - (lines.length - 1) / 2) * (size + 10));
     });
@@ -1287,6 +1658,134 @@ class SlashGame {
     if (this.battle.outcome === 'victory') this._onStageWin();
     else this._onStageLose();
   }
+  // ── PHASE 8: POST-BATTLE REWARDS SCREEN ──────────────────────
+  // Shown for 2.8s after a victory before the full stage-win panel appears.
+  // Tap anywhere to skip ahead immediately.
+  _drawBattleResults() {
+    const ctx = this.ctx;
+    const W = this.W; const H = this.H;
+    this._battleResultsAge = (this._battleResultsAge || 0) + 1;
+    const t = this._battleResultsAge;
+
+    // Dark purple → black background
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0d0024');
+    bg.addColorStop(1, '#1a0038');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle star field
+    if (!this._brStars) {
+      this._brStars = Array.from({length: 40}, () => ({
+        x: Math.random() * W, y: Math.random() * H,
+        r: Math.random() * 1.8 + 0.4,
+        p: Math.random() * Math.PI * 2,
+      }));
+    }
+    this._brStars.forEach(s => {
+      ctx.globalAlpha = 0.4 + 0.3 * Math.sin(t * 0.06 + s.p);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // Card slide-in from below
+    const slideIn = Math.min(1, t / 18);           // 0→1 in 18 frames
+    const slideEase = 1 - Math.pow(1 - slideIn, 3); // ease-out cubic
+    const cardW = Math.min(340, W - 40);
+    const cardH = 310;
+    const cardX = (W - cardW) / 2;
+    const cardY = H / 2 - cardH / 2 + (1 - slideEase) * 80;
+
+    // Card shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(cardX + 4, cardY + 8, cardW, cardH, 22); ctx.fill();
+
+    // Card body — gradient border glow
+    const cardGrd = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH);
+    cardGrd.addColorStop(0, 'rgba(40,10,70,0.97)');
+    cardGrd.addColorStop(1, 'rgba(20,5,40,0.97)');
+    ctx.fillStyle = cardGrd;
+    ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 22); ctx.fill();
+    const borderPulse = 0.7 + 0.3 * Math.sin(t * 0.15);
+    ctx.strokeStyle = `rgba(180,80,255,${borderPulse})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 22); ctx.stroke();
+
+    // Title
+    const titleAlpha = Math.min(1, (t - 4) / 10);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, titleAlpha);
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font        = `900 ${Math.min(26, W * 0.058)}px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.fillStyle   = '#FFD700';
+    ctx.shadowColor = '#FF8C00'; ctx.shadowBlur = 16;
+    ctx.fillText('⚔️ Battle Results!', W / 2, cardY + 18);
+    ctx.restore();
+
+    // Stats — each row counts up from 0 to final value
+    const stats = this._battleResults || {};
+    const rows = [
+      { emoji: '📖', label: 'Words Blended',  val: stats.wordsBlended ?? 0, color: '#76FF03', unit: '' },
+      { emoji: '🔥', label: 'Best Streak',    val: stats.bestStreak   ?? 0, color: '#FF9800', unit: '×' },
+      { emoji: '🎯', label: 'Accuracy',        val: stats.accuracy     ?? 0, color: '#00E5FF', unit: '%' },
+      { emoji: '🍚', label: 'Rice Earned',     val: stats.riceEarned   ?? 0, color: '#FFD700', unit: '' },
+    ];
+
+    rows.forEach((row, i) => {
+      const rowDelay = 10 + i * 12;
+      const rowAlpha = Math.min(1, Math.max(0, (t - rowDelay) / 8));
+      // Count-up: animate from 0 → val over 20 frames after rowDelay
+      const countProg = Math.min(1, Math.max(0, (t - rowDelay) / 20));
+      const displayVal = Math.round(row.val * countProg);
+
+      const rowY = cardY + 72 + i * 52;
+      ctx.save();
+      ctx.globalAlpha = rowAlpha;
+
+      // Row background pill
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.beginPath(); ctx.roundRect(cardX + 12, rowY - 8, cardW - 24, 42, 10); ctx.fill();
+
+      // Emoji + label
+      ctx.font = `bold 15px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillText(`${row.emoji}  ${row.label}`, cardX + 24, rowY + 13);
+
+      // Value (counts up)
+      const scale = 1 + 0.15 * Math.max(0, Math.sin((t - rowDelay - 20) * 0.4)) * (countProg < 1 ? 1 : 0);
+      ctx.textAlign = 'right';
+      ctx.save();
+      ctx.translate(cardX + cardW - 24, rowY + 13);
+      ctx.scale(scale, scale);
+      ctx.font = `900 ${Math.min(22, W * 0.048)}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillStyle = row.color;
+      ctx.shadowColor = row.color; ctx.shadowBlur = 8;
+      ctx.fillText(`${row.unit}${displayVal}${row.unit === '%' ? '' : row.unit === '×' ? '' : ''}`, 0, 0);
+      ctx.restore();
+
+      ctx.restore();
+    });
+
+    // "Tap to continue" hint fades in at t=55
+    const tapAlpha = Math.min(1, Math.max(0, (t - 55) / 15)) * (0.6 + 0.4 * Math.sin(t * 0.14));
+    ctx.save();
+    ctx.globalAlpha = tapAlpha;
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font        = `bold 14px "Nunito", system-ui`;
+    ctx.fillStyle   = 'rgba(255,255,255,0.75)';
+    ctx.fillText('Tap to continue →', W / 2, cardY + cardH - 22);
+    ctx.restore();
+
+    ctx.textBaseline = 'alphabetic';
+  }
+
   // ── STAGE WIN SCREEN ─────────────────────────────────────────
   _drawStageWin() {
     const ctx = this.ctx;
@@ -1300,13 +1799,27 @@ class SlashGame {
     grad.addColorStop(1, '#8BC34A');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
-    // Confetti
-    for (let i = 0; i < 20; i++) {
-      const x = ((i * 173 + this._age * 1.5) % W);
-      const y = (this._age * 1.2 + i * 45) % H;
-      ctx.font = '16px serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(['🎉','⭐','🍚','✨','🏆'][i % 5], x, y);
+    // Confetti — colored rect particles + emoji sprinkles
+    if (this._confetti) {
+      for (const p of this._confetti) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rot += p.rotV;
+        if (p.y > H + 20) { p.y = -20; p.x = Math.random() * W; }
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        if (p.emoji) {
+          ctx.font = '18px serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(p.emoji, 0, 0);
+        } else {
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        }
+        ctx.restore();
+      }
     }
     // Panel
     const pw = Math.min(360, W - 40);
@@ -1317,10 +1830,10 @@ class SlashGame {
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 22); ctx.fill();
     ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 3; ctx.stroke();
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(28, W * 0.062)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.min(28, W * 0.062)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.fillText('🎉 VICTORY!', W / 2, py + 20);
-    ctx.font = `bold 16px "Comic Sans MS", system-ui`;
+    ctx.font = `bold 16px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
     ctx.fillText(`Stage ${this.stageId}: ${stage.name}`, W / 2, py + 66);
     // Stars earned
@@ -1397,10 +1910,10 @@ class SlashGame {
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 20); ctx.fill();
     ctx.strokeStyle = '#F44336'; ctx.lineWidth = 2; ctx.stroke();
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(26, W * 0.058)}px "Comic Sans MS", system-ui`;
+    ctx.font = `bold ${Math.min(26, W * 0.058)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FF5252';
     ctx.fillText('💦 Rice Spilled…', W / 2, py + 22);
-    ctx.font = '15px "Comic Sans MS", system-ui';
+    ctx.font = '15px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.fillText("Riku needs more practice!", W / 2, py + 72);
     ctx.fillText("Collect more phoneme coins in the runner", W / 2, py + 96);
@@ -1425,7 +1938,7 @@ class SlashGame {
       ctx.strokeStyle = '#ff6633'; ctx.lineWidth = 1.5; ctx.stroke();
       // Label
       ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.min(14, btn.w * 0.08)}px "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(14, btn.w * 0.08)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + btn.h / 2);
@@ -1443,9 +1956,9 @@ class SlashGame {
     ctx.clearRect(0, 0, W, H);
     // Animated gradient background
     const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, `hsl(${220 + Math.sin(t*0.01)*15},70%,${15 + Math.sin(t*0.008)*5}%)`);
-    sky.addColorStop(0.6, `hsl(${200 + Math.sin(t*0.012)*10},60%,${35 + Math.sin(t*0.01)*5}%)`);
-    sky.addColorStop(1, `hsl(${130 + Math.sin(t*0.015)*10},50%,${20 + Math.sin(t*0.009)*3}%)`);
+    sky.addColorStop(0, `hsl(${210 + Math.sin(t*0.01)*10},65%,${55 + Math.sin(t*0.008)*8}%)`);
+    sky.addColorStop(0.5, `hsl(${35 + Math.sin(t*0.012)*10},75%,${60 + Math.sin(t*0.01)*5}%)`);
+    sky.addColorStop(1, `hsl(${130 + Math.sin(t*0.015)*10},60%,${35 + Math.sin(t*0.009)*5}%)`);
     ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
     // Stars
     for (let i = 0; i < 20; i++) {
@@ -1458,21 +1971,21 @@ class SlashGame {
     }
     ctx.globalAlpha = 1;
     // Ground strip
-    ctx.fillStyle = '#2a5a18';
+    ctx.fillStyle = '#3d9a3a';
     ctx.fillRect(0, H * 0.78, W, H * 0.22);
-    ctx.fillStyle = '#3d7a2a';
+    ctx.fillStyle = '#55c850';
     ctx.fillRect(0, H * 0.78, W, 8);
     // Animated dinos running in background
-    const dinoEmojis = ['🦖','🦕','🦴'];
-    for (let d = 0; d < 3; d++) {
-      const dx = ((t * (1.2 + d*0.4) + d * W/3) % (W + 80)) - 80;
-      ctx.font = `${H*0.06}px serif`;
+    const dinoEmojis = ['🦖','🦕','🦴','🍚','🌾'];
+    for (let d = 0; d < 5; d++) {
+      const dx = ((t * (1.0 + d*0.35) + d * W/5) % (W + 100)) - 100;
+      ctx.font = `${H*0.11}px serif`;
       ctx.textBaseline = 'middle';
-      ctx.fillText(dinoEmojis[d % dinoEmojis.length], dx, H * 0.83);
+      ctx.fillText(dinoEmojis[d % dinoEmojis.length], dx, H * 0.84 + Math.sin(t * 0.04 + d) * 6);
     }
     // ── Title logo ────────────────────────────────────────────
-    const titleY = H * 0.12;
-    const titleSize = Math.min(W * 0.09, 42);
+    const titleY = H * 0.08;
+    const titleSize = Math.min(W * 0.11, 52);
     // Shimmer effect
     ctx.save();
     const shimmer = ctx.createLinearGradient(0, titleY, W, titleY + 80);
@@ -1499,13 +2012,13 @@ class SlashGame {
     ctx.fillText('DINO SLASH 🦖', W/2, titleY + titleSize * 1.4 + bounce);
     ctx.restore();
     // Subtitle: Phonics Power!
-    ctx.textAlign = 'center'; ctx.font = `bold ${Math.min(16, W*0.038)}px Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.font = `bold ${Math.min(20, W*0.045)}px Arial, sans-serif`;
     ctx.fillStyle = '#4ECDC4';
-    ctx.fillText('PHONICS POWER · SLASH DINOS · SAVE THE RICE PADDY', W/2, titleY + titleSize * 2.6 + bounce);
+    ctx.fillText('LEARN TO READ · SLASH DINOS · SAVE THE RICE PADDY!', W/2, titleY + titleSize * 2.6 + bounce);
     // ── Riku character (procedural) ─────────────────────────────
-    const rikuX = W * 0.5, rikuY = H * 0.47;
-    const rikuBounce = Math.sin(t * 0.06) * 6;
-    const rikuSize = Math.min(W * 0.25, 110);
+    const rikuX = W * 0.5, rikuY = H * 0.43;
+    const rikuBounce = Math.sin(t * 0.06) * 10;
+    const rikuSize = Math.min(W * 0.48, 280);
     const titleRiku = this.sprites['riku-idle'] || this.sprites['riku-run'];
     if (titleRiku && titleRiku.complete && titleRiku.naturalWidth > 0) {
       const ar = titleRiku.naturalWidth / titleRiku.naturalHeight;
@@ -1519,19 +2032,20 @@ class SlashGame {
     const blinkAlpha = 0.5 + 0.5 * Math.sin(t * 0.08);
     ctx.globalAlpha = blinkAlpha;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `bold ${Math.min(20, W*0.05)}px Arial Black, sans-serif`;
+    const tapSize = Math.min(36, W * 0.08);
+    ctx.font = `bold ${tapSize}px Arial Black, sans-serif`;
     ctx.fillStyle = '#FFD700';
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
-    ctx.strokeText('TAP TO PLAY!', W/2, H * 0.73);
-    ctx.fillText('TAP TO PLAY!', W/2, H * 0.73);
+    ctx.strokeStyle = '#5a2000'; ctx.lineWidth = 6;
+    ctx.strokeText('TAP TO PLAY!', W/2, H * 0.74);
+    ctx.fillText('TAP TO PLAY!', W/2, H * 0.74);
     ctx.globalAlpha = 1;
     // ── Rice grains / login streak info bottom ────────────────
     const g = this.progress.getRiceGrains();
     const streak = this.progress.getLoginStreak();
     ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-    ctx.font = `bold ${Math.min(15,W*0.036)}px Arial, sans-serif`;
+    ctx.font = `bold ${Math.min(20,W*0.048)}px Arial, sans-serif`;
     ctx.fillStyle = '#FFD700';
-    ctx.fillText(`🌾 ${g}`, 12, H - 10);
+    ctx.fillText(`🌾 ${g}`, 14, H - 10);
     if (streak > 1) {
       ctx.textAlign = 'right';
       ctx.fillStyle = '#FF8C00';
@@ -1619,6 +2133,7 @@ class SlashGame {
       { label:'🏪 SHOP', sub:'Spend your rice grains', col:'#FF80FF', action:'shop' },
       { label:'🏆 LEADERBOARD', sub:'Challenge the world', col:'#FF8C00', action:'leaderboard' },
       { label:'🥇 ACHIEVEMENTS', sub:`${this.progress.data.achievements.length}/${ACHIEVEMENTS.length} unlocked`, col:'#00CCFF', action:'achievements' },
+      { label:'📊 PROGRESS', sub:'Parent / teacher view', col:'#69F0AE', action:'dashboard' },  // Phase 9
     ];
     const btnH = Math.min(62, (H - 120) / (modes.length + 0.5));
     const btnW = Math.min(W - 40, 400);
@@ -1679,6 +2194,7 @@ class SlashGame {
         if (r.action === 'shop') { this._startShop(); }
         if (r.action === 'leaderboard') { this.state = 'leaderboard'; }
         if (r.action === 'achievements') { this.state = 'achievements'; }
+        if (r.action === 'dashboard')    { this.state = 'dashboard'; this._dashScroll = 0; }  // Phase 9
         if (r.action === 'back') { this.state = 'title'; }
         return;
       }
@@ -1701,6 +2217,7 @@ class SlashGame {
     const j = document.getElementById('dpadJump');
     if (l && r && j) this.endlessRunner.bindDpad(l, r, j);
     this.state = 'endless-runner';
+    this._showPauseBtn();
     if (this.audio) this.audio.startEndlessMusic();
   }
   _stopEndlessRunner() {
@@ -1732,6 +2249,8 @@ class SlashGame {
     }
   }
   _startEndlessBattle() {
+    // Guard: if a battle is already live (e.g. callback fired mid-frame), bail out.
+    if (this.endlessBattle) return;
     const runner = this.endlessRunner;
     const gateData = runner.getPendingGate();
     if (!gateData || !gateData.word) {
@@ -1758,8 +2277,11 @@ class SlashGame {
     // Draw runner background + battle FX on canvas
     if (this.endlessRunner) this.endlessRunner.draw();
     battle.drawFX();
-    if (battle.isDone()) {
-      // Will have called onDone callback already
+    // isDone() returns true only after the onDone callback has already fired from
+    // within update(). The state should now be 'endless-runner'. If for any reason
+    // the callback wasn't invoked (defensive), force cleanup here.
+    if (battle.isDone() && this.state === 'endless-battle') {
+      this._onEndlessBattleDone('miss', 0);
     }
   }
   _onEndlessBattleDone(result, timeUsed) {
@@ -1791,6 +2313,7 @@ class SlashGame {
   _endEndlessRun() {
     const runner = this.endlessRunner;
     if (!runner) { this.state = 'mode-select'; return; }
+    this._hidePauseBtn();
     this.audio?.stopMusic();
     if (this.audio) this.audio.sfxGameOver();
     const score = runner.getScore();
@@ -2283,26 +2806,142 @@ class SlashGame {
   // ── ACHIEVEMENT POPUP SYSTEM ──────────────────────────────────
   _tickAchievementPopup() {
     if (!this._achPopupQueue) this._achPopupQueue = [];
+
+    // Poll progress tracker every frame so unlocks are never missed,
+    // regardless of whether the queue already has items.
+    const newIds = this.progress.getNewAchievements();
+    if (newIds.length > 0) {
+      this.progress.clearNewAchievements();
+      for (const id of newIds) {
+        const ach = ACHIEVEMENTS.find(a => a.id === id);
+        if (ach) this._queueAchievementPopup(ach);
+      }
+    }
+
     if (this._achPopup) {
       this._achPopup.life -= 0.018;
       if (this._achPopup.life <= 0) {
         this._achPopup = null;
-        // Show next in queue
         if (this._achPopupQueue.length > 0) this._showNextPopup();
       }
-    } else if (this._achPopupQueue.length > 0) {
-      // Check for new achievements from progress tracker
-      const newIds = this.progress.getNewAchievements();
-      if (newIds.length > 0) {
-        this.progress.clearNewAchievements();
-        for (const id of newIds) {
-          const ach = ACHIEVEMENTS.find(a => a.id === id);
-          if (ach) this._queueAchievementPopup(ach);
-        }
-      }
-      this._showNextPopup();
     }
   }
+  // ── PHASE 9: PARENT / TEACHER DASHBOARD ──────────────────────
+  // Shows per-stage stats, weak phonemes, and lifetime totals so
+  // parents and teachers can see where a child needs more practice.
+  _drawDashboard() {
+    const ctx = this.ctx, W = this.W, H = this.H, p = this.progress;
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0a1628'); bg.addColorStop(1, '#1b2b4a');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+    // Header
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `bold ${Math.min(22, W * 0.052)}px "Nunito", system-ui`;
+    ctx.fillStyle = '#69F0AE'; ctx.shadowColor = '#00C853'; ctx.shadowBlur = 10;
+    ctx.fillText('📊 Progress Report', W / 2, 14);
+    ctx.shadowBlur = 0;
+    ctx.font = `12px system-ui`; ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillText('Parent / teacher view — shows learning data stored on this device', W / 2, 44);
+
+    // ── Global stats row ────────────────────────────────────────
+    const gStats = [
+      { label: 'Words blended', val: p.data.totalWordsBlended ?? 0 },
+      { label: 'Best combo',    val: p.data.bestCombo         ?? 0 },
+      { label: 'Daily streak',  val: p.data.dailyStreak       ?? 0, suffix: ' days' },
+      { label: 'Rice grains',   val: p.getRicePoints()        ?? 0, suffix: ' 🍚' },
+    ];
+    const gsW = (W - 24) / gStats.length;
+    gStats.forEach((gs, i) => {
+      const gx = 12 + i * gsW, gy = 64;
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.beginPath(); ctx.roundRect(gx, gy, gsW - 6, 46, 8); ctx.fill();
+      ctx.fillStyle = '#69F0AE'; ctx.font = `bold ${Math.min(18, gsW * 0.3)}px "Nunito", system-ui`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(`${gs.val}${gs.suffix || ''}`, gx + (gsW - 6) / 2, gy + 6);
+      ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = `10px system-ui`;
+      ctx.fillText(gs.label, gx + (gsW - 6) / 2, gy + 30);
+    });
+
+    // ── Per-stage breakdown ──────────────────────────────────────
+    const stages = PHONICS_DATA.stageList || [];
+    const rowH = 84, topY = 122;
+    stages.forEach((stage, idx) => {
+      const s     = p.getStage(stage.id);
+      const acc   = s.totalBlends > 0 ? Math.round(s.correctBlends / s.totalBlends * 100) : null;
+      const stars = p.getStars(stage.id);
+      const mastered = (s.wordsMastered || []).length;
+      const ry = topY + idx * (rowH + 8);
+
+      // Row bg
+      ctx.fillStyle = s.unlocked ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.03)';
+      ctx.beginPath(); ctx.roundRect(10, ry, W - 20, rowH, 10); ctx.fill();
+
+      // Stage name + stars
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.font = `bold ${Math.min(14, W * 0.033)}px "Nunito", system-ui`;
+      ctx.fillStyle = s.unlocked ? '#fff' : 'rgba(255,255,255,0.35)';
+      ctx.fillText(`${stage.icon || '🦕'} Stage ${stage.id}: ${stage.name}`, 20, ry + 9);
+      ctx.font = '14px serif';
+      for (let si = 0; si < 3; si++) {
+        ctx.globalAlpha = si < stars ? 1 : 0.2;
+        ctx.fillText('⭐', 20 + si * 18, ry + 30);
+      }
+      ctx.globalAlpha = 1;
+
+      if (!s.unlocked) {
+        ctx.font = '11px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillText('Locked — complete earlier stages', W / 2, ry + rowH / 2);
+        ctx.textAlign = 'left';
+        return;
+      }
+
+      // Stats pills
+      const pills = [
+        { t: acc !== null ? `🎯 ${acc}%` : '🎯 —',   col: acc >= 80 ? '#76FF03' : acc >= 60 ? '#FFD700' : '#FF5252' },
+        { t: `📖 ${mastered} mastered`,               col: '#4FC3F7' },
+        { t: s.mastery?.noHit    ? '✅ No-Hit' : '⬜ No-Hit',   col: s.mastery?.noHit    ? '#00E676' : 'rgba(255,255,255,0.35)' },
+        { t: s.mastery?.speedClear ? '✅ Speed' : '⬜ Speed',   col: s.mastery?.speedClear ? '#FFD700' : 'rgba(255,255,255,0.35)' },
+      ];
+      let px2 = 20;
+      pills.forEach(pill => {
+        ctx.font = `bold 11px "Nunito", system-ui`;
+        const tw = ctx.measureText(pill.t).width + 14;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.roundRect(px2, ry + 52, tw, 22, 6); ctx.fill();
+        ctx.fillStyle = pill.col;
+        ctx.fillText(pill.t, px2 + 7, ry + 59);
+        px2 += tw + 6;
+      });
+
+      // Weak phonemes
+      const weak = p.getWeakPhonemes(stage.id);
+      const weakKeys = Object.entries(weak)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([ph]) => ph.toUpperCase());
+      if (weakKeys.length) {
+        ctx.font = '10px system-ui'; ctx.fillStyle = '#FF8A80'; ctx.textAlign = 'right';
+        ctx.fillText(`Needs work: ${weakKeys.join(', ')}`, W - 18, ry + 62);
+      }
+      ctx.textAlign = 'left';
+    });
+
+    // ── Back button ──────────────────────────────────────────────
+    const totalH = topY + stages.length * (rowH + 8) + 16;
+    const backY = Math.max(H - 36, totalH);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 14px "Nunito", system-ui';
+    ctx.fillStyle = 'rgba(105,240,174,0.85)';
+    ctx.fillText('← Back', W / 2, backY + 14);
+    this._dashBackRect = { x: W/2 - 60, y: backY, w: 120, h: 30 };
+
+    ctx.textBaseline = 'alphabetic';
+  }
+
   _queueAchievementPopup(ach) {
     if (!this._achPopupQueue) this._achPopupQueue = [];
     this._achPopupQueue.push({ ...ach, life: 1 });

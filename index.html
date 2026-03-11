@@ -8,7 +8,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Samurice Dino Games — Phonics runner where you slash dinosaurs with the power of words!">
     <title>⚔️ Samurice Dino Games</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap">
     <link rel="stylesheet" href="css/style.css">
+    <!-- Phase 9: PWA manifest -->
+    <link rel="manifest" href="manifest.json">
     <!-- ctx.roundRect polyfill for older browsers -->
     <script>
     (function() {
@@ -40,22 +45,22 @@
 <div id="modeChooser" class="screen active">
     <div class="mc-hero">
         <img src="assets/sprites/riku-idle.png" class="mc-mascot" alt="Riku the Samurice" onerror="this.style.display='none'">
-        <h1 class="mc-title">⚔️ Samurice Dino Games</h1>
-        <p class="mc-sub">Slash dinosaurs with the power of PHONICS!</p>
+        <h1 class="mc-title">⚔️ Samurice Dino Games 🦖</h1>
+        <p class="mc-sub">Learn to read! Slash dinos with WORD POWER!</p>
     </div>
     <div class="mc-buttons">
-        <button class="mc-btn slash-btn" onclick="launchSlashGame()">
+        <button class="mc-btn slash-btn" id="launchSlashBtn">
             <span class="mc-icon">⚔️</span>
             <div class="mc-text">
-                <span class="mc-name">Samurice Dino Slash</span>
-                <span class="mc-desc">Endless runner + Phonics combat · NEW: Shop · Daily · Achievements!</span>
+                <span class="mc-name">Dino Slash Adventure!</span>
+                <span class="mc-desc">Run, jump, spell words & fight dino bosses!</span>
             </div>
         </button>
-        <button class="mc-btn flap-btn" onclick="launchFlappyGame()">
+        <button class="mc-btn flap-btn" id="launchFlappyBtn">
             <span class="mc-icon">🦕</span>
             <div class="mc-text">
-                <span class="mc-name">Dino Dash</span>
-                <span class="mc-desc">Flappy Bird style — how far can you go?</span>
+                <span class="mc-name">Dino Dash!</span>
+                <span class="mc-desc">Fly through the sky! How far can you go?</span>
             </div>
         </button>
     </div>
@@ -77,13 +82,15 @@
         <!-- Exit button -->
         <button id="slashExitBtn"
                 class="slash-exit-btn"
-                onclick="exitSlash()"
                 title="Back to menu">✕</button>
         <!-- Fullscreen toggle -->
         <button id="slashFsBtn"
                 class="slash-fs-btn game-fs-btn"
-                onclick="toggleFullscreen()"
                 title="Fullscreen">⛶</button>
+        <!-- Pause button — visible only during active runner / battle -->
+        <button id="slashPauseBtn"
+                class="slash-pause-btn hidden"
+                title="Pause (P)">⏸</button>
         <!-- Runner D-pad controls (touch only) -->
         <!-- In endless mode, left/right are hidden; only JUMP shown -->
         <div id="runnerControls" class="runner-controls hidden">
@@ -107,11 +114,11 @@
     <div id="flappyWrapper">
         <canvas id="flappyCanvas"></canvas>
         <button id="muteBtn" class="fd-btn fd-mute flappy-overlay-btn">🔊</button>
-        <button id="flappyBackBtn" class="fd-btn fd-back flappy-overlay-btn" onclick="exitFlappy()">✕</button>
-        <button id="flappyFsBtn" class="fd-btn fd-fs flappy-overlay-btn game-fs-btn" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
+        <button id="flappyBackBtn" class="fd-btn fd-back flappy-overlay-btn">✕</button>
+        <button id="flappyFsBtn" class="fd-btn fd-fs flappy-overlay-btn game-fs-btn" title="Fullscreen">⛶</button>
         <div id="skinPicker" class="fd-skin-picker">
             <button id="prevSkin" class="fd-skin-arrow flappy-overlay-btn">◀</button>
-            <span id="skinName" class="fd-skin-name">Raptor</span>
+            <span id="skinName" class="fd-skin-name">Velociraptor</span>
             <button id="nextSkin" class="fd-skin-arrow flappy-overlay-btn">▶</button>
         </div>
         <div id="modeButtons" class="fd-mode-row">
@@ -138,16 +145,33 @@
 <script src="js/audioManager.js"></script>
 <script src="js/runnerEngine.js"></script>
 <script src="js/battleEngine.js"></script>
+<script src="js/tutorial.js"></script><!-- PHASE 6: onboarding tutorial -->
 <script src="js/slashGame.js"></script>
 <script src="js/game.js"></script>
 <script>
-// ── Fullscreen toggle ──────────────────────────────────────────
-function toggleFullscreen() {
+// ── Button event listeners (replaces inline onclick attributes) ──
+document.addEventListener('DOMContentLoaded', function() {
+  // Mode chooser
+  document.getElementById('launchSlashBtn')?.addEventListener('click', () => launchSlashGame());
+  document.getElementById('launchFlappyBtn')?.addEventListener('click', () => launchFlappyGame());
+  // Slash game controls
+  document.getElementById('slashExitBtn')?.addEventListener('click', () => exitSlash());
+  document.getElementById('slashFsBtn')?.addEventListener('click', () => toggleFullscreen('slashWrapper'));
+  document.getElementById('slashPauseBtn')?.addEventListener('click', () => _slashPause());
+  // Flappy game controls
+  document.getElementById('flappyBackBtn')?.addEventListener('click', () => exitFlappy());
+  document.getElementById('flappyFsBtn')?.addEventListener('click', () => toggleFullscreen('flappyWrapper'));
+});
+
+// ── Fullscreen toggle — targets the active game wrapper ────────
+// Falls back to document.documentElement if wrapper not found.
+function toggleFullscreen(wrapperId) {
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
   if (!fsEl) {
-    const req = document.documentElement.requestFullscreen
-             || document.documentElement.webkitRequestFullscreen;
-    if (req) req.call(document.documentElement).catch(() => {});
+    const target = (wrapperId && document.getElementById(wrapperId))
+                   || document.documentElement;
+    const req = target.requestFullscreen || target.webkitRequestFullscreen;
+    if (req) req.call(target).catch(() => {});
   } else {
     const exit = document.exitFullscreen || document.webkitExitFullscreen;
     if (exit) exit.call(document).catch(() => {});
@@ -162,15 +186,94 @@ function _syncFsIcons() {
 }
 document.addEventListener('fullscreenchange', _syncFsIcons);
 document.addEventListener('webkitfullscreenchange', _syncFsIcons);
-// ── Prevent context menu on long-press (mobile) ─────────────
-document.addEventListener('contextmenu', e => e.preventDefault());
-// ── Prevent double-tap zoom on game elements ────────────────
-let lastTap = 0;
-document.addEventListener('touchend', function(e) {
-  const now = Date.now();
-  if (now - lastTap < 300) e.preventDefault();
-  lastTap = now;
-}, { passive: false });
+// ── Pause helper called by the pause button ──────────────────
+function _slashPause() {
+  if (!_slashGameInstance) return;
+  const s = _slashGameInstance.state;
+  if (s === 'runner'  && _slashGameInstance.runner)  _slashGameInstance.runner._togglePause();
+  if (s === 'battle'  && _slashGameInstance.battle)  _slashGameInstance.battle._togglePause();
+  if (s === 'endless-runner' && _slashGameInstance.endlessRunner) _slashGameInstance.endlessRunner._togglePause();
+}
+// ── Prevent context menu & double-tap zoom on game canvases only ──
+// Scoped to the game wrappers so normal browser behaviour is
+// preserved everywhere else on the page (links, text, PWA banner).
+(function attachGameInputGuards() {
+  const gameWrapperIds = ['slashWrapper', 'flappyWrapper'];
+  gameWrapperIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    let lastTap = 0;
+    el.addEventListener('touchend', function(e) {
+      const now = Date.now();
+      if (now - lastTap < 300) e.preventDefault();
+      lastTap = now;
+    }, { passive: false });
+  });
+})();
+</script>
+
+<!-- Phase 9: PWA install banner (hidden until beforeinstallprompt fires) -->
+<div id="pwa-install-banner" aria-live="polite" role="complementary">
+  <div class="pwa-text">
+    ⚔️ <strong>Play offline!</strong>
+    <small>Add Samurice Dino Slash to your home screen</small>
+  </div>
+  <button id="pwa-install-btn" aria-label="Add to home screen">Install</button>
+  <button id="pwa-dismiss-btn" aria-label="Dismiss install prompt">✕</button>
+</div>
+
+<!-- Phase 9: Service worker registration + PWA install prompt logic -->
+<script>
+(function() {
+  'use strict';
+  // Register service worker for offline support
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {/* silent */});
+    });
+  }
+
+  // Intercept the browser's native install prompt so we can show our own banner
+  let _deferredPrompt = null;
+  const banner  = document.getElementById('pwa-install-banner');
+  const installBtn = document.getElementById('pwa-install-btn');
+  const dismissBtn = document.getElementById('pwa-dismiss-btn');
+
+  // Don't show banner if user already dismissed it in a previous session
+  if (localStorage.getItem('pwa-dismissed') === '1') return;
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();          // stop the browser default mini-infobar
+    _deferredPrompt = e;
+    // Show our banner with a short delay so the game canvas has settled
+    setTimeout(() => banner.classList.add('visible'), 3000);
+  });
+
+  if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+      if (!_deferredPrompt) return;
+      banner.classList.remove('visible');
+      _deferredPrompt.prompt();
+      const { outcome } = await _deferredPrompt.userChoice;
+      if (outcome === 'accepted') localStorage.setItem('pwa-dismissed', '1');
+      _deferredPrompt = null;
+    });
+  }
+
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', () => {
+      banner.classList.remove('visible');
+      localStorage.setItem('pwa-dismissed', '1');
+      _deferredPrompt = null;
+    });
+  }
+
+  // Hide banner if the app is already installed (display-mode: standalone)
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    localStorage.setItem('pwa-dismissed', '1');
+  }
+})();
 </script>
 </body>
 </html>

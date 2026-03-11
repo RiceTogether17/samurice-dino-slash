@@ -9,8 +9,8 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-    background: #2d6a1f;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    background: #2d8a4e;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     text-align: center;
     color: #333;
     overflow: hidden;
@@ -31,30 +31,39 @@ body {
 
 
 /* ============================================================
-   MODE CHOOSER  — full-screen vibrant layout, no white card
+   MODE CHOOSER  — bright, warm, kid-friendly layout
 ============================================================ */
 #modeChooser {
     background:
-        radial-gradient(ellipse at 30% 20%, rgba(90,180,60,0.35) 0%, transparent 55%),
-        radial-gradient(ellipse at 75% 80%, rgba(30,100,20,0.5) 0%, transparent 55%),
-        linear-gradient(160deg, #0d2b08 0%, #1a4a0f 45%, #2d6a1f 100%);
+        radial-gradient(ellipse at 20% 10%, rgba(255,220,100,0.4) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 90%, rgba(255,140,50,0.3) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(255,255,200,0.15) 0%, transparent 60%),
+        linear-gradient(160deg, #1a6b3a 0%, #2d8a4e 35%, #44a864 70%, #3d9a55 100%);
     flex-direction: column;
     gap: 0;
     overflow: hidden;
 }
 
-/* Decorative floating rice particles (pure CSS, no JS) */
+/* Decorative floating sparkles */
 #modeChooser::before {
     content: '';
     position: absolute;
     inset: 0;
     background-image:
-        radial-gradient(circle 2px at 15% 25%, rgba(255,215,0,0.35) 100%, transparent),
-        radial-gradient(circle 2px at 80% 15%, rgba(255,215,0,0.25) 100%, transparent),
-        radial-gradient(circle 2px at 50% 70%, rgba(255,215,0,0.2)  100%, transparent),
-        radial-gradient(circle 2px at 25% 80%, rgba(255,215,0,0.3)  100%, transparent),
-        radial-gradient(circle 2px at 90% 55%, rgba(255,215,0,0.15) 100%, transparent);
+        radial-gradient(circle 3px at 15% 25%, rgba(255,230,100,0.55) 100%, transparent),
+        radial-gradient(circle 4px at 80% 15%, rgba(255,215,0,0.45)  100%, transparent),
+        radial-gradient(circle 3px at 50% 70%, rgba(255,255,200,0.4) 100%, transparent),
+        radial-gradient(circle 4px at 25% 80%, rgba(255,215,0,0.5)   100%, transparent),
+        radial-gradient(circle 3px at 90% 55%, rgba(255,230,100,0.35) 100%, transparent),
+        radial-gradient(circle 2px at 45% 15%, rgba(255,255,255,0.5) 100%, transparent),
+        radial-gradient(circle 2px at 70% 45%, rgba(255,255,255,0.4) 100%, transparent),
+        radial-gradient(circle 2px at 10% 60%, rgba(255,255,255,0.35) 100%, transparent);
     pointer-events: none;
+    animation: sparkleFloat 6s ease-in-out infinite alternate;
+}
+@keyframes sparkleFloat {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(-8px); }
 }
 
 .mc-hero {
@@ -64,28 +73,31 @@ body {
 }
 
 .mc-mascot {
-    height: clamp(72px, 16vh, 130px);
+    height: clamp(160px, 35vh, 300px);
     object-fit: contain;
-    filter: drop-shadow(0 4px 14px rgba(0,0,0,0.45));
+    filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5));
     animation: mascotBounce 2.2s ease-in-out infinite;
     display: block;
-    margin: 0 auto 6px;
+    margin: 0 auto 12px;
 }
 @keyframes mascotBounce {
-    0%, 100% { transform: translateY(0) rotate(-2deg); }
-    50%       { transform: translateY(-10px) rotate(2deg); }
+    0%, 100% { transform: translateY(0) rotate(-3deg) scale(1); }
+    50%       { transform: translateY(-14px) rotate(3deg) scale(1.03); }
 }
 
 .mc-title {
-    font-size: clamp(2rem, 8vw, 3rem);
-    color: #FFD700;
+    font-size: clamp(2.6rem, 11vw, 4rem);
+    color: #fff;
     text-shadow:
-        0 3px 0 #7f5700,
-        0 0 20px rgba(255,180,0,0.6),
-        0 0 40px rgba(255,120,0,0.3);
+        0 4px 0 #b85400,
+        0 0 20px rgba(255,200,50,0.8),
+        0 0 50px rgba(255,150,0,0.5),
+        0 0 80px rgba(255,100,0,0.3);
     animation: titleBounce 2.4s ease-in-out infinite;
-    margin-bottom: 8px;
-    line-height: 1.1;
+    margin-bottom: 10px;
+    line-height: 1.15;
+    letter-spacing: 0.04em;
+    -webkit-text-stroke: 1px rgba(180,80,0,0.3);
 }
 @keyframes titleBounce {
     0%, 100% { transform: translateY(0) scale(1); }
@@ -93,19 +105,20 @@ body {
 }
 
 .mc-sub {
-    color: rgba(255,255,255,0.72);
-    font-size: clamp(0.9rem, 3vw, 1.1rem);
-    letter-spacing: 0.02em;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    color: #FFECB3;
+    font-size: clamp(1.05rem, 3.5vw, 1.35rem);
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.55);
+    font-weight: bold;
 }
 
 .mc-buttons {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding: 10px 18px 28px;
+    gap: 18px;
+    padding: 10px 20px 32px;
     width: 100%;
-    max-width: 500px;
+    max-width: 520px;
     margin: 0 auto;
     flex: 1;
     justify-content: center;
@@ -114,19 +127,18 @@ body {
 .mc-btn {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 20px;
     width: 100%;
-    padding: 22px 24px;
-    border: none;
-    border-radius: 22px;
+    padding: 26px 28px;
+    border: 3px solid rgba(255,255,255,0.25);
+    border-radius: 28px;
     cursor: pointer;
     text-align: left;
     font-family: inherit;
-    transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.12s;
-    box-shadow: 0 8px 0 rgba(0,0,0,0.4), 0 4px 20px rgba(0,0,0,0.35);
+    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s, filter 0.2s;
+    box-shadow: 0 8px 0 rgba(0,0,0,0.45), 0 6px 24px rgba(0,0,0,0.4);
     position: relative;
     overflow: hidden;
-    border-top: 1.5px solid rgba(255,255,255,0.2);
 }
 /* Shine overlay */
 .mc-btn::after {
@@ -141,35 +153,45 @@ body {
 .mc-btn:active { transform: translateY(5px);  box-shadow: 0 3px 0 rgba(0,0,0,0.4); }
 
 .slash-btn {
-    background: linear-gradient(135deg, #ff7043 0%, #e53935 100%);
+    background: linear-gradient(135deg, #FF6B35 0%, #FF4444 50%, #E53935 100%);
     color: #fff;
+    border-color: rgba(255,200,150,0.5);
+}
+.slash-btn:hover {
+    background: linear-gradient(135deg, #FF8A5C 0%, #FF5555 50%, #EF4444 100%);
+    filter: drop-shadow(0 0 16px rgba(255,80,60,0.7));
 }
 .flap-btn {
-    background: linear-gradient(135deg, #42a5f5 0%, #1565c0 100%);
+    background: linear-gradient(135deg, #4FC3F7 0%, #2196F3 50%, #1976D2 100%);
     color: #fff;
+    border-color: rgba(150,210,255,0.5);
+}
+.flap-btn:hover {
+    background: linear-gradient(135deg, #6BD4FF 0%, #42A5F5 50%, #2196F3 100%);
+    filter: drop-shadow(0 0 16px rgba(33,150,243,0.7));
 }
 
 .mc-icon {
-    font-size: clamp(2.4rem, 8vw, 3.2rem);
+    font-size: clamp(2.8rem, 9vw, 3.8rem);
     line-height: 1;
-    filter: drop-shadow(0 3px 6px rgba(0,0,0,0.35));
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
     flex-shrink: 0;
 }
 .mc-text {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
 }
 .mc-name {
-    font-size: clamp(1.1rem, 4vw, 1.35rem);
+    font-size: clamp(1.25rem, 4.5vw, 1.5rem);
     font-weight: bold;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.35);
-    letter-spacing: 0.01em;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    letter-spacing: 0.02em;
 }
 .mc-desc {
-    font-size: clamp(0.76rem, 2.5vw, 0.88rem);
-    opacity: 0.88;
-    line-height: 1.35;
+    font-size: clamp(0.85rem, 2.8vw, 1rem);
+    opacity: 0.9;
+    line-height: 1.4;
 }
 
 
@@ -563,7 +585,7 @@ body {
     pointer-events: none;
 }
 .rotate-icon { font-size: 3rem; animation: rotatePulse 1.5s ease-in-out infinite; }
-.rotate-text { color: #fff; font-size: 1.1rem; font-family: 'Comic Sans MS', system-ui, sans-serif; text-align: center; padding: 0 24px; }
+.rotate-text { color: #fff; font-size: 1.1rem; font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif; text-align: center; padding: 0 24px; }
 @keyframes rotatePulse {
     0%,100% { transform: rotate(0deg)  scale(1); }
     50%      { transform: rotate(15deg) scale(1.1); }
@@ -596,6 +618,30 @@ body {
 }
 .slash-exit-btn { top: 10px; right: 10px; }
 .slash-fs-btn   { top: 10px; right: 58px; font-size: 1.1rem; }
+/* Pause button — bottom-left corner, away from D-pad but visible on all devices */
+.slash-pause-btn {
+    position: absolute;
+    z-index: 30;
+    top: 10px; left: 10px;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    transition: background 0.15s, transform 0.1s;
+    touch-action: manipulation;
+}
+.slash-pause-btn:hover  { background: rgba(255,215,0,0.35); }
+.slash-pause-btn:active { transform: scale(0.9); }
+.slash-pause-btn.hidden { display: none; }
 .slash-exit-btn:hover  { background: rgba(200,30,30,0.75); }
 .slash-exit-btn:active,
 .slash-fs-btn:active   { transform: scale(0.9); }
@@ -735,19 +781,19 @@ body {
     flex-wrap: wrap;
 }
 
-/* Empty slot */
+/* Empty slot — Phase 8: bumped from 40×44 to 48×52 to match larger tiles */
 .be-blank {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 40px;
-    height: 44px;
+    min-width: 48px;
+    height: 52px;
     padding: 0 6px;
     background: rgba(0,0,0,0.5);
     border: 2.5px dashed rgba(255,215,0,0.7);
     border-radius: 10px;
     font-size: 1rem;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     font-weight: bold;
     color: transparent;   /* empty — just shows the box */
     transition: background 0.15s, border-color 0.15s;
@@ -781,7 +827,7 @@ body {
 .be-build-placeholder {
     color: rgba(255,255,255,0.28);
     font-size: 0.88rem;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     font-style: italic;
     pointer-events: none;
 }
@@ -793,7 +839,7 @@ body {
     color: #3E2723;
     font-weight: bold;
     font-size: 1.05rem;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     border-radius: 10px;
     padding: 5px 12px;
     min-width: 36px;
@@ -841,20 +887,21 @@ body {
     max-height: 130px;
 }
 
-/* Individual tile — Mario question-block style */
+/* Individual tile — Mario question-block style
+   Phase 8: bumped base from 56px → 64px for easier tapping (WCAG 2.5.5 kids 4-8) */
 .be-tile {
     box-shadow: 0 5px 0 rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08), 0 0 20px rgba(255,193,7,0.12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 44px;
-    height: 46px;
-    padding: 0 8px;
+    min-width: 64px;
+    height: 64px;
+    padding: 0 10px;
     background: linear-gradient(160deg, #FFF9C4, #FFD600);
     color: #3E2000;
     font-weight: 900;
-    font-size: clamp(0.9rem, 4vw, 1.1rem);
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-size: clamp(1rem, 4.2vw, 1.25rem);
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     border: 2px solid #C89000;
     border-bottom-color: #7f5700;
     border-right-color: #a07000;
@@ -970,7 +1017,7 @@ body {
     height: 48px;
     padding: 0 20px;
     font-size: 1rem;
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     font-weight: bold;
     border: none;
     border-radius: 12px;
@@ -996,6 +1043,15 @@ body {
 }
 .be-btn-clear:hover { background: rgba(244,67,54,0.9); border-color: #F44336; color: #fff; }
 
+.be-btn-undo {
+    background: rgba(100,60,10,0.75);
+    color: #FFD54F;
+    border: 1.5px solid rgba(255,193,7,0.6);
+    font-size: 0.95rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.be-btn-undo:hover { background: rgba(255,193,7,0.85); color: #3E2000; }
+
 .be-btn-hear {
     background: rgba(20,90,180,0.75);
     color: #A8DAFF;
@@ -1005,12 +1061,46 @@ body {
 }
 .be-btn-hear:hover { background: rgba(33,150,243,0.9); color: #fff; }
 
+/* Phase 8: Hint button — glowing gold when available, dimmed once used */
+.be-btn-hint {
+    background: rgba(255,193,7,0.22);
+    border-color: rgba(255,193,7,0.6);
+    color: #FFD700;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.4), 0 0 8px rgba(255,215,0,0.25);
+    transition: background 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+.be-btn-hint:hover:not(:disabled) {
+    background: rgba(255,215,0,0.45);
+    border-color: #FFD700;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.4), 0 0 14px rgba(255,215,0,0.6);
+    color: #3E2000;
+}
+.be-btn-hint:disabled {
+    opacity: 0.32;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Phase 8: live word preview — phoneme sequence built so far */
+.be-word-preview {
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
+    font-weight: 900;
+    font-size: clamp(0.8rem, 3.5vw, 1.05rem);
+    color: #FFD700;
+    letter-spacing: 0.05em;
+    min-height: 1.3em;
+    text-align: center;
+    text-shadow: 0 0 10px rgba(255,215,0,0.5);
+    transition: color 0.2s;
+    padding: 0 4px;
+}
+
 
 /* ── Feedback flash ──────────────────────────────────────── */
 .be-feedback {
     min-height: 20px;
     font-size: clamp(0.8rem, 3.5vw, 0.98rem);
-    font-family: 'Comic Sans MS', system-ui, sans-serif;
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
     font-weight: bold;
     color: #FFD700;
     text-align: center;
@@ -1075,11 +1165,12 @@ body {
     .mc-buttons { padding: 8px 12px 20px; gap: 10px; }
 }
 @media (orientation: landscape) and (max-height: 500px) {
-    .mc-hero    { padding: 14px 20px 8px; }
-    .mc-title   { font-size: 1.6rem; animation: none; }
-    .mc-buttons { padding: 6px 16px 14px; gap: 8px; }
-    .mc-btn     { padding: 14px 18px; border-radius: 16px; }
-    .mc-icon    { font-size: 2rem; }
+    .mc-hero    { padding: 8px 20px 4px; }
+    .mc-mascot  { height: clamp(90px, 22vh, 160px); }
+    .mc-title   { font-size: 2rem; }
+    .mc-buttons { padding: 4px 16px 10px; gap: 10px; }
+    .mc-btn     { padding: 18px 22px; border-radius: 22px; }
+    .mc-icon    { font-size: 2.6rem; }
 }
 
 /* ============================================================
@@ -1268,9 +1359,10 @@ body {
 /* ── Mode chooser — updated hero & button styles ─────────── */
 #modeChooser {
     background:
-        radial-gradient(ellipse at 30% 20%, rgba(90,180,60,0.35) 0%, transparent 55%),
-        radial-gradient(ellipse at 75% 80%, rgba(30,100,20,0.5) 0%, transparent 55%),
-        linear-gradient(160deg, #0d2b08 0%, #1a4a0f 45%, #2d6a1f 100%);
+        radial-gradient(ellipse at 20% 10%, rgba(255,220,100,0.4) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 90%, rgba(255,140,50,0.3) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(255,255,200,0.15) 0%, transparent 60%),
+        linear-gradient(160deg, #1a6b3a 0%, #2d8a4e 35%, #44a864 70%, #3d9a55 100%);
 }
 
 /* ── Enhanced battle overlay for campaign mode ───────────── */
@@ -1323,3 +1415,53 @@ body {
 .be-overlay .be-tile-vowel   { background: linear-gradient(160deg, #B3E5FC, #4FC3F7); }
 .be-overlay .be-tile-digraph { background: linear-gradient(160deg, #D1C4E9, #9575CD); }
 .be-overlay .be-tile-blend   { background: linear-gradient(160deg, #C8E6C9, #66BB6A); }
+
+/* ── Phase 9: prefers-reduced-motion ────────────────────────
+   Remove entrance animations and transitions for players who have
+   the OS accessibility setting "Reduce Motion" enabled. Screen-shake
+   is handled in JS via window.REDUCED_MOTION.               */
+@media (prefers-reduced-motion: reduce) {
+    .be-tile     { animation: none !important; transition: none !important; }
+    .be-blank    { transition: none !important; }
+    .be-blank.be-blank-filled { animation: none !important; }
+    .be-target-emoji { animation: none !important; }
+    .be-tile:hover:not(.be-tile-used) { transform: none; }
+    .be-tile:active:not(.be-tile-used) { transform: none; }
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* ── Phase 9: PWA install banner ───────────────────────────── */
+#pwa-install-banner {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: linear-gradient(90deg, #1a237e, #283593);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 18px;
+    font-family: 'Nunito', system-ui, sans-serif;
+    font-size: 0.95rem;
+    font-weight: bold;
+    z-index: 9999;
+    box-shadow: 0 -3px 16px rgba(0,0,0,0.5);
+    transform: translateY(100%);
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+}
+#pwa-install-banner.visible { transform: translateY(0); }
+#pwa-install-banner .pwa-text { flex: 1; }
+#pwa-install-banner .pwa-text small { display: block; font-weight: normal; opacity: 0.8; font-size: 0.78rem; }
+#pwa-install-btn {
+    background: #FFD700; color: #1a237e;
+    border: none; border-radius: 10px;
+    padding: 8px 18px; font-weight: 900;
+    font-size: 0.9rem; cursor: pointer;
+    white-space: nowrap;
+}
+#pwa-install-btn:hover { background: #FFE57F; }
+#pwa-dismiss-btn {
+    background: none; border: none; color: rgba(255,255,255,0.7);
+    font-size: 1.4rem; cursor: pointer; padding: 0 4px; line-height: 1;
+}
+#pwa-dismiss-btn:hover { color: #fff; }

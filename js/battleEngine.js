@@ -70,6 +70,86 @@ class SlashParticle {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SLASH TRAIL  (Phase 7)
+// Bezier arc drawn from a phoneme tile to the boss when the player
+// taps the correct tile.  Fades out over ~25 frames.
+// ─────────────────────────────────────────────────────────────
+class SlashTrail {
+  /**
+   * @param {number} tx  tile canvas-space X
+   * @param {number} ty  tile canvas-space Y
+   * @param {number} bx  boss canvas-space X
+   * @param {number} by  boss canvas-space Y
+   */
+  constructor(tx, ty, bx, by) {
+    this.tx = tx; this.ty = ty;
+    this.bx = bx; this.by = by;
+    // Control point arcs upward so the trail curves like a sword stroke
+    this.cpx = (tx + bx) / 2;
+    this.cpy = Math.min(ty, by) - 60;
+    this.life = 1.0;  // 0→dead
+  }
+  update() { this.life -= 0.04; }  // ~25 frames
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.life) * 0.85;
+    const grd = ctx.createLinearGradient(this.tx, this.ty, this.bx, this.by);
+    grd.addColorStop(0, 'rgba(255,255,255,0.9)');
+    grd.addColorStop(0.5, 'rgba(255,215,0,0.7)');
+    grd.addColorStop(1, 'rgba(255,100,0,0.1)');
+    ctx.strokeStyle = grd;
+    ctx.lineWidth   = 3 + this.life * 4;
+    ctx.lineCap     = 'round';
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur  = 14 * this.life;
+    ctx.beginPath();
+    ctx.moveTo(this.tx, this.ty);
+    ctx.quadraticCurveTo(this.cpx, this.cpy, this.bx, this.by);
+    ctx.stroke();
+    ctx.restore();
+  }
+  isDead() { return this.life <= 0; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMBO RING  (Phase 7)
+// Expanding ring that radiates from the boss on streak milestones
+// (combo ≥ 3 or ≥ 5).  Signals the player they've hit a hot streak.
+// ─────────────────────────────────────────────────────────────
+class ComboRing {
+  /**
+   * @param {number} x     centre X (boss position)
+   * @param {number} y     centre Y (boss position)
+   * @param {string} color ring colour (gold for ×3, magenta for ×5)
+   */
+  constructor(x, y, color) {
+    this.x = x; this.y = y;
+    this.color  = color;
+    this.radius = 20;
+    this.life   = 1.0;
+  }
+  update() {
+    this.radius += 7;  // ring grows outward
+    this.life   -= 0.045;
+  }
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.life) * 0.7;
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth   = 3 + this.life * 3;
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur  = 18 * this.life;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  isDead() { return this.life <= 0; }
+}
+
+// ─────────────────────────────────────────────────────────────
 // DAMAGE POP
 // ─────────────────────────────────────────────────────────────
 class DamagePop {
@@ -88,7 +168,7 @@ class DamagePop {
     ctx.globalAlpha = Math.max(0, this.life);
     ctx.translate(this.x, this.y);
     ctx.scale(this.scale, this.scale);
-    ctx.font        = 'bold 28px "Comic Sans MS", system-ui';
+    ctx.font        = 'bold 28px "Nunito", "Comic Sans MS", system-ui';
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = '#000';
@@ -110,6 +190,7 @@ class BattleEngine {
     this.ctx       = canvas.getContext('2d');
     this.overlay   = overlay;   // DOM element: #battleOverlay
     this.stage     = stageData;
+    this._blendTime  = stageData.blendTime ?? BLEND_TIME;
     this.sprites   = sprites || {};
     this.audio     = audio;
     this.progress  = progress;
@@ -149,21 +230,27 @@ class BattleEngine {
 
     // Animations
     this.slashParticles = [];
+    this._slashTrails   = [];   // Phase 7: bezier arcs from tile → boss
+    this._comboRings    = [];   // Phase 7: expanding rings at boss on streak milestones
+    this._gradeFloat    = null;
     this.damagePops     = [];
     this._bossShake     = 0;
     this._rikuShake     = 0;
     this._bossBobOffset = 0;
 
     // Blend session
-    this._blendTimeLeft  = BLEND_TIME;
+    this._blendTimeLeft  = this._blendTime;
     this._blendTimer     = null;
     this._currentBuilt   = [];   // phonemes selected so far
+    this._builtTileIdxes = [];   // parallel array: tile index for each built phoneme (enables undo)
     this._wrongAttempts  = 0;    // wrong-order attempts for current word
     this._showFirstHint  = false; // highlight first phoneme tile on penultimate attempt
     this._feedbackFlashTimer = 0; // tiny visual pulse when a tile is right/wrong
 
     // Pause
     this._paused = false;
+    this._pauseResumeBtnRect = null;
+    this._pauseQuitBtnRect   = null;
 
     // DOM refs (created by _setupDOM)
     this._tileEls   = [];
@@ -173,8 +260,50 @@ class BattleEngine {
     this.outcome   = null;  // 'victory' | 'defeat'
     this._destroyed = false; // guards against orphaned setTimeout callbacks after destroy()
 
+    // ── Keyboard tile selection ──────────────────────────────
+    this._kbHandler = (e) => this._onKeyDown(e);
+    document.addEventListener('keydown', this._kbHandler);
+
     // Kick off first word after a short delay (let canvas settle)
     setTimeout(() => { if (!this._destroyed) { this._startNextWord(); this._startBlendTimer(); } }, 400);
+  }
+
+  // ── Keyboard tile selection ─────────────────────────────────
+  // Letter keys select the first non-used tile whose phoneme starts
+  // with that letter; Backspace undoes the last placed tile.
+  _onKeyDown(e) {
+    if (this._paused || this.done) return;
+    if (this.state !== 'idle' && this.state !== 'blending') return;
+    // Ignore modifier combos (Ctrl+R reload etc.)
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    const key = e.key;
+    if (key === 'Backspace' || key === 'Delete') {
+      e.preventDefault();
+      this._undoLastTile();
+      return;
+    }
+    if (key === 'Escape') {
+      e.preventDefault();
+      this._clearBuild();
+      return;
+    }
+    // Single printable character → match tile
+    if (key.length !== 1) return;
+    const k = key.toLowerCase();
+    // Prefer exact-match first, then startsWith
+    for (const pass of ['exact', 'prefix']) {
+      for (let i = 0; i < this._shuffledPh.length; i++) {
+        if (this._usedTileIdx.has(i)) continue;
+        const ph = this._shuffledPh[i].toLowerCase();
+        const match = pass === 'exact' ? ph === k : ph.startsWith(k);
+        if (match) {
+          e.preventDefault();
+          this._onTileClick(this._shuffledPh[i], this._tileEls[i], i);
+          return;
+        }
+      }
+    }
   }
 
   // ── Utility: Fisher-Yates shuffle ───────────────────────────
@@ -203,14 +332,24 @@ class BattleEngine {
     this._clearBtn = document.createElement('button');
     this._clearBtn.className   = 'be-btn be-btn-clear';
     this._clearBtn.innerHTML   = '✕ Clear';
-    this._clearBtn.title       = 'Clear your answer';
+    this._clearBtn.title       = 'Clear your answer (Escape)';
+    this._clearBtn.setAttribute('aria-label', 'Clear answer (Escape key)');
     this._clearBtn.addEventListener('click', () => this._clearBuild());
     this._clearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._clearBuild(); });
+
+    this._undoBtn = document.createElement('button');
+    this._undoBtn.className   = 'be-btn be-btn-undo';
+    this._undoBtn.innerHTML   = '↩ Undo';
+    this._undoBtn.title       = 'Undo last tile (Backspace)';
+    this._undoBtn.setAttribute('aria-label', 'Undo last tile (Backspace key)');
+    this._undoBtn.addEventListener('click', () => this._undoLastTile());
+    this._undoBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._undoLastTile(); });
 
     this._hearBtn = document.createElement('button');
     this._hearBtn.className   = 'be-btn be-btn-hear';
     this._hearBtn.innerHTML   = '🔊 Hear';
     this._hearBtn.title       = 'Hear the word';
+    this._hearBtn.setAttribute('aria-label', 'Hear the word pronounced');
     this._hearBtn.addEventListener('click', () => {
       if (this._currentWord) {
         this.audio?.playBlendSequence(this._currentWord.phonemes, this._currentWord.word);
@@ -218,7 +357,16 @@ class BattleEngine {
     });
     this._hearBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._hearBtn.click(); });
 
-    controls.append(this._clearBtn, this._hearBtn);
+    // Phase 8: explicit Hint button — reveals the next correct tile on demand
+    this._hintBtn = document.createElement('button');
+    this._hintBtn.className   = 'be-btn be-btn-hint';
+    this._hintBtn.innerHTML   = '💡 Hint';
+    this._hintBtn.title       = 'Highlight the next correct tile';
+    this._hintBtn.setAttribute('aria-label', 'Show a hint — highlight the next tile');
+    this._hintBtn.addEventListener('click', () => this._useHint());
+    this._hintBtn.addEventListener('touchend', (e) => { e.preventDefault(); this._useHint(); });
+
+    controls.append(this._clearBtn, this._undoBtn, this._hearBtn, this._hintBtn);
     this.overlay.appendChild(controls);
 
     // ── 2. Target hint (emoji + blank slots) ────────────────
@@ -232,7 +380,11 @@ class BattleEngine {
     this._blanksEl = document.createElement('div');
     this._blanksEl.className = 'be-blanks';
 
-    this._targetEl.append(this._targetEmojiEl, this._blanksEl);
+    // Phase 8: live word preview — "SH · I · P = SHIP" shown as tiles are placed
+    this._wordPreviewEl = document.createElement('div');
+    this._wordPreviewEl.className = 'be-word-preview';
+
+    this._targetEl.append(this._targetEmojiEl, this._blanksEl, this._wordPreviewEl);
     this.overlay.appendChild(this._targetEl);
 
     // ── 3. Tile pool ─────────────────────────────────────────
@@ -265,14 +417,18 @@ class BattleEngine {
     }
     this._currentWord   = this._wordQueue[this._wordQueueIdx++];
     this._shuffledPh    = this._shuffleArray([...this._currentWord.phonemes]); // randomise tile order
-    this._wrongAttempts = 0;
-    this._currentBuilt  = [];
-    this._usedTileIdx   = new Set();
+    this._wrongAttempts  = 0;
+    this._currentBuilt   = [];
+    this._builtTileIdxes = [];
+    this._usedTileIdx    = new Set();
     this._showFirstHint = false;
 
     this._renderTargetHint();
     this._renderCurrentWordTiles();
     this._setFeedback('');
+    // Phase 8: reset hint button so it's available for each new word
+    if (this._hintBtn) { this._hintBtn.disabled = false; }
+    if (this._wordPreviewEl) this._wordPreviewEl.textContent = '';
 
     // Speak the word as an audio hint (delayed so the tile animation settles first)
     setTimeout(() => {
@@ -297,6 +453,22 @@ class BattleEngine {
       return `<span class="be-blank"></span>`;
     }).join('');
     this._blanksEl.innerHTML = html;
+
+    // Phase 8: live word preview — show built phonemes joined, fading to target word
+    if (this._wordPreviewEl) {
+      if (this._currentBuilt.length === 0) {
+        this._wordPreviewEl.textContent = '';
+      } else {
+        const joined = this._currentBuilt.map(p => p.toUpperCase()).join(' · ');
+        const full   = this._currentWord.word.toUpperCase();
+        // Show "SH · I · P = SHIP" once all phonemes are placed, otherwise "SH · I ···"
+        const isComplete = this._currentBuilt.length === this._currentWord.phonemes.length;
+        this._wordPreviewEl.textContent = isComplete
+          ? `${joined} = ${full}!`
+          : `${joined} ···`;
+        this._wordPreviewEl.style.color = isComplete ? '#76FF03' : '#FFD700';
+      }
+    }
   }
 
   // ── Render tiles for current word only ───────────────────────
@@ -319,13 +491,16 @@ class BattleEngine {
       tile.textContent      = ph.toUpperCase();
       tile.dataset.phoneme  = ph;
       tile.dataset.idx      = idx;
+      tile.setAttribute('role', 'button');
+      tile.setAttribute('aria-label', `Phoneme tile ${ph.toUpperCase()}${isUsed ? ', used' : ''}`);
+      tile.setAttribute('aria-disabled', isUsed ? 'true' : 'false');
+      tile.setAttribute('title', `${ph.toUpperCase()} — press '${ph[0].toUpperCase()}' key`);
 
       if (!isUsed) {
         tile.addEventListener('click', () => this._onTileClick(ph, tile, idx));
-        tile.addEventListener('mouseenter', () => { this.audio?.playPhoneme(ph); this._pronounceTile(ph); });
+        tile.addEventListener('mouseenter', () => { this.audio?.playPhoneme(ph); });
         tile.addEventListener('touchstart', () => {
           this.audio?.playPhoneme(ph);
-          this._pronounceTile(ph);
         }, { passive: true });
         tile.addEventListener('touchend', (e) => {
           e.preventDefault();
@@ -342,10 +517,14 @@ class BattleEngine {
   _onTileClick(phoneme, tileEl, tileIdx) {
     if (this.state !== 'idle' && this.state !== 'blending') return;
     if (this._usedTileIdx.has(tileIdx)) return;
+    if (this.done) return;
+    // Cooldown: prevent rapid wrong-tile taps from stacking damage/skip
+    const now = Date.now();
+    if (now - (this._lastTileClickMs || 0) < 300) return;
+    this._lastTileClickMs = now;
 
     const expected = this._currentWord.phonemes[this._currentBuilt.length];
     this.audio?.playPhoneme(phoneme);
-    this._pronounceTile(phoneme);
 
     // Live correctness feedback per tile (green/red flash)
     if (phoneme !== expected) {
@@ -355,9 +534,27 @@ class BattleEngine {
 
     this.state = 'blending';
     this._currentBuilt.push(phoneme);
+    this._builtTileIdxes.push(tileIdx);   // track for undo
     this._usedTileIdx.add(tileIdx);
     tileEl.classList.add('be-tile-used');
     this._flashTileFeedback(tileEl, 'ok');
+
+    // Emit slash sparks + slash trail from tile's canvas-space position → boss
+    if (this.canvas) {
+      const cr  = this.canvas.getBoundingClientRect();
+      const tr  = tileEl.getBoundingClientRect();
+      const scx = this.W / cr.width;
+      const scy = this.H / cr.height;
+      const tx  = (tr.left + tr.width  / 2 - cr.left) * scx;
+      const ty  = (tr.top  + tr.height / 2 - cr.top)  * scy;
+      for (let i = 0; i < 4; i++) {
+        this.slashParticles.push(new SlashParticle(tx, ty));
+      }
+      // Phase 7: bezier arc from tile → boss (drawn behind particles)
+      const bossX = Math.round(this.W * 0.72);
+      const bossY = Math.round(this.H * 0.58 * 0.50);
+      this._slashTrails.push(new SlashTrail(tx, ty, bossX, bossY));
+    }
 
     this._renderBlanks();
     this._setFeedback('✅ Nice sound! Keep blending…', '#7CFC9A');
@@ -402,10 +599,16 @@ class BattleEngine {
 
   // ── Tile pronunciation helper using speech synthesis ─────────────────
   _pronounceTile(phoneme) {
+    // Reuse AudioManager's UK-female voice preference when available.
+    if (this.audio?.speak) {
+      this.audio.speak(phoneme, 0.86, 1.12);
+      return;
+    }
     if (!window.speechSynthesis) return;
     const u = new SpeechSynthesisUtterance(phoneme);
     u.rate = 0.86;
     u.pitch = 1.12;
+    u.lang = 'en-GB';
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(u);
   }
@@ -443,9 +646,11 @@ class BattleEngine {
     const pokeDmg = Math.max(2, Math.floor(this.stage.bossAttack * 0.12));
     this.rikuHp = Math.max(0, this.rikuHp - pokeDmg);
     this._rikuShake = 5;
-    this._currentBuilt = [];
-    this._usedTileIdx = new Set();
-    this._showFirstHint = (this._wrongAttempts >= MAX_WRONGS - 1);
+    this._currentBuilt   = [];
+    this._builtTileIdxes = [];
+    this._usedTileIdx    = new Set();
+    const _hintThreshold = (this.stage.id <= 2) ? 1 : MAX_WRONGS - 1;
+    this._showFirstHint = (this._wrongAttempts >= _hintThreshold);
     this._renderCurrentWordTiles();
     this._renderBlanks();
     if (this.rikuHp <= 0) this._lose();
@@ -471,8 +676,9 @@ class BattleEngine {
     const _fy = Math.round(this.H * 0.58);
     this.damagePops.push(new DamagePop(Math.round(this.W * 0.22), Math.round(_fy * 0.50), `-${dmg}`, '#FF5252'));
 
-    // On penultimate attempt, hint the first correct tile
-    this._showFirstHint = (this._wrongAttempts >= MAX_WRONGS - 1);
+    // Hint the first correct tile; for early stages show hint from 1st wrong attempt
+    const _hintAt = (this.stage.id <= 2) ? 1 : MAX_WRONGS - 1;
+    this._showFirstHint = (this._wrongAttempts >= _hintAt);
 
     // Reset build and re-render tiles in the same shuffled order
     this._currentBuilt = [];
@@ -485,6 +691,7 @@ class BattleEngine {
 
   // ── Skip word after 3 failures ───────────────────────────────
   _skipWord() {
+    if (this.done || this.state === 'boss-attack') return;
     this._stopBlendTimer();
     this.state = 'boss-attack';
     this._combo = 0;
@@ -574,7 +781,7 @@ class BattleEngine {
     this._stopBlendTimer();
     this.state = 'riku-attack';
 
-    const timeBonus = Math.max(0, this._blendTimeLeft / BLEND_TIME);
+    const timeBonus = Math.max(0, this._blendTimeLeft / this._blendTime);
     const accuracyPct = this._attemptedBlends > 0 ? (this._correctBlends / this._attemptedBlends) : 1;
     // Streak multiplier grows steadily for clean chains.
     const streakMult = 1 + Math.min(this._streak, 8) * 0.12;
@@ -600,6 +807,19 @@ class BattleEngine {
 
     // Mark special as ready at combo 5
     if (this._combo >= 5) this._specialReady = true;
+
+    // Phase 7: combo burst rings radiate from boss at streak milestones
+    if (this._combo === 3 || this._combo === 5) {
+      const ringColor = this._combo >= 5 ? '#FF4081' : '#FFD700';
+      const ringX = Math.round(this.W * 0.72);
+      const ringY = Math.round(this.H * 0.58 * 0.50);
+      for (let r = 0; r < (this._combo >= 5 ? 3 : 2); r++) {
+        // Stagger rings slightly so they visually separate
+        const ring = new ComboRing(ringX, ringY, ringColor);
+        ring.radius = 20 + r * 18;  // pre-offset so rings don't stack identically
+        this._comboRings.push(ring);
+      }
+    }
 
     if (this.progress) this.progress.recordBlend(this.stage.id, wordObj.word, true, timeBonus > 0.82, wordObj.phonemes);
     if (this.audio)    this.audio.sfxSlash();
@@ -635,6 +855,12 @@ class BattleEngine {
 
     this.damagePops.push(new DamagePop(bossX, bossY - 40, `-${damage}`, '#FFD700'));
     this.damagePops.push(new DamagePop(bossX, bossY - 80, `${slashType} • ${gradeText}`, '#fff'));
+
+    // ── Grade floater: large centered text with scale+fade ────
+    const gfColor = this._combo >= 5 ? '#FF4081' :
+                    this._combo >= 3 ? '#FF9800' :
+                    timeBonus > 0.7  ? '#76FF03' : '#FFFFFF';
+    this._gradeFloat = { text: gradeText, life: 1.0, color: gfColor };
     this._setFeedback(`⚔️ "${wordObj.word.toUpperCase()}" — ${slashType} • ${gradeText} (${damage} dmg, acc ${Math.round(accuracyPct * 100)}%)`, '#FFD700');
 
     this._checkBossPhase();
@@ -652,15 +878,17 @@ class BattleEngine {
     }, delay);
   }
 
-  // ── Timer ────────────────────────────────────────────────────
+  // ── Timer (performance.now()-based: no drift) ───────────────
   _startBlendTimer() {
     this._stopBlendTimer();
-    this._blendTimeLeft = BLEND_TIME;
+    this._blendTimeLeft   = this._blendTime;
+    this._timerStartedAt  = performance.now();  // absolute start time
     this._timerBar.style.width = '100%';
     this._timerBar.className = 'be-timer-fill';
     this._blendTimer = setInterval(() => {
-      this._blendTimeLeft -= 0.1;
-      const pct = Math.max(0, this._blendTimeLeft / BLEND_TIME);
+      const elapsed = (performance.now() - this._timerStartedAt) / 1000;
+      this._blendTimeLeft = Math.max(0, this._blendTime - elapsed);
+      const pct = this._blendTimeLeft / this._blendTime;
       this._timerBar.style.width  = (pct * 100) + '%';
       this._timerBar.className = 'be-timer-fill' +
         (pct < 0.25 ? ' be-timer-urgent' : pct < 0.5 ? ' be-timer-warn' : '');
@@ -668,15 +896,17 @@ class BattleEngine {
         this._stopBlendTimer();
         this._bossAutoAttack();
       }
-    }, 100);
+    }, 50); // 50ms poll for smoother bar
   }
 
   _stopBlendTimer() {
     if (this._blendTimer) { clearInterval(this._blendTimer); this._blendTimer = null; }
+    // Record remaining time so _resumeBlendTimer can pick up exactly here
+    this._timerPausedLeft = this._blendTimeLeft;
   }
 
   _bossAutoAttack() {
-    if (this.done) return;
+    if (this.done || this.state === 'boss-attack') return;
     this.state = 'boss-attack';
     // Phase amplifies boss attack
     const phaseMult = this._bossPhase === 3 ? 1.5 : this._bossPhase === 2 ? 1.25 : 1.0;
@@ -709,12 +939,36 @@ class BattleEngine {
   // ── Clear build (keep current word, reset attempts) ──────────
   _clearBuild() {
     if (this.state === 'riku-attack' || this.state === 'boss-attack') return;
-    this._currentBuilt = [];
-    this._usedTileIdx  = new Set();
+    this._currentBuilt   = [];
+    this._builtTileIdxes = [];
+    this._usedTileIdx    = new Set();
     this._renderCurrentWordTiles();
     this._renderBlanks();
     this._setFeedback('');
     this.state = 'idle';
+  }
+
+  // ── Phase 8: explicit hint — reveal the next correct tile ───
+  _useHint() {
+    if (this.done || !this._currentWord) return;
+    // Disable button so it can't be spammed mid-word
+    if (this._hintBtn) this._hintBtn.disabled = true;
+    this._showFirstHint = true;
+    this._renderCurrentWordTiles();
+    this._setFeedback('💡 Hint: look for the glowing tile!', '#FFD700');
+  }
+
+  // ── Undo: remove the last placed tile ───────────────────────
+  _undoLastTile() {
+    if (this.state === 'riku-attack' || this.state === 'boss-attack') return;
+    if (!this._currentBuilt.length) return;
+    this._currentBuilt.pop();
+    const lastIdx = this._builtTileIdxes.pop();
+    if (lastIdx !== undefined) this._usedTileIdx.delete(lastIdx);
+    this._renderCurrentWordTiles();
+    this._renderBlanks();
+    this._setFeedback('↩ Tile removed — try again!', '#FFD54F');
+    if (this.state === 'blending') this.state = 'idle';
   }
 
   // ── Feedback text ────────────────────────────────────────────
@@ -752,6 +1006,10 @@ class BattleEngine {
 
     this.slashParticles.forEach(p => p.update());
     this.slashParticles = this.slashParticles.filter(p => !p.isDead());
+    this._slashTrails.forEach(t => t.update());
+    this._slashTrails = this._slashTrails.filter(t => !t.isDead());
+    this._comboRings.forEach(r => r.update());
+    this._comboRings = this._comboRings.filter(r => !r.isDead());
     this.damagePops.forEach(p => p.update());
     this.damagePops = this.damagePops.filter(p => !p.isDead());
   }
@@ -767,6 +1025,10 @@ class BattleEngine {
     this._drawRiku(ctx);
     this._drawHPBars(ctx);
 
+    // Phase 7: slash trails drawn behind particles (tile → boss arcs)
+    this._slashTrails.forEach(t => t.draw(ctx));
+    // Phase 7: combo burst rings expand around boss at streak milestones
+    this._comboRings.forEach(r => r.draw(ctx));
     this.slashParticles.forEach(p => p.draw(ctx));
     this.damagePops.forEach(p => p.draw(ctx));
 
@@ -783,7 +1045,7 @@ class BattleEngine {
         const bannerAlpha = (this._phaseFlash - 40) / 40;
         ctx.save();
         ctx.globalAlpha = bannerAlpha;
-        ctx.font        = `bold ${Math.min(32, this.W * 0.065)}px "Comic Sans MS", system-ui`;
+        ctx.font        = `bold ${Math.min(32, this.W * 0.065)}px "Nunito", "Comic Sans MS", system-ui`;
         ctx.textAlign   = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle   = this._bossPhase === 3 ? '#FF1744' : '#FF8F00';
@@ -801,7 +1063,7 @@ class BattleEngine {
       const pulse = 0.8 + 0.2 * Math.sin(this._age * 0.2);
       ctx.save();
       ctx.globalAlpha = pulse;
-      ctx.font        = `bold ${16 + this._combo * 2}px "Comic Sans MS", system-ui`;
+      ctx.font        = `bold ${16 + this._combo * 2}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle   = '#FFD700';
       ctx.textAlign   = 'right';
       ctx.shadowColor = '#FF6F00';
@@ -815,7 +1077,7 @@ class BattleEngine {
       const pulse = 0.7 + 0.3 * Math.sin(this._age * 0.3);
       ctx.save();
       ctx.globalAlpha = pulse;
-      ctx.font        = `bold 18px "Comic Sans MS", system-ui`;
+      ctx.font        = `bold 18px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle   = '#FF4081';
       ctx.textAlign   = 'left';
       ctx.shadowColor = '#FF1744'; ctx.shadowBlur = 10;
@@ -828,7 +1090,7 @@ class BattleEngine {
       const phaseColor = this._bossPhase === 3 ? '#FF1744' : '#FF8F00';
       const phaseLabel = this._bossPhase === 3 ? '🔥 BERSERK' : '💢 RAGE';
       ctx.save();
-      ctx.font      = 'bold 12px "Comic Sans MS", system-ui';
+      ctx.font      = 'bold 12px "Nunito", "Comic Sans MS", system-ui';
       ctx.fillStyle = phaseColor;
       ctx.textAlign = 'center';
       ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
@@ -836,6 +1098,36 @@ class BattleEngine {
       ctx.globalAlpha = alpha;
       ctx.fillText(phaseLabel, Math.round(this.W * 0.72), Math.round(this.H * 0.04));
       ctx.restore();
+    }
+
+    // ── Grade floater: large centered PERFECT!/GREAT! ───────────
+    if (this._gradeFloat) {
+      const gf = this._gradeFloat;
+      gf.life -= 0.022;
+      if (gf.life <= 0) {
+        this._gradeFloat = null;
+      } else {
+        const fadeIn  = Math.min(1, (1 - gf.life) * 8);   // snappy pop-in
+        const fadeOut = gf.life < 0.35 ? gf.life / 0.35 : 1;
+        const alpha   = Math.min(fadeIn, fadeOut);
+        const scale   = 0.5 + 0.6 * Math.min(1, (1 - gf.life) * 5); // pop from small
+        const fontSize = Math.min(64, this.W * 0.12);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(this.W / 2, this.H * 0.38);
+        ctx.scale(scale, scale);
+        ctx.font        = `900 ${fontSize}px "Nunito", "Comic Sans MS", system-ui`;
+        ctx.textAlign   = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur  = 20;
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth   = fontSize * 0.07;
+        ctx.strokeText(gf.text, 0, 0);
+        ctx.fillStyle   = gf.color;
+        ctx.fillText(gf.text, 0, 0);
+        ctx.restore();
+      }
     }
 
     // ── Pause overlay ────────────────────────────────────────────
@@ -855,12 +1147,17 @@ class BattleEngine {
     }
   }
 
-  // Restart blend-timer interval without resetting _blendTimeLeft
+  // Resume blend-timer from where it was paused (no reset)
   _resumeBlendTimer() {
     this._stopBlendTimer();
+    // Re-anchor start time so remaining time counts from now
+    const resumeFrom = this._timerPausedLeft ?? this._blendTimeLeft;
+    this._blendTimeLeft  = resumeFrom;
+    this._timerStartedAt = performance.now() - (this._blendTime - resumeFrom) * 1000;
     this._blendTimer = setInterval(() => {
-      this._blendTimeLeft -= 0.1;
-      const pct = Math.max(0, this._blendTimeLeft / BLEND_TIME);
+      const elapsed = (performance.now() - this._timerStartedAt) / 1000;
+      this._blendTimeLeft = Math.max(0, this._blendTime - elapsed);
+      const pct = this._blendTimeLeft / this._blendTime;
       this._timerBar.style.width  = (pct * 100) + '%';
       this._timerBar.className = 'be-timer-fill' +
         (pct < 0.25 ? ' be-timer-urgent' : pct < 0.5 ? ' be-timer-warn' : '');
@@ -868,36 +1165,50 @@ class BattleEngine {
         this._stopBlendTimer();
         this._bossAutoAttack();
       }
-    }, 100);
+    }, 50);
   }
 
   _drawPauseOverlay(ctx) {
     const cx = this.W / 2;
-    const cy = Math.round(this.H * 0.30); // centre in upper canvas (battle UI below)
+    // Centre in the upper canvas portion (battle overlay takes bottom half)
+    const cy = Math.round(this.H * 0.28);
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.52)';
-    ctx.fillRect(0, 0, this.W, this.H * 0.60);
+    ctx.fillStyle = 'rgba(0,0,0,0.58)';
+    ctx.fillRect(0, 0, this.W, this.H * 0.62);
     // Panel
-    const pw = Math.min(300, this.W * 0.72);
-    const ph = 145;
-    ctx.fillStyle   = 'rgba(10,10,30,0.88)';
+    const pw = Math.min(300, this.W * 0.74);
+    const ph = 186;
+    const px = cx - pw / 2, py = cy - ph / 2;
+    ctx.fillStyle   = 'rgba(10,10,30,0.92)';
     ctx.strokeStyle = '#FFD700';
     ctx.lineWidth   = 2.5;
-    ctx.beginPath(); ctx.roundRect(cx - pw / 2, cy - ph / 2, pw, ph, 18); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 18); ctx.fill(); ctx.stroke();
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Comic Sans MS", system-ui`;
+    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle    = '#FFD700';
-    ctx.shadowColor  = '#FF6F00';
-    ctx.shadowBlur   = 14;
-    ctx.fillText('⏸ PAUSED', cx, cy - 32);
+    ctx.shadowColor  = '#FF6F00'; ctx.shadowBlur = 14;
+    ctx.fillText('⏸ PAUSED', cx, py + 32);
     ctx.shadowBlur   = 0;
-    ctx.font      = `${Math.round(this.W * 0.034)}px "Comic Sans MS", system-ui`;
+    // ── Resume button ────────────────────────────────────────
+    const btnW = pw - 40, btnH = 44;
+    const resumeY = py + 64;
+    ctx.fillStyle = 'rgba(50,180,80,0.85)';
+    ctx.strokeStyle = '#7CFC9A'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 20, resumeY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
-    ctx.fillText('P or ESC to resume', cx, cy + 8);
-    ctx.fillStyle = '#FF9800';
-    ctx.font      = `${Math.round(this.W * 0.031)}px "Comic Sans MS", system-ui`;
-    ctx.fillText('Q — quit to map', cx, cy + 42);
+    ctx.fillText('▶ RESUME', cx, resumeY + btnH / 2);
+    this._pauseResumeBtnRect = { x: px + 20, y: resumeY, w: btnW, h: btnH };
+    // ── Quit button ──────────────────────────────────────────
+    const quitY = resumeY + btnH + 12;
+    ctx.fillStyle = 'rgba(180,50,20,0.75)';
+    ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 20, quitY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFD9D0';
+    ctx.fillText('🗺 Quit to Map', cx, quitY + btnH / 2);
+    this._pauseQuitBtnRect = { x: px + 20, y: quitY, w: btnW, h: btnH };
     ctx.restore();
   }
 
@@ -971,8 +1282,9 @@ class BattleEngine {
     const bFeetY = fy;
     const bCY    = bFeetY - bH / 2;
 
-    const shakeX = this._bossShake > 0 ? (Math.random() - 0.5) * 14 : 0;
-    const shakeY = this._bossShake > 0 ? (Math.random() - 0.5) * 8  : 0;
+    // Phase 9: suppress shake for prefers-reduced-motion
+    const shakeX = (this._bossShake > 0 && !window.REDUCED_MOTION) ? (Math.random() - 0.5) * 14 : 0;
+    const shakeY = (this._bossShake > 0 && !window.REDUCED_MOTION) ? (Math.random() - 0.5) * 8  : 0;
     const bob    = this._bossBobOffset;
     const scale  = 1 + Math.min(0.25, this._bossShake * 0.012);
     const hpPct  = this.bossHp / this.bossMaxHp;
@@ -1020,7 +1332,7 @@ class BattleEngine {
     ctx.restore();
 
     const nameY = bFeetY - bH + bob - 12;
-    ctx.font        = `bold ${Math.max(13, Math.floor(this.W * 0.027))}px "Comic Sans MS", system-ui`;
+    ctx.font        = `bold ${Math.max(13, Math.floor(this.W * 0.027))}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle   = '#fff';
     ctx.textAlign   = 'center';
     ctx.shadowColor = '#000';
@@ -1090,8 +1402,8 @@ class BattleEngine {
     const rFeetY = fy;
     const rCY    = rFeetY - rH / 2;
 
-    const shakeX = this._rikuShake > 0 ? (Math.random() - 0.5) * 10 : 0;
-    const shakeY = this._rikuShake > 0 ? (Math.random() - 0.5) * 5  : 0;
+    const shakeX = (this._rikuShake > 0 && !window.REDUCED_MOTION) ? (Math.random() - 0.5) * 10 : 0;
+    const shakeY = (this._rikuShake > 0 && !window.REDUCED_MOTION) ? (Math.random() - 0.5) * 5  : 0;
     const bob    = this.state === 'idle' ? Math.sin(this._age * 0.05) * 3 : 0;
 
     ctx.save();
@@ -1171,7 +1483,7 @@ class BattleEngine {
         ctx.fillStyle = 'rgba(255,255,255,0.22)';
         ctx.beginPath(); ctx.roundRect(x + 2, barY + 2, barW * pct - 4, barH * 0.4, (barH * 0.4) / 2); ctx.fill();
       }
-      ctx.font = 'bold 11px "Comic Sans MS", system-ui';
+      ctx.font = 'bold 11px "Nunito", "Comic Sans MS", system-ui';
       ctx.fillStyle = '#fff';
       ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
       ctx.textAlign = textRight ? 'right' : 'left';
@@ -1196,6 +1508,10 @@ class BattleEngine {
   destroy() {
     this._destroyed = true;
     this._stopBlendTimer();
+    if (this._kbHandler) {
+      document.removeEventListener('keydown', this._kbHandler);
+      this._kbHandler = null;
+    }
     this.overlay.innerHTML = '';
   }
 }
@@ -1243,6 +1559,10 @@ class EndlessBattleEngine {
 
     // Build overlay
     this._buildOverlay();
+
+    // ── Keyboard tile selection for EndlessBattle ────────────
+    this._kbHandler = (e) => this._onKeyDownEBE(e);
+    document.addEventListener('keydown', this._kbHandler);
 
     // Auto-blend mode (power-up)
     if (this._autoBlend) {
@@ -1316,8 +1636,13 @@ class EndlessBattleEngine {
     const shuffled = this._shuffledPhonemes();
     for (const { ph, i } of shuffled) {
       const btn = document.createElement('button');
-      btn.className = 'ebe-tile' + (this._usedIdx.has(i) ? ' ebe-tile-used' : '');
+      const _isUsedEbe = this._usedIdx.has(i);
+      btn.className = 'ebe-tile' + (_isUsedEbe ? ' ebe-tile-used' : '');
       btn.textContent = ph.toUpperCase();
+      btn.setAttribute('role', 'button');
+      btn.setAttribute('aria-label', `Phoneme ${ph.toUpperCase()}${_isUsedEbe ? ', used' : ''}`);
+      btn.setAttribute('aria-disabled', _isUsedEbe ? 'true' : 'false');
+      btn.setAttribute('title', `${ph.toUpperCase()} — press '${ph[0].toUpperCase()}' key`);
       if (!this._usedIdx.has(i)) {
         const tap = (e) => { e.preventDefault(); this._onTap(ph, i, btn); };
         btn.addEventListener('touchstart', tap, { passive: false });
@@ -1469,10 +1794,36 @@ class EndlessBattleEngine {
 
   _dismiss() {
     this._state = 'done';
+    if (this._kbHandler) {
+      document.removeEventListener('keydown', this._kbHandler);
+      this._kbHandler = null;
+    }
     const timeUsed = (performance.now() - this._startTime) / 1000;
     this.overlay.classList.remove('active');
     this.overlay.innerHTML = '';
     if (this.onDone) this.onDone(this._result, timeUsed);
+  }
+
+  _onKeyDownEBE(e) {
+    if (this._state !== 'blend') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const key = e.key;
+    if (key.length !== 1) return;
+    const k = key.toLowerCase();
+    // Find matching tile in the rendered order: exact first, then prefix
+    const phonemes = this.word.phonemes;
+    for (const pass of ['exact', 'prefix']) {
+      for (let i = 0; i < phonemes.length; i++) {
+        if (this._usedIdx.has(i)) continue;
+        const ph = phonemes[i].toLowerCase();
+        const match = pass === 'exact' ? ph === k : ph.startsWith(k);
+        if (match && this._tileEls[i]) {
+          e.preventDefault();
+          this._onTap(phonemes[i], i, this._tileEls[i]);
+          return;
+        }
+      }
+    }
   }
 
   _doAutoBlend() {

@@ -3,8 +3,43 @@
 // Step 5 (Audio, UX & Mobile): added blend chimes, swipe jump SFX,
 // and dynamic music intensity controls for runner/battle pacing.
 // Step 6 (Technical): added full-game audio preloading hooks for startup readiness.
+// Phase 9: haptic() global + window.REDUCED_MOTION flag for accessibility.
 // ============================================================
 // AUDIO MANAGER — js/audioManager.js
+
+// ─────────────────────────────────────────────────────────────
+// HAPTIC FEEDBACK  (Phase 9)
+// Fire-and-forget vibration patterns for key game events.
+// navigator.vibrate is gated behind feature-detect + try/catch so
+// browsers that don't support it (desktop, iOS) fail silently.
+// ─────────────────────────────────────────────────────────────
+const _HAPTIC_PATTERNS = {
+  tap:        [18],
+  jump:       [22],
+  slash:      [30],
+  stomp:      [40],
+  bossHit:    [25],
+  wrong:      [20, 50, 20],
+  hurt:       [40, 40, 60],
+  groundPound:[70],
+  victory:    [40, 30, 40, 30, 80],
+};
+function haptic(name) {
+  try {
+    const pat = _HAPTIC_PATTERNS[name];
+    if (pat && navigator.vibrate) navigator.vibrate(pat);
+  } catch (_) { /* silently ignore on unsupported platforms */ }
+}
+
+// ─────────────────────────────────────────────────────────────
+// REDUCED MOTION  (Phase 9)
+// Global flag read by renderer code to skip shake/particles
+// when the OS accessibility setting "reduce motion" is on.
+// ─────────────────────────────────────────────────────────────
+window.REDUCED_MOTION = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+// Re-evaluate if the user changes their OS preference at runtime
+window.matchMedia?.('(prefers-reduced-motion: reduce)')
+  .addEventListener?.('change', e => { window.REDUCED_MOTION = e.matches; });
 //
 // Consonant blends whose letters are spoken individually (b…l, s…t, etc.).
 // Digraphs like "sh", "ch", "th" are NOT listed here — they stay as one sound.
@@ -50,6 +85,21 @@ class AudioManager {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     } catch { /* audio not supported */ }
 
+    // iOS / Android require a user gesture before AudioContext can play.
+    // Register a one-time capture-phase listener so it fires before any other
+    // handler, resuming the context the moment the player first touches the screen.
+    if (this.ctx && this.ctx.state === 'suspended') {
+      const unlock = () => {
+        this.ctx.resume().catch(() => {});
+        document.removeEventListener('pointerdown', unlock, true);
+        document.removeEventListener('touchstart',  unlock, true);
+        document.removeEventListener('keydown',      unlock, true);
+      };
+      document.addEventListener('pointerdown', unlock, true);
+      document.addEventListener('touchstart',  unlock, true);
+      document.addEventListener('keydown',      unlock, true);
+    }
+
     // Preload SFX immediately (correct extensions per actual files)
     const sfxFiles = {
       'coin':      'assets/audio/sfx/coin.wav',
@@ -67,6 +117,13 @@ class AudioManager {
 
     // Music player (created after ctx)
     this._music = this.ctx ? new MusicPlayer(this.ctx) : null;
+
+    // Cache a preferred TTS voice (female UK) when voices become available.
+    this._preferredVoice = null;
+    this._refreshPreferredVoice();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.addEventListener('voiceschanged', () => this._refreshPreferredVoice());
+    }
   }
 
   // ── Mute toggle ─────────────────────────────────────────────
@@ -148,16 +205,45 @@ class AudioManager {
   }
 
   // ── TTS speech fallback ──────────────────────────────────────
+  _refreshPreferredVoice() {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+
+    // Prefer female UK English voices to match packaged word-audio tone.
+    const ukFemaleName = /libby|sonia|hazel|susan|google uk english female/i;
+    const femaleHints  = /female|woman|girl|libby|sonia|hazel|susan|samantha|karen|moira|tessa/i;
+    const ukVoices = voices.filter(v => /^en[-_]gb$/i.test(v.lang || ''));
+
+    this._preferredVoice =
+      ukVoices.find(v => ukFemaleName.test(v.name || '')) ||
+      ukVoices.find(v => femaleHints.test(v.name || '')) ||
+      ukVoices[0] ||
+      voices.find(v => /^en/i.test(v.lang || '') && femaleHints.test(v.name || '')) ||
+      voices.find(v => /^en/i.test(v.lang || '')) ||
+      voices[0] ||
+      null;
+    return this._preferredVoice;
+  }
+
   _speak(text, rate = 0.85, pitch = 1.1) {
     if (this.muted || !window.speechSynthesis) return;
     const u = new SpeechSynthesisUtterance(text);
     u.rate  = rate;
     u.pitch = pitch;
-    // Prefer a child-friendly voice if available
-    const voices = speechSynthesis.getVoices();
-    const kid = voices.find(v => /Samantha|Karen|Moira|Tessa/i.test(v.name));
-    if (kid) u.voice = kid;
-    speechSynthesis.speak(u);
+    const voice = this._preferredVoice || this._refreshPreferredVoice();
+    if (voice) {
+      u.voice = voice;
+      if (!u.lang) u.lang = voice.lang || 'en-GB';
+    } else {
+      u.lang = 'en-GB';
+    }
+    window.speechSynthesis.speak(u);
+  }
+
+  // Public wrapper so other modules can use the same voice profile.
+  speak(text, rate = 0.85, pitch = 1.1) {
+    this._speak(text, rate, pitch);
   }
 
   // ── PRIVATE: Play a single indivisible phoneme (no blend splitting) ─
@@ -212,19 +298,21 @@ class AudioManager {
   }
 
   // ── SFX shortcuts ────────────────────────────────────────────
-  sfxCoin()     { if (!this._playBuffer('sfx/coin'))     { this._tone(880, 'sine', 0.08, 0.25); this._tone(1100, 'sine', 0.06, 0.2, 0.07); } }
-  sfxBoost()    { if (!this._playBuffer('sfx/boost'))    { [660,880,1100,1320].forEach((f,i) => this._tone(f,'sine',0.09,0.28,i*0.06)); } }
-  sfxSlash()    { if (!this._playBuffer('sfx/slash'))    { this._tone(220,'sawtooth',0.12,0.5); this._tone(440,'sine',0.08,0.3,0.06); } }
-  sfxBossHit()  { if (!this._playBuffer('sfx/boss-hit')) { this._tone(160,'sawtooth',0.18,0.55); this._tone(120,'square',0.1,0.4,0.1); } }
-  sfxVictory()  { if (!this._playBuffer('sfx/victory'))  { [523,659,784,880,1047].forEach((f,i) => this._tone(f,'sine',0.18,0.4,i*0.13)); } }
-  sfxHurt()     { if (!this._playBuffer('sfx/riku-hurt')){ this._tone(200,'square',0.14,0.45); } }
-  sfxJump()     { if (!this._playBuffer('sfx/jump'))     { this._tone(520,'sine',0.1,0.3); this._tone(660,'sine',0.07,0.2,0.07); } }
-  sfxStomp()    { if (!this._playBuffer('sfx/stomp'))    { this._tone(300,'square',0.1,0.4); this._tone(150,'sawtooth',0.08,0.3,0.06); } }
-  sfxWrongBlend()  { this._tone(180,'sawtooth',0.2,0.4); }
-  sfxGroundPound() { this._tone(70,'square',0.22,0.65); this._tone(170,'sawtooth',0.12,0.40,0.06); }
-  sfxWallJump()    { this._tone(380,'triangle',0.10,0.30); this._tone(560,'sine',0.08,0.22,0.06); }
-  sfxStarPower()   { [523,659,784,880,1047,1319].forEach((f,i) => this._tone(f,'sine',0.10,0.30,i*0.055)); }
-  sfxSpring()      { this._tone(280,'sine',0.04,0.35); this._tone(540,'sine',0.07,0.30,0.05); this._tone(820,'sine',0.08,0.25,0.09); }
+  // Phase 9: haptic feedback added alongside each SFX call.
+  // Vibration is fire-and-forget; feature-detect guards all calls.
+  sfxCoin()     { if (!this._playBuffer('sfx/coin'))     { this._tone(880, 'sine', 0.08, 0.25); this._tone(1100, 'sine', 0.06, 0.2, 0.07); } haptic('tap'); }
+  sfxBoost()    { if (!this._playBuffer('sfx/boost'))    { [660,880,1100,1320].forEach((f,i) => this._tone(f,'sine',0.09,0.28,i*0.06)); } haptic('tap'); }
+  sfxSlash()    { if (!this._playBuffer('sfx/slash'))    { this._tone(220,'sawtooth',0.12,0.5); this._tone(440,'sine',0.08,0.3,0.06); } haptic('slash'); }
+  sfxBossHit()  { if (!this._playBuffer('sfx/boss-hit')) { this._tone(160,'sawtooth',0.18,0.55); this._tone(120,'square',0.1,0.4,0.1); } haptic('bossHit'); }
+  sfxVictory()  { if (!this._playBuffer('sfx/victory'))  { [523,659,784,880,1047].forEach((f,i) => this._tone(f,'sine',0.18,0.4,i*0.13)); } haptic('victory'); }
+  sfxHurt()     { if (!this._playBuffer('sfx/riku-hurt')){ this._tone(200,'square',0.14,0.45); } haptic('hurt'); }
+  sfxJump()     { if (!this._playBuffer('sfx/jump'))     { this._tone(520,'sine',0.1,0.3); this._tone(660,'sine',0.07,0.2,0.07); } haptic('jump'); }
+  sfxStomp()    { if (!this._playBuffer('sfx/stomp'))    { this._tone(300,'square',0.1,0.4); this._tone(150,'sawtooth',0.08,0.3,0.06); } haptic('stomp'); }
+  sfxWrongBlend()  { this._tone(180,'sawtooth',0.2,0.4); haptic('wrong'); }
+  sfxGroundPound() { this._tone(70,'square',0.22,0.65); this._tone(170,'sawtooth',0.12,0.40,0.06); haptic('groundPound'); }
+  sfxWallJump()    { this._tone(380,'triangle',0.10,0.30); this._tone(560,'sine',0.08,0.22,0.06); haptic('jump'); }
+  sfxStarPower()   { [523,659,784,880,1047,1319].forEach((f,i) => this._tone(f,'sine',0.10,0.30,i*0.055)); haptic('victory'); }
+  sfxSpring()      { this._tone(280,'sine',0.04,0.35); this._tone(540,'sine',0.07,0.30,0.05); this._tone(820,'sine',0.08,0.25,0.09); haptic('jump'); }
   sfxCheckpoint()  { [523,659,784].forEach((f,i) => this._tone(f,'sine',0.14,0.32,i*0.09)); }
 
   // ── NEW: Combo / power-up / achievement SFX ──────────────────

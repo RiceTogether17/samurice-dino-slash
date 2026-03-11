@@ -48,13 +48,13 @@ const TERMINAL_VEL    = 11;
 const PIPE_SPEED_INIT = 2.8;
 const PIPE_SPEED_MAX  = 7.0;
 const SPEED_INCREMENT = 0.18;
-const GAP_INITIAL     = 175;
-const GAP_MIN         = 120;
+const GAP_INITIAL     = 210;
+const GAP_MIN         = 150;
 const GAP_SHRINK      = 3;
 const PIPE_INTERVAL   = 1800;
 const PIPE_WIDTH      = 68;
-const DINO_W          = 56;
-const DINO_H          = 56;
+const DINO_W          = 88;
+const DINO_H          = 88;
 const DINO_X          = 90;
 const GROUND_H        = 60;
 const SHAKE_DURATION  = 18;
@@ -62,8 +62,7 @@ const SHAKE_MAG       = 8;
 const PARTICLE_COUNT  = 22;
 
 const SKINS = [
-  { name: 'Raptor',       file: 'assets/dinosaurs/velociraptor.png'  },
-  { name: 'Velociraptor', file: 'assets/dinosaurs/velociraptor2.png' },
+  { name: 'Velociraptor', file: 'assets/dinosaurs/velociraptor.png'  },
   { name: 'Stego',        file: 'assets/dinosaurs/stegosaurus.png'  },
   { name: 'Triceratops',  file: 'assets/dinosaurs/triceratops.png'  },
   { name: 'T-Rex Boss',   file: 'assets/dinosaurs/trex.png'         },
@@ -839,43 +838,43 @@ class FlappyGame {
 
     // Panel
     ctx.fillStyle = 'rgba(10,10,30,0.55)';
-    ctx.roundRect(cx - 165, cy - 175, 330, 360, 22);
+    ctx.roundRect(cx - 180, cy - 190, 360, 390, 24);
     ctx.fill();
 
     ctx.textAlign = 'center';
 
     // Title
-    ctx.font        = 'bold 34px "Comic Sans MS", system-ui, sans-serif';
+    ctx.font        = 'bold 40px "Comic Sans MS", system-ui, sans-serif';
     ctx.strokeStyle = '#222';
-    ctx.lineWidth   = 4;
-    ctx.strokeText('🦖 DINO DASH 🦖', cx, cy - 135);
+    ctx.lineWidth   = 5;
+    ctx.strokeText('🦖 DINO DASH 🦖', cx, cy - 145);
     ctx.fillStyle   = '#FFD700';
-    ctx.fillText('🦖 DINO DASH 🦖', cx, cy - 135);
+    ctx.fillText('🦖 DINO DASH 🦖', cx, cy - 145);
 
     // Dino preview
     const sp = this._sprite();
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      ctx.drawImage(sp, cx - 48, cy - 115, 96, 96);
+      ctx.drawImage(sp, cx - 64, cy - 120, 128, 128);
     }
 
     // Best
-    ctx.font      = 'bold 18px system-ui, sans-serif';
+    ctx.font      = 'bold 22px "Comic Sans MS", system-ui, sans-serif';
     ctx.fillStyle = '#FFD700';
-    ctx.fillText(`Best: ${this.bestScore}`, cx, cy + 15);
+    ctx.fillText(`Best: ${this.bestScore}`, cx, cy + 20);
 
     // Tap prompt (pulsing opacity)
     const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 450);
     ctx.save();
     ctx.globalAlpha = pulse;
-    ctx.font        = 'bold 22px "Comic Sans MS", system-ui, sans-serif';
+    ctx.font        = 'bold 26px "Comic Sans MS", system-ui, sans-serif';
     ctx.fillStyle   = '#fff';
-    ctx.fillText('Tap / Space to Start!', cx, cy + 60);
+    ctx.fillText('Tap / Space to Fly!', cx, cy + 65);
     ctx.restore();
 
     // Controls hint
-    ctx.font      = '13px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText('P = pause  |  Space / Tap = flap', cx, cy + 110);
+    ctx.font      = '15px "Comic Sans MS", system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillText('P = pause  |  Space / Tap = flap', cx, cy + 115);
   }
 
   _drawPauseOverlay() {

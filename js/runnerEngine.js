@@ -26,7 +26,7 @@ const R_ACCEL      = 0.55;  // px/frame² acceleration
 const R_MAX_SPD    = 6.0;   // max run speed
 const R_FRICTION   = 0.78;  // velocity multiplier when no key held
 const R_BOOST_DUR  = 240;   // frames of speed boost after full-word collect
-const R_COIN_R     = 28;    // coin collision radius
+const R_COIN_R     = 34;    // coin collision radius
 const R_LEVEL_W    = 7800;  // world width per level (px)
 const R_WORDS_PER_STAGE = 8; // words shown in each runner level
 
@@ -587,7 +587,7 @@ class PhonemeCoin {
     // Phoneme text — scaled to coin radius
     const text   = this.phoneme.toUpperCase();
     const fsize  = text.length > 2 ? Math.round(r * 0.5) : text.length > 1 ? Math.round(r * 0.62) : Math.round(r * 0.72);
-    ctx.font        = `bold ${fsize}px "Comic Sans MS", system-ui, sans-serif`;
+    ctx.font        = `bold ${fsize}px "Nunito", "Comic Sans MS", system-ui, sans-serif`;
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle   = '#5D4037';
@@ -953,7 +953,7 @@ class QuestionBlock {
 
     // Question mark or empty
     if (!this.hit) {
-      ctx.font        = `bold ${Math.round(h * 0.58 + pulse * h)}px "Comic Sans MS", system-ui`;
+      ctx.font        = `bold ${Math.round(h * 0.58 + pulse * h)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.textAlign   = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle   = '#fff';
@@ -1372,7 +1372,7 @@ class RunnerParticle {
     ctx.globalAlpha = Math.max(0, this.life);
     ctx.translate(this.x, this.y);
     ctx.scale(this.scale, this.scale);
-    ctx.font        = 'bold 18px "Comic Sans MS", system-ui';
+    ctx.font        = 'bold 18px "Nunito", "Comic Sans MS", system-ui';
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
@@ -1380,6 +1380,49 @@ class RunnerParticle {
     ctx.strokeText(this.text, 0, 0);
     ctx.fillStyle   = this.color;
     ctx.fillText(this.text, 0, 0);
+    ctx.restore();
+  }
+  isDead() { return this.life <= 0; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// SHOCKWAVE RING  (Phase 7)
+// Expanding ground ring spawned on hard landing (landSquash===10)
+// and ground-pound impact.  Radiates outward and fades.
+// ─────────────────────────────────────────────────────────────
+class ShockwaveRing {
+  /**
+   * @param {number} x      centre X (player feet mid-point)
+   * @param {number} y      centre Y (ground level / feet)
+   * @param {string} color  ring tint ('rgba(255,160,0,…)' for normal land,
+   *                                   '#FF4500' for ground-pound)
+   */
+  constructor(x, y, color = 'rgba(255,180,80,1)') {
+    this.x      = x;
+    this.y      = y;
+    this.color  = color;
+    this.radius = 4;   // starts small, grows outward
+    this.life   = 1.0;
+    this.scaleY = 0.25; // flattened so it hugs the ground plane
+  }
+  update() {
+    this.radius += 6;
+    this.life   -= 0.05; // ~20-frame life
+  }
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.life) * 0.65;
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth   = 2 + this.life * 3;
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur  = 12 * this.life;
+    // Scale vertically so the ring looks like an ellipse lying on the ground
+    ctx.translate(this.x, this.y);
+    ctx.scale(1, this.scaleY);
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
   isDead() { return this.life <= 0; }
@@ -1425,11 +1468,11 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   const groundY    = canvasH - R_GROUND_H;
   const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
   const difficulty = stageData.id - 1;             // 0-5
-  const minionSp   = sprites && sprites['minion-dino'];
+  const minionSp   = sprites && (sprites['dino-minion'] || sprites['minion-dino']);
   const flyingSp   = sprites && sprites['flying-enemy'];
   const springSp   = sprites && sprites['spring-pad'];
   const checkpointSp = sprites && sprites['checkpoint-flag'];
-  const minionSize = Math.max(96, Math.round(canvasH * 0.22));
+  const minionSize = Math.max(110, Math.round(canvasH * 0.28));
   const items      = {
     platforms: [], coins: [], minions: [], flag: null,
     movingPlatforms: [], questionBlocks: [], powerUps: [], flyingEnemies: [],
@@ -1586,7 +1629,8 @@ class RunnerEngine {
     this.done    = false;
     this.outcome = null;
     this._paused = false;
-    this.dustParticles = [];
+    this.dustParticles   = [];
+    this._shockwaveRings = [];   // Phase 7: ground rings on landing / ground-pound
     this.fx = new ParticleSystem();
     this._dpadAbort = null;
   }
@@ -1711,6 +1755,11 @@ class RunnerEngine {
         this.dustParticles.push(new DustParticle(
           this.player.screenX + this.player.w / 2, pFeet));
       }
+      // Phase 7: shockwave ring on any hard landing
+      this._shockwaveRings.push(new ShockwaveRing(
+        this.player.screenX + this.player.w / 2, pFeet,
+        'rgba(220,170,80,1)',
+      ));
     }
     // Running trail every 5 frames when moving fast enough
     if (this.player.onGround && Math.abs(this.player.vx) > 1.8 && this._age % 5 === 0) {
@@ -1763,6 +1812,13 @@ class RunnerEngine {
       this.particles.push(new RunnerParticle(
         this.player.screenX + this.player.w / 2,
         this.player.y + this.player.h, '💥 POUND!', '#FF6F00', -3));
+      // Phase 7: large shockwave ring on ground-pound impact (2 staggered rings)
+      const gpFeet = this.player.y + this.player.h;
+      for (let r = 0; r < 2; r++) {
+        const ring = new ShockwaveRing(poundX, gpFeet, '#FF4500');
+        ring.radius = 8 + r * 22;   // stagger so rings don't perfectly stack
+        this._shockwaveRings.push(ring);
+      }
     }
 
     // Question blocks — head-butt detection
@@ -1897,6 +1953,10 @@ class RunnerEngine {
     // Dust particles
     this.dustParticles.forEach(p => p.update());
     this.dustParticles = this.dustParticles.filter(p => !p.isDead());
+
+    // Phase 7: shockwave rings
+    this._shockwaveRings.forEach(r => r.update());
+    this._shockwaveRings = this._shockwaveRings.filter(r => !r.isDead());
   }
 
   // ── Stomp an enemy (shared for ground + flying) ──────────────
@@ -2020,7 +2080,8 @@ class RunnerEngine {
 
     // Screen shake transform
     let shakeX = 0, shakeY = 0;
-    if (this._screenShake > 0) {
+    // Phase 9: skip screen shake if user prefers reduced motion
+    if (this._screenShake > 0 && !window.REDUCED_MOTION) {
       shakeX = (Math.random() - 0.5) * this._screenShake * 1.2;
       shakeY = (Math.random() - 0.5) * this._screenShake * 0.7;
     }
@@ -2063,6 +2124,9 @@ class RunnerEngine {
     if (this.flag.sx < this.W + 100 && this.flag.sx > -100) {
       this.flag.draw(ctx, this.groundY);
     }
+
+    // Phase 7: shockwave rings drawn behind dust (ground-level ellipses)
+    this._shockwaveRings.forEach(r => r.draw(ctx));
 
     // Dust particles (at player feet, behind player)
     this.dustParticles.forEach(p => p.draw(ctx));
@@ -2230,7 +2294,7 @@ class RunnerEngine {
 
     // ── Timer (top-center)
     const urgent = this.timeLeft < 15;
-    ctx.font        = `bold ${urgent ? '26px' : '22px'} "Comic Sans MS", system-ui`;
+    ctx.font        = `bold ${urgent ? '26px' : '22px'} "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle   = urgent ? '#FF5252' : '#FFFFFF';
     ctx.textAlign   = 'center';
     ctx.shadowColor = urgent ? '#FF000088' : 'rgba(0,0,0,0.8)';
@@ -2240,7 +2304,7 @@ class RunnerEngine {
     ctx.shadowBlur  = 0;
 
     // ── Score (top-center, below timer)
-    ctx.font      = `bold 13px "Comic Sans MS", system-ui`;
+    ctx.font      = `bold 13px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 2;
     ctx.fillText(`⭐ ${this.score.toLocaleString()}`, this.W / 2, 38);
@@ -2249,13 +2313,13 @@ class RunnerEngine {
     // ── Coins collected (top-right)
     const total     = this.coins.length;
     const collected = this.coins.filter(c => c.collected).length;
-    ctx.font      = 'bold 16px "Comic Sans MS", system-ui';
+    ctx.font      = 'bold 16px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'right';
     ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 3;
     ctx.fillText(`🪙 ${collected}/${total}`, this.W - 12, 14);
     // Lives remaining
-    ctx.font      = '14px "Comic Sans MS", system-ui';
+    ctx.font      = '14px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = '#fff';
     ctx.fillText(`✕${this.lives} 🍙`, this.W - 12, 34);
     ctx.shadowBlur  = 0;
@@ -2282,7 +2346,7 @@ class RunnerEngine {
       ctx.beginPath(); ctx.roundRect(bx, by, bw * pct, 14, 4); ctx.fill();
 
       ctx.fillStyle   = '#fff';
-      ctx.font        = 'bold 12px "Comic Sans MS", system-ui';
+      ctx.font        = 'bold 15px "Nunito", "Comic Sans MS", system-ui';
       ctx.textAlign   = 'center';
       ctx.fillText(p.powerUp === 'chili' ? '🌶️ CHILI RUSH!' : '⚡ BLEND BOOST!',
         this.W / 2, by - 7);
@@ -2293,7 +2357,7 @@ class RunnerEngine {
       const pulse = 0.8 + 0.2 * Math.sin(this._age * 0.25);
       ctx.save();
       ctx.globalAlpha = pulse;
-      ctx.font        = `bold ${14 + this._stompCombo * 3}px "Comic Sans MS", system-ui`;
+      ctx.font        = `bold ${14 + this._stompCombo * 3}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle   = '#FFD700';
       ctx.textAlign   = 'right';
       ctx.shadowColor = '#FF6F00'; ctx.shadowBlur = 8;
@@ -2302,10 +2366,10 @@ class RunnerEngine {
     }
 
     // ── Stage label (bottom-left)
-    ctx.font      = '12px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font      = 'bold 16px "Nunito", "Comic Sans MS", system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.textAlign = 'left';
-    ctx.fillText(`Stage ${this.stage.id}: ${this.stage.name}`, 10, this.H - R_GROUND_H - 10);
+    ctx.fillText(`Stage ${this.stage.id}: ${this.stage.name}`, 12, this.H - R_GROUND_H - 12);
 
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign    = 'left';
@@ -2325,32 +2389,43 @@ class RunnerEngine {
     const cx = this.W / 2;
     const cy = this.H / 2;
     ctx.save();
-    // Dim the entire screen
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = 'rgba(0,0,0,0.62)';
     ctx.fillRect(0, 0, this.W, this.H);
     // Panel
-    const pw = Math.min(300, this.W * 0.7);
-    const ph = 150;
-    ctx.fillStyle   = 'rgba(10,10,30,0.88)';
+    const pw = Math.min(300, this.W * 0.72);
+    const ph = 188;
+    const px = cx - pw / 2, py = cy - ph / 2;
+    ctx.fillStyle   = 'rgba(10,10,30,0.92)';
     ctx.strokeStyle = '#FFD700';
     ctx.lineWidth   = 2.5;
-    ctx.beginPath(); ctx.roundRect(cx - pw / 2, cy - ph / 2, pw, ph, 18); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 18); ctx.fill(); ctx.stroke();
     // Title
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Comic Sans MS", system-ui`;
+    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle    = '#FFD700';
-    ctx.shadowColor  = '#FF6F00';
-    ctx.shadowBlur   = 14;
-    ctx.fillText('⏸ PAUSED', cx, cy - 34);
+    ctx.shadowColor  = '#FF6F00'; ctx.shadowBlur = 14;
+    ctx.fillText('⏸ PAUSED', cx, py + 34);
     ctx.shadowBlur   = 0;
-    // Hints
-    ctx.font      = `${Math.round(this.W * 0.034)}px "Comic Sans MS", system-ui`;
+    // ── Resume button ────────────────────────────────────────
+    const btnW = pw - 40, btnH = 44;
+    const resumeY = py + 66;
+    ctx.fillStyle = 'rgba(50,180,80,0.85)';
+    ctx.strokeStyle = '#7CFC9A'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 20, resumeY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
-    ctx.fillText('P or ESC to resume', cx, cy + 6);
-    ctx.fillStyle = '#FF9800';
-    ctx.font      = `${Math.round(this.W * 0.031)}px "Comic Sans MS", system-ui`;
-    ctx.fillText('Q — quit to map', cx, cy + 42);
+    ctx.fillText('▶ RESUME', cx, resumeY + btnH / 2);
+    this._pauseResumeBtnRect = { x: px + 20, y: resumeY, w: btnW, h: btnH };
+    // ── Quit button ──────────────────────────────────────────
+    const quitY = resumeY + btnH + 12;
+    ctx.fillStyle = 'rgba(180,50,20,0.75)';
+    ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 20, quitY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFD9D0';
+    ctx.fillText('🗺 Quit to Map', cx, quitY + btnH / 2);
+    this._pauseQuitBtnRect = { x: px + 20, y: quitY, w: btnW, h: btnH };
     ctx.restore();
   }
 
@@ -2728,6 +2803,8 @@ class EndlessRunnerEngine {
     // World state
     this._worldX   = 0;  // how far we've scrolled (world units)
     this._distM    = 0;  // distance in meters (worldX / 60)
+    this._lastMilestoneM = 0;  // last milestone distance awarded
+    this._milestoneBanner = null; // { text, life }
     this._speed    = E_BASE_SPEED;
     this._age      = 0;
 
@@ -3250,7 +3327,21 @@ class EndlessRunnerEngine {
     this._scrollAll(dx);
     this._worldX += dx;
     this._distM   = Math.round(this._worldX / 60);
-    this.score   += Math.round(dx * (0.5 + Math.max(0, this._riceScoreMult - 1) * 0.2)); // distance score
+    this.score   += Math.round(dx * (0.5 + Math.max(0, this._riceScoreMult - 1) * 0.2));
+
+    // ── Distance milestones ──────────────────────────────────
+    const _milestones = [250, 500, 750, 1000, 1500, 2000, 3000];
+    for (const m of _milestones) {
+      if (this._distM >= m && this._lastMilestoneM < m) {
+        this._lastMilestoneM = m;
+        const bonus = Math.floor(m / 50);
+        this.progress?.addRiceGrains?.(bonus);
+        this.score += bonus * 100;
+        if (this.audio) this.audio.sfxVictory?.();
+        this._milestoneBanner = { text: `🏁 ${m}m! +${bonus} 🍚`, life: 1.0 };
+        break;
+      }
+    } // distance score
 
     // Generate new chunks
     if (this._nextChunkX - this._worldX < this.W + E_CHUNK_W) {
@@ -3426,6 +3517,28 @@ class EndlessRunnerEngine {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
+    // Scenic endless backdrop: cycle campaign maps (including bonus map)
+    // as distance increases so more environment art gets used in gameplay.
+    const bgCycle = [
+      'stage-1-rice-paddy', 'stage-2-bamboo', 'stage-3-cherry-temple',
+      'stage-4-ruins', 'stage-5-mountain-terraces', 'stage-6-volcanic',
+      'bonus-training',
+    ];
+    const bgKey = bgCycle[Math.floor(this._distM / 220) % bgCycle.length];
+    const bgSp = this.sprites[bgKey];
+    if (bgSp && bgSp.complete && bgSp.naturalWidth > 0) {
+      const ar = bgSp.naturalWidth / bgSp.naturalHeight;
+      const drawH = this.groundY;
+      const drawW = drawH * ar;
+      const scrollX = -((this._worldX * 0.22) % drawW);
+      ctx.save();
+      ctx.globalAlpha = 0.40;
+      for (let x = scrollX; x < W + drawW; x += drawW) {
+        ctx.drawImage(bgSp, x, 0, drawW, drawH);
+      }
+      ctx.restore();
+    }
+
     // Zone transition overlay
     if (this._zoneFlash > 60) {
       ctx.fillStyle = `rgba(255,255,255,${(this._zoneFlash - 60) / 120})`;
@@ -3533,6 +3646,34 @@ class EndlessRunnerEngine {
       ctx.strokeText(this._zoneLabel, W/2, H*0.4);
       ctx.fillText(this._zoneLabel, W/2, H*0.4);
       ctx.restore();
+    }
+
+    // ── Milestone banner ──────────────────────────────────────
+    if (this._milestoneBanner) {
+      const mb = this._milestoneBanner;
+      mb.life -= 0.018;
+      if (mb.life <= 0) {
+        this._milestoneBanner = null;
+      } else {
+        const fadeIn  = Math.min(1, (1 - mb.life) * 8);
+        const fadeOut = mb.life < 0.3 ? mb.life / 0.3 : 1;
+        const alpha   = Math.min(fadeIn, fadeOut);
+        const scale   = 0.6 + 0.5 * Math.min(1, (1 - mb.life) * 6);
+        const fsize   = Math.min(44, W * 0.09);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(W / 2, H * 0.25);
+        ctx.scale(scale, scale);
+        ctx.font = `900 ${fsize}px "Nunito", "Comic Sans MS", system-ui`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+        ctx.lineWidth = fsize * 0.08;
+        ctx.strokeText(mb.text, 0, 0);
+        ctx.fillStyle = '#FFD700';
+        ctx.fillText(mb.text, 0, 0);
+        ctx.restore();
+      }
     }
   }
 
