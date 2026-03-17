@@ -247,6 +247,12 @@ class BattleEngine {
     this._showFirstHint  = false; // highlight first phoneme tile on penultimate attempt
     this._feedbackFlashTimer = 0; // tiny visual pulse when a tile is right/wrong
 
+    // Relaxed mode — no timer penalty for younger / slower learners
+    this._relaxedMode = localStorage.getItem('samurice_relaxed') === '1';
+
+    // Track words successfully learned this battle (for end-of-stage summary)
+    this._learnedWords = [];
+
     // Pause
     this._paused = false;
     this._pauseResumeBtnRect = null;
@@ -404,6 +410,21 @@ class BattleEngine {
     this._feedbackEl = document.createElement('div');
     this._feedbackEl.className = 'be-feedback';
     this.overlay.appendChild(this._feedbackEl);
+
+    // ── 6. "SAY IT!" celebration banner (educational moment) ──
+    this._sayItBanner = document.createElement('div');
+    this._sayItBanner.className = 'be-say-it-banner';
+    this._sayItBanner.setAttribute('aria-live', 'assertive');
+    this._sayItBanner.style.display = 'none';
+    this.overlay.appendChild(this._sayItBanner);
+
+    // ── 7. Relaxed mode indicator ─────────────────────────────
+    if (this._relaxedMode) {
+      const relaxedBadge = document.createElement('div');
+      relaxedBadge.className = 'be-relaxed-badge';
+      relaxedBadge.textContent = '😊 Relaxed Mode — no time pressure!';
+      this.overlay.insertBefore(relaxedBadge, this.overlay.firstChild);
+    }
   }
 
   // ── Start next word ──────────────────────────────────────────
@@ -635,6 +656,10 @@ class BattleEngine {
     this._flashTileFeedback(tileEl, 'bad');
     this.audio?.sfxWrongBlend?.();
     this._setFeedback(`❌ Try '${String(expected).toUpperCase()}' first. You tapped '${String(got).toUpperCase()}'.`, '#FF8A80');
+    // After brief pause, play the CORRECT phoneme so the child hears what to listen for
+    setTimeout(() => {
+      if (!this.done) this.audio?.playPhoneme?.(expected);
+    }, 650);
 
     this._wrongAttempts++;
     if (this._wrongAttempts >= MAX_WRONGS) {
@@ -822,9 +847,15 @@ class BattleEngine {
     }
 
     if (this.progress) this.progress.recordBlend(this.stage.id, wordObj.word, true, timeBonus > 0.82, wordObj.phonemes);
+    // Track unique words the child successfully blended (for end-of-stage summary)
+    if (!this._learnedWords.includes(wordObj.word)) {
+      this._learnedWords.push(wordObj.word);
+    }
     if (this.audio)    this.audio.sfxSlash();
     if (this.audio)    this.audio.sfxBlendChime?.();
     if (this.audio)    this.audio.sfxBossHit();
+    // Show the "SAY IT!" educational prompt — the key moment where child echoes the word
+    this._showSayItBanner(wordObj.word);
     setTimeout(() => {
       if (this._destroyed) return;
       if (this.audio) this.audio.playBlendSequence(wordObj.phonemes, wordObj.word);
@@ -907,6 +938,22 @@ class BattleEngine {
 
   _bossAutoAttack() {
     if (this.done || this.state === 'boss-attack') return;
+
+    // Relaxed mode: timer expiry never hurts — just encourage and restart
+    if (this._relaxedMode) {
+      this._setFeedback('⏰ Take your time! Try again — you can do it! 😊', '#FFD700');
+      this.damagePops.push(new DamagePop(
+        Math.round(this.W * 0.5), Math.round(this.H * 0.3),
+        '😊 No rush!', '#FFD700',
+      ));
+      setTimeout(() => {
+        if (this._destroyed || this.done) return;
+        this._startNextWord();
+        this._startBlendTimer();
+      }, 1200);
+      return;
+    }
+
     this.state = 'boss-attack';
     // Phase amplifies boss attack
     const phaseMult = this._bossPhase === 3 ? 1.5 : this._bossPhase === 2 ? 1.25 : 1.0;
@@ -977,11 +1024,48 @@ class BattleEngine {
     this._feedbackEl.style.color  = color;
   }
 
+  // ── "SAY IT!" banner — the key educational moment ────────────
+  // After a correct blend, prompt the child to say the word aloud
+  // and play a slow, clear pronunciation for them to echo.
+  _showSayItBanner(word) {
+    if (!this._sayItBanner) return;
+    this._sayItBanner.innerHTML =
+      `<span class="be-say-it-emoji">🗣️</span>` +
+      `<span class="be-say-it-word">SAY IT: ${word.toUpperCase()}!</span>` +
+      `<span class="be-say-it-sub">Say it out loud!</span>`;
+    this._sayItBanner.style.display = 'flex';
+    this._sayItBanner.classList.remove('be-say-it-pop');
+    // Trigger reflow to restart animation
+    void this._sayItBanner.offsetWidth;
+    this._sayItBanner.classList.add('be-say-it-pop');
+
+    // Speak the word slowly and clearly so the child can echo it
+    const speakWord = (w, rate = 0.72, pitch = 1.05) => {
+      if (this.audio?.speak) {
+        this.audio.speak(w, rate, pitch);
+      } else if (window.speechSynthesis) {
+        const u = new SpeechSynthesisUtterance(w);
+        u.rate = rate; u.pitch = pitch; u.volume = 1;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+      }
+    };
+    speakWord(word);
+
+    setTimeout(() => {
+      if (this._sayItBanner) {
+        this._sayItBanner.classList.remove('be-say-it-pop');
+        this._sayItBanner.style.display = 'none';
+      }
+    }, 1500);
+  }
+
   // ── Win / Lose ───────────────────────────────────────────────
   _win() {
     this._stopBlendTimer();
-    this.done    = true;
-    this.outcome = 'victory';
+    this.done        = true;
+    this.outcome     = 'victory';
+    this.learnedWords = [...this._learnedWords];   // expose for stage-win summary
     if (this.audio) this.audio.sfxVictory();
   }
 

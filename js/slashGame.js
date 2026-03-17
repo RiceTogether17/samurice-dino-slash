@@ -579,6 +579,13 @@ class SlashGame {
       return;
     }
     if (this.state === 'stage-select') {
+      // Relaxed mode toggle (top-right button)
+      const rt = this._relaxedToggleRect;
+      if (rt && mx >= rt.x && mx <= rt.x + rt.w && my >= rt.y && my <= rt.y + rt.h) {
+        const next = localStorage.getItem('samurice_relaxed') === '1' ? '0' : '1';
+        localStorage.setItem('samurice_relaxed', next);
+        return;
+      }
       const cards = this._stageCardRects || [];
       cards.forEach((r, i) => {
         if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
@@ -851,6 +858,7 @@ class SlashGame {
       accuracy:     this._lastBattleAccuracy     ?? 0,
       riceEarned,
       stageId: this.stageId,
+      learnedWords: this.battle?.learnedWords    ?? [],   // words child successfully blended
     };
 
     this.overlay.classList.remove('active');
@@ -1330,6 +1338,39 @@ class SlashGame {
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
       ctx.fillText(eg, x + cw / 2, y + 70);
     }
+    // ── Relaxed Mode toggle (top-right corner of header) ───────
+    // Lets parents/teachers turn off the timer penalty for early learners.
+    const relaxed = localStorage.getItem('samurice_relaxed') === '1';
+    const btnW = Math.min(130, W * 0.30);
+    const btnH = 26;
+    const btnX = W - btnW - 10;
+    const btnY = 10;
+    this._relaxedToggleRect = { x: btnX, y: btnY, w: btnW, h: btnH };
+    // Button background
+    ctx.fillStyle = relaxed ? 'rgba(0,188,212,0.35)' : 'rgba(0,188,212,0.12)';
+    ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 13); ctx.fill();
+    ctx.strokeStyle = relaxed ? '#00BCD4' : 'rgba(0,188,212,0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 13); ctx.stroke();
+    // Switch track
+    const trackX = btnX + btnW - 36;
+    const trackY = btnY + 5;
+    ctx.fillStyle = relaxed ? '#00BCD4' : 'rgba(255,255,255,0.15)';
+    ctx.beginPath(); ctx.roundRect(trackX, trackY, 28, 16, 8); ctx.fill();
+    // Knob
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 3;
+    ctx.beginPath();
+    ctx.arc(relaxed ? trackX + 20 : trackX + 8, trackY + 8, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Label
+    ctx.font = `bold ${Math.min(10, btnW * 0.09)}px "Nunito", system-ui`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = relaxed ? '#fff' : '#80DEEA';
+    ctx.fillText('😊 Relaxed', btnX + 8, btnY + btnH / 2);
+
     // Back hint
     ctx.font = '12px system-ui';
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
@@ -1694,8 +1735,11 @@ class SlashGame {
     // Card slide-in from below
     const slideIn = Math.min(1, t / 18);           // 0→1 in 18 frames
     const slideEase = 1 - Math.pow(1 - slideIn, 3); // ease-out cubic
+    const stats = this._battleResults || {};
+    const learnedWords = (stats.learnedWords || []).slice(0, 8); // cap at 8 for layout
+    const wordsRowH = learnedWords.length > 0 ? 52 + Math.ceil(learnedWords.length / 4) * 28 : 0;
     const cardW = Math.min(340, W - 40);
-    const cardH = 310;
+    const cardH = 310 + wordsRowH;
     const cardX = (W - cardW) / 2;
     const cardY = H / 2 - cardH / 2 + (1 - slideEase) * 80;
 
@@ -1727,7 +1771,6 @@ class SlashGame {
     ctx.restore();
 
     // Stats — each row counts up from 0 to final value
-    const stats = this._battleResults || {};
     const rows = [
       { emoji: '📖', label: 'Words Blended',  val: stats.wordsBlended ?? 0, color: '#76FF03', unit: '' },
       { emoji: '🔥', label: 'Best Streak',    val: stats.bestStreak   ?? 0, color: '#FF9800', unit: '×' },
@@ -1771,6 +1814,47 @@ class SlashGame {
 
       ctx.restore();
     });
+
+    // "Words You Learned!" — educational summary of successfully blended words
+    if (learnedWords.length > 0) {
+      const wordsY = cardY + 72 + rows.length * 52 + 8;
+      const wordsAlpha = Math.min(1, Math.max(0, (t - 60) / 12));
+      ctx.save();
+      ctx.globalAlpha = wordsAlpha;
+
+      // Section header
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.beginPath(); ctx.roundRect(cardX + 12, wordsY, cardW - 24, wordsRowH - 8, 10); ctx.fill();
+      ctx.font = `bold 13px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#76FF03';
+      ctx.shadowColor = '#76FF03'; ctx.shadowBlur = 6;
+      ctx.fillText('📚 Words you learned today:', cardX + 20, wordsY + 8);
+      ctx.shadowBlur = 0;
+
+      // Word chips — up to 8 words in wrapping rows of 4
+      learnedWords.forEach((w, wi) => {
+        const col  = wi % 4;
+        const row  = Math.floor(wi / 4);
+        const chipW = (cardW - 28) / 4 - 4;
+        const chipX = cardX + 14 + col * (chipW + 4);
+        const chipY = wordsY + 28 + row * 28;
+        // Chip bg
+        ctx.fillStyle = 'rgba(118,255,3,0.18)';
+        ctx.beginPath(); ctx.roundRect(chipX, chipY, chipW, 22, 6); ctx.fill();
+        ctx.strokeStyle = 'rgba(118,255,3,0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(chipX, chipY, chipW, 22, 6); ctx.stroke();
+        // Word text
+        ctx.font = `bold 11px "Nunito", system-ui`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(w.toUpperCase(), chipX + chipW / 2, chipY + 11);
+      });
+      ctx.restore();
+    }
 
     // "Tap to continue" hint fades in at t=55
     const tapAlpha = Math.min(1, Math.max(0, (t - 55) / 15)) * (0.6 + 0.4 * Math.sin(t * 0.14));
