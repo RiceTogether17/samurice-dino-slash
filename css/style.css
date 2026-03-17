@@ -1465,3 +1465,129 @@ body {
     font-size: 1.4rem; cursor: pointer; padding: 0 4px; line-height: 1;
 }
 #pwa-dismiss-btn:hover { color: #fff; }
+
+/* ============================================================
+   EDUCATIONAL IMPROVEMENTS — Mario + Educator Edition
+   1. "SAY IT!" banner   2. Relaxed Mode badge   3. Stage-select toggle
+============================================================ */
+
+/* ── "SAY IT!" celebration banner ──────────────────────────── */
+/* Appears for ~1.5s after every correct word blend, prompting  */
+/* the child to say the word aloud (key phonics learning step). */
+.be-say-it-banner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    background: linear-gradient(135deg, rgba(10,50,10,0.95) 0%, rgba(20,80,20,0.97) 100%);
+    border: 3px solid #76FF03;
+    border-radius: 20px;
+    padding: 14px 28px 12px;
+    box-shadow: 0 0 32px rgba(118,255,3,0.7), 0 6px 24px rgba(0,0,0,0.7);
+    pointer-events: none;
+    white-space: nowrap;
+}
+.be-say-it-emoji {
+    font-size: 2rem;
+    line-height: 1;
+}
+.be-say-it-word {
+    font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;
+    font-size: clamp(1.4rem, 5vw, 2.2rem);
+    font-weight: 900;
+    color: #76FF03;
+    text-shadow: 0 0 12px rgba(118,255,3,0.8), 0 2px 4px rgba(0,0,0,0.9);
+    letter-spacing: 0.05em;
+}
+.be-say-it-sub {
+    font-family: 'Nunito', system-ui, sans-serif;
+    font-size: clamp(0.75rem, 2.5vw, 0.95rem);
+    font-weight: 700;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.02em;
+}
+
+/* Pop-in animation */
+@keyframes sayItPop {
+    0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
+    40%  { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
+    60%  { transform: translate(-50%, -50%) scale(0.96); }
+    75%  { transform: translate(-50%, -50%) scale(1.04); }
+    85%  { transform: translate(-50%, -50%) scale(1.0);  opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1.0);  opacity: 0; }
+}
+.be-say-it-pop {
+    animation: sayItPop 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* ── Relaxed Mode badge ─────────────────────────────────────── */
+/* Shown at the top of the battle overlay when relaxed mode is  */
+/* active so children and parents know no timer pressure exists. */
+.be-relaxed-badge {
+    width: 100%;
+    padding: 5px 10px;
+    background: linear-gradient(90deg, rgba(0,188,212,0.22), rgba(0,188,212,0.10));
+    border-bottom: 1.5px solid rgba(0,188,212,0.4);
+    font-family: 'Nunito', system-ui, sans-serif;
+    font-size: clamp(0.7rem, 2.2vw, 0.85rem);
+    font-weight: 700;
+    color: #80DEEA;
+    text-align: center;
+    letter-spacing: 0.02em;
+    border-radius: 0;
+    flex-shrink: 0;
+}
+
+/* ── Relaxed Mode toggle on stage-select screen ─────────────── */
+.relaxed-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0,188,212,0.15);
+    border: 2px solid rgba(0,188,212,0.4);
+    border-radius: 40px;
+    padding: 7px 18px 7px 12px;
+    cursor: pointer;
+    font-family: 'Nunito', system-ui, sans-serif;
+    font-size: clamp(0.75rem, 2.5vw, 0.9rem);
+    font-weight: 800;
+    color: #80DEEA;
+    transition: background 0.2s, border-color 0.2s;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.relaxed-mode-toggle:hover, .relaxed-mode-toggle:focus {
+    background: rgba(0,188,212,0.25);
+    border-color: rgba(0,188,212,0.7);
+    outline: none;
+}
+.relaxed-mode-toggle.active {
+    background: rgba(0,188,212,0.35);
+    border-color: #00BCD4;
+    color: #fff;
+}
+.relaxed-mode-toggle .rmt-icon { font-size: 1.3em; }
+.relaxed-mode-toggle .rmt-switch {
+    width: 36px; height: 20px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 10px;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+.relaxed-mode-toggle.active .rmt-switch { background: #00BCD4; }
+.relaxed-mode-toggle .rmt-knob {
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: left 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.relaxed-mode-toggle.active .rmt-knob { left: 18px; }
