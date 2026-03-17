@@ -47,6 +47,9 @@
         <img src="assets/sprites/riku-idle.png" class="mc-mascot" alt="Riku the Samurice" onerror="this.style.display='none'">
         <h1 class="mc-title">⚔️ Samurice Dino Games 🦖</h1>
         <p class="mc-sub">Learn to read! Slash dinos with WORD POWER!</p>
+        <!-- Daily streak + rice grains engagement strip -->
+        <div id="mc-streak-chip" class="mc-streak-chip" style="display:none"></div>
+        <div id="mc-rice-counter" class="mc-rice-counter"></div>
     </div>
     <div class="mc-buttons">
         <button class="mc-btn slash-btn" id="launchSlashBtn">
@@ -63,7 +66,91 @@
                 <span class="mc-desc">Fly through the sky! How far can you go?</span>
             </div>
         </button>
+        <!-- Parent / Teacher Progress Dashboard -->
+        <button class="mc-btn progress-btn" id="launchProgressBtn">
+            <span class="mc-icon">📊</span>
+            <div class="mc-text">
+                <span class="mc-name">Progress Dashboard</span>
+                <span class="mc-desc">Parent & teacher view — phonics mastery heatmap &amp; stats</span>
+            </div>
+        </button>
     </div>
+</div>
+<!-- ══════════════════════════════════════════════════════════
+     PARENT / TEACHER PROGRESS DASHBOARD
+═══════════════════════════════════════════════════════════════ -->
+<div id="progressScreen" class="screen pd-screen">
+  <div class="pd-topbar">
+    <button id="progressBackBtn" class="pd-back-btn">← Back</button>
+    <h2 class="pd-title">📊 Progress Dashboard</h2>
+    <button id="shareReportBtn" class="pd-share-btn">📤 Share Progress Report</button>
+  </div>
+
+  <div class="pd-body">
+
+    <!-- ── Global Stats Row ── -->
+    <section class="pd-section pd-stats-row">
+      <div class="pd-stat-card">
+        <span class="pd-stat-icon">📝</span>
+        <span class="pd-stat-val" id="pd-words-blended">0</span>
+        <span class="pd-stat-label">Words Blended</span>
+      </div>
+      <div class="pd-stat-card">
+        <span class="pd-stat-icon">🔥</span>
+        <span class="pd-stat-val" id="pd-daily-streak">0</span>
+        <span class="pd-stat-label">Daily Streak</span>
+      </div>
+      <div class="pd-stat-card">
+        <span class="pd-stat-icon">💥</span>
+        <span class="pd-stat-val" id="pd-best-combo">0</span>
+        <span class="pd-stat-label">Best Combo</span>
+      </div>
+      <div class="pd-stat-card">
+        <span class="pd-stat-icon">🌾</span>
+        <span class="pd-stat-val" id="pd-rice-grains">0</span>
+        <span class="pd-stat-label">Rice Grains</span>
+      </div>
+      <div class="pd-stat-card">
+        <span class="pd-stat-icon">🏃</span>
+        <span class="pd-stat-val" id="pd-endless-dist">0m</span>
+        <span class="pd-stat-label">Endless Record</span>
+      </div>
+    </section>
+
+    <!-- ── Stage Progress ── -->
+    <section class="pd-section">
+      <h3 class="pd-section-title">📚 Stage Progress</h3>
+      <div id="pd-stages" class="pd-stages-grid"></div>
+    </section>
+
+    <!-- ── Phoneme Mastery Heatmap ── -->
+    <section class="pd-section">
+      <h3 class="pd-section-title">🔠 Phoneme Mastery Map</h3>
+      <p class="pd-section-hint">
+        <span class="pd-ph-green pd-legend">Green</span> = mastered ·
+        <span class="pd-ph-yellow pd-legend">Yellow</span> = practising ·
+        <span class="pd-ph-red pd-legend">Red</span> = needs work
+      </p>
+      <div id="pd-heatmap" class="pd-heatmap"></div>
+    </section>
+
+    <!-- ── Classroom Code ── -->
+    <section class="pd-section pd-class-section">
+      <h3 class="pd-section-title">🏫 Classroom Code</h3>
+      <p class="pd-section-hint">Create a class code to group students and share progress.</p>
+      <div class="pd-class-row">
+        <input id="pd-class-input" class="pd-class-input" type="text" maxlength="24" placeholder="Enter class name…" autocomplete="off">
+        <button id="pd-create-class-btn" class="pd-create-btn">Create Class</button>
+      </div>
+      <div class="pd-class-info">
+        <span class="pd-class-label">Class:</span>
+        <span id="pd-class-name" class="pd-class-name">—</span>
+        <span class="pd-class-label">Code:</span>
+        <span id="pd-class-code" class="pd-class-code">——</span>
+      </div>
+    </section>
+
+  </div><!-- /.pd-body -->
 </div>
 <!-- ══════════════════════════════════════════════════════════
      SAMURICE DINO SLASH — Phonics auto-runner + battle game
@@ -148,9 +235,12 @@
 <script src="js/tutorial.js"></script><!-- PHASE 6: onboarding tutorial -->
 <script src="js/slashGame.js"></script>
 <script src="js/game.js"></script>
+<script src="js/parentDashboard.js"></script>
 <script>
 // ── Button event listeners (replaces inline onclick attributes) ──
 document.addEventListener('DOMContentLoaded', function() {
+  // Init parent dashboard (defers until _progressTracker is ready)
+  initParentDashboard();
   // Mode chooser
   document.getElementById('launchSlashBtn')?.addEventListener('click', () => launchSlashGame());
   document.getElementById('launchFlappyBtn')?.addEventListener('click', () => launchFlappyGame());

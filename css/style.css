@@ -1591,3 +1591,324 @@ body {
     box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 .relaxed-mode-toggle.active .rmt-knob { left: 18px; }
+
+/* ============================================================
+   MODE CHOOSER — Progress dashboard button + engagement strip
+   (Zuckerberg-inspired: surface streaks & social proof upfront)
+============================================================ */
+
+/* Progress / Parent view button */
+.progress-btn {
+    background: linear-gradient(135deg, #7B1FA2 0%, #6A1B9A 50%, #4A148C 100%);
+    color: #fff;
+    border-color: rgba(200,160,255,0.45);
+}
+.progress-btn:hover {
+    background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 50%, #6A1B9A 100%);
+    filter: drop-shadow(0 0 16px rgba(156,39,176,0.7));
+}
+
+/* Daily streak engagement chip */
+.mc-streak-chip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(0,0,0,0.35);
+    border: 2px solid rgba(255,215,0,0.5);
+    border-radius: 999px;
+    padding: 6px 16px;
+    margin: 8px auto 2px;
+    max-width: 460px;
+    font-size: clamp(0.78rem, 2.4vw, 0.95rem);
+    color: #fff;
+    font-weight: bold;
+    backdrop-filter: blur(4px);
+}
+.streak-flame   { font-size: 1.3em; }
+.streak-count   { font-size: 1.4em; color: #FFD700; font-weight: 900; }
+.streak-label   { opacity: 0.85; }
+.streak-done    { color: #A5D6A7; font-weight: bold; }
+.streak-theme   { color: #FFD700; font-style: italic; }
+.login-badge    { opacity: 0.7; font-size: 0.82em; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 8px; }
+
+/* Rice grains mini-counter */
+.mc-rice-counter {
+    font-size: clamp(0.78rem, 2.2vw, 0.9rem);
+    color: rgba(255,236,179,0.9);
+    font-weight: bold;
+    margin-bottom: 4px;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    min-height: 1.2em;
+}
+
+
+/* ============================================================
+   PARENT / TEACHER PROGRESS DASHBOARD SCREEN
+============================================================ */
+
+.pd-screen {
+    background:
+        linear-gradient(160deg, #0d2b08 0%, #1a4d1a 40%, #0d3b17 100%);
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    overflow: hidden;
+}
+
+/* Top bar */
+.pd-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px 8px;
+    background: rgba(0,0,0,0.4);
+    border-bottom: 2px solid rgba(255,215,0,0.3);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.pd-title {
+    color: #FFD700;
+    font-size: clamp(1.05rem, 3.5vw, 1.4rem);
+    font-weight: 900;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    margin: 0;
+    flex: 1;
+    text-align: center;
+}
+.pd-back-btn {
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.3);
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: bold;
+    padding: 7px 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.pd-back-btn:hover { background: rgba(255,255,255,0.22); }
+.pd-share-btn {
+    background: linear-gradient(135deg, #FF6B35, #FF4444);
+    border: none;
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: bold;
+    padding: 8px 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.35);
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+.pd-share-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.35); }
+
+/* Scrollable body */
+.pd-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 14px 14px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Section wrapper */
+.pd-section {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 18px;
+    padding: 14px 14px 16px;
+}
+.pd-section-title {
+    color: #FFD700;
+    font-size: clamp(0.95rem, 3vw, 1.15rem);
+    font-weight: 900;
+    margin: 0 0 10px;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+.pd-section-hint {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.65);
+    margin: -6px 0 10px;
+    line-height: 1.5;
+}
+
+/* ── Stats row ─────────────────────────────────────────────── */
+.pd-stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    padding: 12px;
+}
+.pd-stat-card {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 14px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-width: 80px;
+    flex: 1 1 80px;
+}
+.pd-stat-icon  { font-size: 1.4rem; }
+.pd-stat-val   { font-size: clamp(1.2rem, 4vw, 1.6rem); font-weight: 900; color: #FFD700; }
+.pd-stat-label { font-size: 0.7rem; color: rgba(255,255,255,0.7); text-align: center; }
+
+/* ── Stage progress grid ───────────────────────────────────── */
+.pd-stages-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+}
+.pd-stage-card {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 14px;
+    padding: 10px 12px;
+    transition: transform 0.15s;
+}
+.pd-stage-card:hover { transform: translateY(-2px); }
+.pd-stage-card.pd-locked {
+    opacity: 0.5;
+    pointer-events: none;
+}
+.pd-stage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+.pd-stage-num   { font-weight: 900; color: #FFD700; font-size: 0.9rem; }
+.pd-stage-stars { font-size: 0.95rem; letter-spacing: 1px; }
+.pd-mastery-badges { display: flex; gap: 4px; }
+.pd-badge { font-size: 0.9rem; cursor: help; }
+.pd-stage-name    { font-weight: bold; color: #fff; font-size: 0.88rem; margin-bottom: 2px; }
+.pd-stage-pattern { font-size: 0.75rem; color: rgba(255,255,255,0.6); margin-bottom: 8px; }
+.pd-stage-bar-wrap { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.pd-stage-bar {
+    flex: 1;
+    height: 8px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.pd-stage-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #66BB6A, #FFD700);
+    border-radius: 999px;
+    transition: width 0.6s ease;
+}
+.pd-stage-acc   { font-size: 0.75rem; color: #FFD700; font-weight: bold; white-space: nowrap; }
+.pd-stage-stats { font-size: 0.75rem; color: rgba(255,255,255,0.65); }
+.pd-locked-label { color: rgba(255,255,255,0.4) !important; }
+
+/* ── Phoneme heatmap ───────────────────────────────────────── */
+.pd-heatmap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.pd-phoneme-cell {
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    cursor: help;
+    border: 2px solid transparent;
+    transition: transform 0.12s;
+}
+.pd-phoneme-cell:hover { transform: scale(1.15); }
+.pd-ph-green  { background: rgba(102,187,106,0.25); border-color: #66BB6A; color: #A5D6A7; }
+.pd-ph-yellow { background: rgba(255,193,7,0.2);   border-color: #FFD700; color: #FFE082; }
+.pd-ph-red    { background: rgba(239,83,80,0.25);  border-color: #EF5350; color: #EF9A9A; }
+
+/* Legend chips (inline in hint text) */
+.pd-legend {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 0.8em;
+    border: 1px solid currentColor;
+}
+.pd-no-data {
+    color: rgba(255,255,255,0.45);
+    font-style: italic;
+    font-size: 0.85rem;
+    padding: 8px 0;
+}
+
+/* ── Classroom Code ────────────────────────────────────────── */
+.pd-class-section {}
+.pd-class-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+.pd-class-input {
+    flex: 1;
+    min-width: 140px;
+    background: rgba(255,255,255,0.1);
+    border: 2px solid rgba(255,255,255,0.25);
+    border-radius: 12px;
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.9rem;
+    padding: 9px 14px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.pd-class-input::placeholder { color: rgba(255,255,255,0.4); }
+.pd-class-input:focus { border-color: rgba(255,215,0,0.7); }
+.pd-create-btn {
+    background: linear-gradient(135deg, #00897B, #00695C);
+    border: none;
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.88rem;
+    font-weight: bold;
+    padding: 9px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.35);
+    transition: transform 0.1s;
+}
+.pd-create-btn:active { transform: translateY(2px); }
+.pd-class-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.pd-class-label { font-size: 0.78rem; color: rgba(255,255,255,0.55); }
+.pd-class-name  { color: #fff; font-weight: bold; font-size: 0.9rem; }
+.pd-class-code  {
+    font-family: 'Courier New', monospace;
+    font-size: 1.05rem;
+    font-weight: 900;
+    color: #FFD700;
+    background: rgba(255,215,0,0.1);
+    padding: 3px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,215,0,0.35);
+    letter-spacing: 2px;
+    transition: background 0.3s, color 0.3s;
+}
+.pd-code-flash {
+    background: rgba(255,215,0,0.35) !important;
+    color: #fff !important;
+    animation: codeFlash 0.5s ease 2;
+}
+@keyframes codeFlash {
+    0%, 100% { background: rgba(255,215,0,0.35); }
+    50%       { background: rgba(255,215,0,0.6); }
+}
