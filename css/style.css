@@ -1912,3 +1912,299 @@ body {
     0%, 100% { background: rgba(255,215,0,0.35); }
     50%       { background: rgba(255,215,0,0.6); }
 }
+
+/* ============================================================
+   ENGAGEMENT ENGINE — XP bar, Lucky Jar, Calendar, Shield
+   "Design for daily return. Every pixel should pull them back."
+============================================================ */
+
+/* ── Meta row (rice grains + countdown side by side) ───────── */
+.mc-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    margin: 2px 0 4px;
+    flex-wrap: wrap;
+}
+.mc-countdown {
+    font-size: clamp(0.72rem, 2.1vw, 0.85rem);
+    color: rgba(255,220,100,0.9);
+    font-weight: bold;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    letter-spacing: 0.04em;
+    min-height: 1.1em;
+}
+
+/* ── XP bar ─────────────────────────────────────────────────── */
+.mc-xp-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 20px;
+    margin: 4px auto 0;
+    width: 100%;
+    max-width: 480px;
+}
+.mc-xp-level {
+    font-size: clamp(0.78rem, 2.4vw, 0.95rem);
+    font-weight: 900;
+    color: #FFD700;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    white-space: nowrap;
+    min-width: 40px;
+}
+.mc-xp-track {
+    flex: 1;
+    height: 10px;
+    background: rgba(0,0,0,0.4);
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.2);
+    overflow: hidden;
+}
+.mc-xp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #66BB6A 0%, #FFD700 60%, #FF9800 100%);
+    border-radius: 999px;
+    transition: width 1.1s cubic-bezier(0.22,1,0.36,1);
+    box-shadow: 0 0 6px rgba(255,200,0,0.6);
+}
+.mc-xp-next {
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.65);
+    font-weight: bold;
+    white-space: nowrap;
+    min-width: 60px;
+    text-align: right;
+}
+
+/* ── Welcome Back banner ────────────────────────────────────── */
+.mc-welcome-back {
+    background: linear-gradient(135deg, rgba(255,152,0,0.85), rgba(255,87,34,0.85));
+    border: 2px solid rgba(255,215,0,0.6);
+    border-radius: 12px;
+    color: #fff;
+    font-size: clamp(0.82rem, 2.5vw, 0.95rem);
+    font-weight: bold;
+    padding: 7px 16px;
+    margin: 6px auto 0;
+    max-width: 460px;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    text-align: center;
+}
+.welcome-pulse { animation: welcomePulse 0.6s ease 3; }
+@keyframes welcomePulse {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.04); }
+}
+
+/* ── Engagement strip (jar + calendar + shield) ─────────────── */
+.mc-engage-strip {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 12px;
+    padding: 8px 14px 4px;
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    flex-wrap: wrap;
+}
+
+/* ── Lucky Jar ──────────────────────────────────────────────── */
+.mc-jar-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 68px;
+    position: relative;
+}
+.mc-jar-btn {
+    font-size: 2.6rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 0.15s;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+    user-select: none;
+}
+.mc-jar-btn.jar-ready {
+    animation: jarBounce 1.8s ease-in-out infinite;
+}
+.mc-jar-btn.jar-spent {
+    filter: grayscale(0.7) drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    opacity: 0.6;
+    cursor: default;
+    animation: none;
+}
+@keyframes jarBounce {
+    0%, 100% { transform: translateY(0) rotate(-4deg) scale(1); }
+    40%       { transform: translateY(-8px) rotate(4deg) scale(1.06); }
+    70%       { transform: translateY(-4px) rotate(-2deg) scale(1.02); }
+}
+.mc-jar-btn.jar-spin {
+    animation: jarSpin 0.8s ease-in-out forwards !important;
+}
+@keyframes jarSpin {
+    0%   { transform: rotate(0deg) scale(1); }
+    25%  { transform: rotate(-20deg) scale(1.1); }
+    50%  { transform: rotate(20deg) scale(1.15); }
+    75%  { transform: rotate(-15deg) scale(1.12); }
+    100% { transform: rotate(0deg) scale(1); }
+}
+.mc-jar-label {
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.75);
+    font-weight: bold;
+    text-align: center;
+    max-width: 80px;
+    line-height: 1.3;
+}
+.jar-burst {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1rem;
+    font-weight: 900;
+    color: #FFD700;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    pointer-events: none;
+    animation: burstUp 1.4s ease forwards;
+    white-space: nowrap;
+}
+@keyframes burstUp {
+    0%   { opacity: 1; transform: translateX(-50%) translateY(0) scale(0.8); }
+    60%  { opacity: 1; transform: translateX(-50%) translateY(-28px) scale(1.2); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-48px) scale(0.9); }
+}
+
+/* ── 7-Day Calendar ─────────────────────────────────────────── */
+.mc-calendar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 200px;
+    max-width: 320px;
+}
+/* Row of day tiles */
+.mc-calendar > .cal-tile,
+.mc-calendar:has(.cal-tile) { display: contents; }
+.mc-calendar {
+    /* tiles rendered inline */
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.cal-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 48px;
+    border-radius: 10px;
+    border: 2px solid transparent;
+    font-size: 0.68rem;
+    gap: 2px;
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+}
+.cal-tile:hover { transform: translateY(-2px); }
+.cal-day    { font-weight: 900; font-size: 0.75rem; }
+.cal-reward { font-size: 0.72rem; }
+
+.cal-done {
+    background: rgba(102,187,106,0.2);
+    border-color: #66BB6A;
+    color: #A5D6A7;
+}
+.cal-claimed {
+    background: rgba(255,215,0,0.15);
+    border-color: #FFD700;
+    color: #FFD700;
+}
+.cal-available {
+    background: rgba(255,152,0,0.25);
+    border-color: #FF9800;
+    color: #FFE082;
+    animation: calPulse 1.5s ease-in-out infinite;
+    box-shadow: 0 0 12px rgba(255,152,0,0.5);
+}
+@keyframes calPulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255,152,0,0.4); }
+    50%       { box-shadow: 0 0 18px rgba(255,200,0,0.8); }
+}
+.cal-locked {
+    background: rgba(0,0,0,0.25);
+    border-color: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.3);
+}
+.cal-streak-label {
+    width: 100%;
+    text-align: center;
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.65);
+    font-weight: bold;
+    margin-top: 2px;
+}
+.cal-burst {
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.85rem;
+    font-weight: 900;
+    color: #FFD700;
+    pointer-events: none;
+    white-space: nowrap;
+    animation: burstUp 1.2s ease forwards;
+}
+
+/* ── Streak Shield ──────────────────────────────────────────── */
+.mc-shield-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+}
+.mc-shield-btn {
+    background: linear-gradient(135deg, #1565C0, #0D47A1);
+    border: 2px solid rgba(100,180,255,0.5);
+    color: #fff;
+    font-family: inherit;
+    font-size: clamp(0.72rem, 2.2vw, 0.82rem);
+    font-weight: bold;
+    padding: 8px 12px;
+    border-radius: 14px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+    transition: transform 0.1s, box-shadow 0.1s, opacity 0.2s;
+    white-space: nowrap;
+}
+.mc-shield-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+    box-shadow: none;
+}
+.mc-shield-btn.shield-active {
+    background: linear-gradient(135deg, #2E7D32, #1B5E20);
+    border-color: rgba(100,255,130,0.5);
+    opacity: 0.9;
+}
+.mc-shield-btn:not(:disabled):hover { transform: translateY(-2px); }
+.mc-shield-btn:not(:disabled):active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+.shield-burst {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.9rem;
+    font-weight: 900;
+    color: #90CAF9;
+    pointer-events: none;
+    white-space: nowrap;
+    animation: burstUp 1.2s ease forwards;
+}

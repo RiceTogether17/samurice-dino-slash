@@ -49,8 +49,37 @@
         <p class="mc-sub">Learn to read! Slash dinos with WORD POWER!</p>
         <!-- Daily streak + rice grains engagement strip -->
         <div id="mc-streak-chip" class="mc-streak-chip" style="display:none"></div>
-        <div id="mc-rice-counter" class="mc-rice-counter"></div>
+        <div class="mc-meta-row">
+            <div id="mc-rice-counter" class="mc-rice-counter"></div>
+            <div id="mc-countdown" class="mc-countdown"></div>
+        </div>
+        <!-- XP Level bar -->
+        <div id="mc-xp-bar-wrap" class="mc-xp-bar-wrap">
+            <span class="mc-xp-level" id="mc-xp-level">Lv.1</span>
+            <div class="mc-xp-track">
+                <div class="mc-xp-fill" id="mc-xp-fill" style="width:0%"></div>
+            </div>
+            <span class="mc-xp-next" id="mc-xp-next">0 XP</span>
+        </div>
+        <!-- Welcome back bonus banner -->
+        <div id="mc-welcome-back" class="mc-welcome-back" style="display:none"></div>
     </div>
+
+    <!-- ── Engagement row: Lucky Jar + 7-Day Calendar + Streak Shield ── -->
+    <div class="mc-engage-strip">
+        <!-- Lucky Jar -->
+        <div class="mc-jar-wrap" id="mc-jar-wrap">
+            <div class="mc-jar-btn" id="mc-jar-btn">🫙</div>
+            <div class="mc-jar-label" id="mc-jar-label">Lucky Jar</div>
+        </div>
+        <!-- 7-Day Login Calendar -->
+        <div class="mc-calendar" id="mc-calendar"></div>
+        <!-- Streak Shield -->
+        <div class="mc-shield-wrap" id="mc-shield-wrap" style="display:none">
+            <button class="mc-shield-btn" id="mc-shield-btn">🛡️ Shield Streak</button>
+        </div>
+    </div>
+
     <div class="mc-buttons">
         <button class="mc-btn slash-btn" id="launchSlashBtn">
             <span class="mc-icon">⚔️</span>
@@ -236,20 +265,28 @@
 <script src="js/slashGame.js"></script>
 <script src="js/game.js"></script>
 <script src="js/parentDashboard.js"></script>
+<script src="js/engagementEngine.js"></script>
 <script>
 // ── Button event listeners (replaces inline onclick attributes) ──
 document.addEventListener('DOMContentLoaded', function() {
-  // Init parent dashboard (defers until _progressTracker is ready)
+  // Init parent dashboard + engagement engine (both defer until _progressTracker is ready)
   initParentDashboard();
+  initEngagementEngine();
   // Mode chooser
   document.getElementById('launchSlashBtn')?.addEventListener('click', () => launchSlashGame());
   document.getElementById('launchFlappyBtn')?.addEventListener('click', () => launchFlappyGame());
   // Slash game controls
-  document.getElementById('slashExitBtn')?.addEventListener('click', () => exitSlash());
+  document.getElementById('slashExitBtn')?.addEventListener('click', () => {
+    exitSlash();
+    if (window._engagementEngine) window._engagementEngine.refresh();
+  });
   document.getElementById('slashFsBtn')?.addEventListener('click', () => toggleFullscreen('slashWrapper'));
   document.getElementById('slashPauseBtn')?.addEventListener('click', () => _slashPause());
   // Flappy game controls
-  document.getElementById('flappyBackBtn')?.addEventListener('click', () => exitFlappy());
+  document.getElementById('flappyBackBtn')?.addEventListener('click', () => {
+    exitFlappy();
+    if (window._engagementEngine) window._engagementEngine.refresh();
+  });
   document.getElementById('flappyFsBtn')?.addEventListener('click', () => toggleFullscreen('flappyWrapper'));
 });
 

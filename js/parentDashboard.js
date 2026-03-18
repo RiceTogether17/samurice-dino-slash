@@ -34,6 +34,8 @@ class ParentDashboard {
   hide() {
     this._el.classList.remove('active');
     document.getElementById('modeChooser').classList.add('active');
+    // Refresh engagement strip so rice/level are up-to-date when returning home
+    if (window._engagementEngine) window._engagementEngine.refresh();
   }
 
   // ── Home-screen engagement strip ─────────────────────────
