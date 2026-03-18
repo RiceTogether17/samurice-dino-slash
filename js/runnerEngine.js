@@ -2804,7 +2804,9 @@ class EndlessRunnerEngine {
     this._worldX   = 0;  // how far we've scrolled (world units)
     this._distM    = 0;  // distance in meters (worldX / 60)
     this._lastMilestoneM = 0;  // last milestone distance awarded
-    this._milestoneBanner = null; // { text, life }
+    this._milestoneBanner = null; // { text, life, color, tier }
+    this._flashOverlay = null;    // { color, alpha } — full-screen color flash for big moments
+    this._jackpotClusterHits = {}; // clusterId → collected count
     this._speed    = E_BASE_SPEED;
     this._age      = 0;
 
@@ -3049,6 +3051,8 @@ class EndlessRunnerEngine {
     if (Math.random() < 0.07) {
       const jx = x + E_CHUNK_W * 0.5;
       const jy = this.groundY - 55;
+      // Unique cluster ID so we can detect when player clears the whole ring
+      const clusterId = `jk_${this._age}_${Math.random().toString(36).slice(2, 6)}`;
       for (let i = 0; i < 8; i++) {
         const angle = (i / 8) * Math.PI * 2;
         const radius = 22;
@@ -3058,7 +3062,8 @@ class EndlessRunnerEngine {
           12, // bigger radius = visually distinct
           angle,
         );
-        g._jackpot = true; // flagged for 3x value on collect
+        g._jackpot = true;       // flagged for 3x value on collect
+        g._clusterId = clusterId; // cluster membership for fanfare
         this._grains.push(g);
       }
     }
@@ -3149,7 +3154,8 @@ class EndlessRunnerEngine {
     g.r = r;
     g.collected = false;
     g.wobble   = wobble;
-    g._jackpot = false; // reset on pool reuse
+    g._jackpot = false;     // reset on pool reuse
+    g._clusterId = null;    // reset cluster membership
     return g;
   }
 
@@ -3212,7 +3218,13 @@ class EndlessRunnerEngine {
     const nextGrains = [];
     for (const g of this._grains) {
       if (!g.collected && g.screenX > margin) nextGrains.push(g);
-      else this._releaseGrain(g);
+      else {
+        // Clean up cluster hit counts for culled jackpot grains
+        if (g._jackpot && g._clusterId && this._jackpotClusterHits[g._clusterId] !== undefined) {
+          delete this._jackpotClusterHits[g._clusterId];
+        }
+        this._releaseGrain(g);
+      }
     }
     this._grains = nextGrains;
 
@@ -3361,29 +3373,51 @@ class EndlessRunnerEngine {
     // ── Distance milestones — escalating jackpots, not flat trickle ────────
     // Bigger milestones = dramatically bigger rewards to create "one more run" hooks
     const _milestoneData = [
-      { m:  250, grains:  8,  label:'🌾 250m!' },
-      { m:  500, grains: 20,  label:'⭐ 500m BONUS!' },
-      { m:  750, grains: 35,  label:'🔥 750m!!' },
-      { m: 1000, grains: 60,  label:'💥 1000m JACKPOT!' },
-      { m: 1500, grains: 100, label:'🏆 1500m LEGEND!!' },
-      { m: 2000, grains: 160, label:'🌟 2000m MASTER!!!' },
-      { m: 3000, grains: 250, label:'👑 3000m GOD RUN!!!!' },
+      { m:  250, grains:  8,  label:'250m!',           tier: 0, color: '#CD9B46' },
+      { m:  500, grains: 20,  label:'500m BONUS!',      tier: 1, color: '#C8D0E0' },
+      { m:  750, grains: 35,  label:'750m!!',            tier: 1, color: '#FFD700' },
+      { m: 1000, grains: 60,  label:'1000m JACKPOT!',   tier: 2, color: '#FF9800' },
+      { m: 1500, grains: 100, label:'1500m LEGEND!!',   tier: 3, color: '#FF4444' },
+      { m: 2000, grains: 160, label:'2000m MASTER!!!',  tier: 4, color: '#FF44FF' },
+      { m: 3000, grains: 250, label:'3000m GOD RUN!!!!',tier: 5, color: '#44FFFF' },
     ];
-    for (const { m, grains, label } of _milestoneData) {
+    for (const { m, grains, label, tier, color } of _milestoneData) {
       if (this._distM >= m && this._lastMilestoneM < m) {
         this._lastMilestoneM = m;
         this.progress?.addRiceGrains?.(grains);
         this.score += grains * 120;
         if (this.audio) this.audio.sfxVictory?.();
-        this._milestoneBanner = { text: `${label} +${grains} 🌾`, life: 1.4 };
-        // Extra grain burst at major milestones (1000m+) for visual drama
-        if (m >= 1000) {
-          const cx = this.W / 2, cy = this.groundY - 60;
-          for (let i = 0; i < 12; i++) {
-            this._particles.push(new EndlessParticle(cx + (Math.random()-0.5)*80, cy, {
-              color: '#FFD700', r: 6 + Math.random()*5,
-              vx: (Math.random()-0.5)*5, vy: -3 - Math.random()*3,
-              decay: 0.022, gravity: 0.1,
+        // Milestone banner with tier color + longer life for bigger milestones
+        this._milestoneBanner = { text: `${label}  +${grains} 🌾`, life: 1.6 + tier * 0.12, color, tier };
+        // Screen flash — intensity scales with tier
+        this._flashOverlay = { color, alpha: 0.25 + tier * 0.08 };
+        // Screen shake — scales with tier
+        this._shake = 6 + tier * 5;
+        this._shakeAmt = 3 + tier * 2;
+        // Particle burst — count and drama scale with tier
+        const cx = this.W / 2, cy = this.groundY - 60;
+        const ptCount = 6 + tier * 7;
+        for (let i = 0; i < ptCount; i++) {
+          const angle = (i / ptCount) * Math.PI * 2;
+          this._particles.push(new EndlessParticle(cx + (Math.random()-0.5)*100, cy - Math.random()*60, {
+            color: i % 2 === 0 ? color : '#FFD700',
+            type: i % 3 === 0 ? 'star' : 'circle',
+            r: 5 + Math.random() * (3 + tier * 2),
+            vx: Math.cos(angle) * (2 + tier),
+            vy: -3 - Math.random() * (2 + tier * 0.8),
+            decay: 0.018 + Math.random() * 0.01,
+            gravity: 0.08,
+          }));
+        }
+        // Extra ring-burst at epic milestones (1500m+)
+        if (tier >= 3) {
+          for (let i = 0; i < 18; i++) {
+            const a = (i / 18) * Math.PI * 2;
+            this._particles.push(new EndlessParticle(cx, cy, {
+              color, type: 'star', r: 4 + Math.random() * 4,
+              vx: Math.cos(a) * (4 + tier * 1.5),
+              vy: Math.sin(a) * (4 + tier * 1.5),
+              decay: 0.025, gravity: 0,
             }));
           }
         }
@@ -3409,6 +3443,12 @@ class EndlessRunnerEngine {
 
     // Screen shake
     if (this._shake > 0) this._shake -= dtScale;
+
+    // Flash overlay decay
+    if (this._flashOverlay) {
+      this._flashOverlay.alpha -= 0.04 * dtScale;
+      if (this._flashOverlay.alpha <= 0) this._flashOverlay = null;
+    }
 
     // Zone flash
     if (this._zoneFlash > 0) this._zoneFlash -= dtScale;
@@ -3479,11 +3519,42 @@ class EndlessRunnerEngine {
         const ptSize  = isJackpot ? 9 : 5;
         this._particles.push(new EndlessParticle(g.screenX, g.y, { color: ptColor, type:'star', r: ptSize, vy:-3, decay:0.045 }));
         if (isJackpot) {
-          // Extra fanfare: floating text and extra particles
+          // Extra fanfare: floating text and extra particles per grain
           this._particles.push(new EndlessParticle(g.screenX, g.y - 20, {
             type: 'text', text: '🌾×3', color: '#FF9800',
-            r: 7, vx: 0, vy: -2, decay: 0.02, gravity: 0,
+            r: 8, vx: (Math.random()-0.5)*1.5, vy: -2.2, decay: 0.018, gravity: 0,
           }));
+          for (let i = 0; i < 5; i++) {
+            this._particles.push(new EndlessParticle(g.screenX, g.y, {
+              color: '#FF9800', type: 'star', r: 4 + Math.random()*4,
+              vx: (Math.random()-0.5)*4, vy: -2 - Math.random()*3,
+              decay: 0.03, gravity: 0.06,
+            }));
+          }
+          // Cluster sweep tracking — fire "JACKPOT!" when player clears ≥5 grains
+          if (g._clusterId) {
+            if (!this._jackpotClusterHits[g._clusterId]) this._jackpotClusterHits[g._clusterId] = 0;
+            this._jackpotClusterHits[g._clusterId]++;
+            if (this._jackpotClusterHits[g._clusterId] === 5) {
+              // Full cluster cleared! Big moment
+              delete this._jackpotClusterHits[g._clusterId];
+              this._milestoneBanner = { text: '💰 JACKPOT SWEEP!', life: 2.0, color: '#FF9800', tier: 2 };
+              this._flashOverlay = { color: '#FF9800', alpha: 0.45 };
+              this._shake = 20; this._shakeAmt = 9;
+              if (this.audio) this.audio.sfxVictory?.();
+              const cx = this.W / 2, cy = this.groundY - 80;
+              for (let i = 0; i < 28; i++) {
+                const a = (i / 28) * Math.PI * 2;
+                this._particles.push(new EndlessParticle(cx, cy, {
+                  color: i % 2 === 0 ? '#FF9800' : '#FFD700',
+                  type: 'star', r: 5 + Math.random()*5,
+                  vx: Math.cos(a) * (3 + Math.random()*4),
+                  vy: Math.sin(a) * (3 + Math.random()*4) - 2,
+                  decay: 0.02, gravity: 0,
+                }));
+              }
+            }
+          }
         }
       }
     }
@@ -3731,29 +3802,60 @@ class EndlessRunnerEngine {
       ctx.restore();
     }
 
+    // ── Flash overlay (full-screen tint for big moments) ──────
+    if (this._flashOverlay && this._flashOverlay.alpha > 0) {
+      ctx.save();
+      ctx.globalAlpha = this._flashOverlay.alpha;
+      ctx.fillStyle = this._flashOverlay.color;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+
     // ── Milestone banner ──────────────────────────────────────
     if (this._milestoneBanner) {
       const mb = this._milestoneBanner;
-      mb.life -= 0.018;
+      mb.life -= 0.016;
       if (mb.life <= 0) {
         this._milestoneBanner = null;
       } else {
-        const fadeIn  = Math.min(1, (1 - mb.life) * 8);
-        const fadeOut = mb.life < 0.3 ? mb.life / 0.3 : 1;
-        const alpha   = Math.min(fadeIn, fadeOut);
-        const scale   = 0.6 + 0.5 * Math.min(1, (1 - mb.life) * 6);
-        const fsize   = Math.min(44, W * 0.09);
+        const maxLife = 1.6 + (mb.tier || 0) * 0.12;
+        const elapsed = maxLife - mb.life; // 0 → maxLife
+        // Bounce-pop animation: overshoot then settle
+        // Phase 1 (elapsed 0–0.15): scale 0 → 1.3 (pop in)
+        // Phase 2 (elapsed 0.15–0.3): scale 1.3 → 0.95 (settle)
+        // Phase 3 (elapsed 0.3–end): scale 1.0 hold
+        let scale;
+        if (elapsed < 0.15)      scale = (elapsed / 0.15) * 1.3;
+        else if (elapsed < 0.30) scale = 1.3 - ((elapsed - 0.15) / 0.15) * 0.35;
+        else                     scale = 0.95 + Math.sin(elapsed * 6) * 0.01; // subtle pulse
+        const fadeOut = mb.life < 0.35 ? mb.life / 0.35 : 1;
+        const alpha   = Math.min(1, elapsed * 10) * fadeOut;
+        const fsize   = Math.min(40 + (mb.tier || 0) * 4, W * 0.10);
+        const color   = mb.color || '#FFD700';
+        // Backdrop pill
+        const pillW = fsize * mb.text.length * 0.48 * scale;
+        const pillH = fsize * 1.2 * scale;
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.5;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        ctx.ellipse(W / 2, H * 0.26, pillW * 0.55, pillH * 0.58, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        // Text
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.translate(W / 2, H * 0.25);
+        ctx.translate(W / 2, H * 0.26);
         ctx.scale(scale, scale);
         ctx.font = `900 ${fsize}px "Nunito", "Comic Sans MS", system-ui`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-        ctx.lineWidth = fsize * 0.08;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 20 + (mb.tier || 0) * 10;
+        ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+        ctx.lineWidth = fsize * 0.09;
         ctx.strokeText(mb.text, 0, 0);
-        ctx.fillStyle = '#FFD700';
+        ctx.fillStyle = color;
         ctx.fillText(mb.text, 0, 0);
         ctx.restore();
       }
