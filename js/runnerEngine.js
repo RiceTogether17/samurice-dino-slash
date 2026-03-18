@@ -3002,9 +3002,9 @@ class EndlessRunnerEngine {
     // Always safe at start
     if (dist < 80) { this._spawnSafeChunk(x); return; }
 
-    // Force DinoGate every 5-14 chunks (was 3-8 — was interrupting flow too aggressively)
-    // Fewer gates early = build momentum. Gates stay meaningful at high distance.
-    const gateInterval = Math.max(5, 14 - Math.floor(dist / 350));
+    // DinoGate frequency: starts rare (grace period), ramps as distance grows.
+    // Minimum 7 chunks so at max speed (~14px/f) gates are at least ~6s apart.
+    const gateInterval = Math.max(7, 18 - Math.floor(dist / 350));
     if (this._chunksSinceGate >= gateInterval) {
       this._spawnGateChunk(x);
       this._chunksSinceGate = 0;
@@ -3200,7 +3200,11 @@ class EndlessRunnerEngine {
 
     const nextSpikes = [];
     for (const s of this._spikes) {
-      if (s.screenX + s.w > margin && s.screenX < this.W + 50) nextSpikes.push(s);
+      // Only cull obstacles that have fully scrolled off the LEFT side.
+      // The previous right-side guard (s.screenX < W+50) was culling pre-generated
+      // spikes immediately after spawning them (they start at screenX 700–1800+),
+      // making the endless run feel hazard-free for long stretches.
+      if (s.screenX + s.w > margin) nextSpikes.push(s);
       else this._releaseSpike(s);
     }
     this._spikes = nextSpikes;
@@ -3430,8 +3434,10 @@ class EndlessRunnerEngine {
   _updatePtero() {
     const a = this._age;
     for (const p of this._pterodactyls) {
-      p.y = p._baseY + Math.sin(a * 0.04 + p.phase) * p.amplitude;
+      // Must capture _baseY BEFORE computing new y — otherwise first frame
+      // uses undefined and the ptero's position becomes NaN permanently.
       if (p._baseY === undefined) p._baseY = p.y;
+      p.y = p._baseY + Math.sin(a * 0.04 + p.phase) * p.amplitude;
     }
   }
 
