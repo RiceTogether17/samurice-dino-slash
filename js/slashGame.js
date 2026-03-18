@@ -139,6 +139,7 @@ class SlashGame {
     this._age = 0;
     this._transFrames = 0;
     this._transMsg = '';
+    this._stateEntryFade = 1.0;  // start with fade-in from title
     this._stageStartedAt = 0;
     this._lastRunnerHp = null;
     this._stageWinMastery = null;
@@ -540,7 +541,7 @@ class SlashGame {
     }
     // Title screen: any click advances
     if (this.state === 'title') {
-      this.state = 'mode-select'; return;
+      this.state = 'mode-select'; this._stateEntryFade = 1.0; return;
     }
     // Mode select: handled by _clickModeSelect
     if (this.state === 'mode-select') {
@@ -631,6 +632,7 @@ class SlashGame {
   _launchStage(id) {
     if (!this.progress.isUnlocked(id)) return;
     this.stageId = id;
+    this._stateEntryFade = 1.0;
     this.overlay.classList.add('hidden');
     this.audio.preloadStage(id);
     this._stageStartedAt = Date.now();
@@ -806,18 +808,23 @@ class SlashGame {
     // Start stage music
     this.audio.startMusic(this.stageId);
     this.state = 'runner';
+    // Nintendo 3-2-1 countdown — player needs a moment to orient
+    this._runnerCountdownAge = 0;
   }
   // ── TRANSITION ───────────────────────────────────────────────
-  _startTransition(msg, callback, duration = 120) {
+  _startTransition(msg, callback, duration = 120, showBoss = false) {
     this.state = 'transition';
     this._transMsg = msg;
     this._transFrames = duration;
+    this._transDuration = duration;               // for normalized progress calc
+    this._transBossStageId = showBoss ? (this.stageId || 0) : 0;  // boss cinematic only when flagged
     this._transCallback = callback;
   }
   // ── BATTLE PHASE ─────────────────────────────────────────────
   _startBattle(collectedPhonemes) {
     if (this.runner) { this.runner.destroy(); this.runner = null; }
     this.audio.stopMusic();
+    this._stateEntryFade = 0.8;
     this.overlay.classList.remove('hidden');
     this.overlay.classList.add('active');
     this.overlay.innerHTML = '';
@@ -882,6 +889,7 @@ class SlashGame {
     if (this._battleResultsDone) return;
     this._battleResultsDone = true;
     this.state = 'stage-win';
+    this._stageWinAge = 0;
     this._resultBtnRects = [];
     this._confetti = Array.from({length: 55}, () => ({
       x: Math.random() * this.W,
@@ -904,6 +912,7 @@ class SlashGame {
     this.overlay.innerHTML = '';
     if (this.battle) { this.battle.destroy(); this.battle = null; }
     this.state = 'stage-lose';
+    this._stageLoseAge = 0;
     this._resultBtnRects = [];
   }
   // ── EXIT ─────────────────────────────────────────────────────
@@ -988,6 +997,12 @@ class SlashGame {
     // Achievement popup on top of everything
     this._drawAchievementPopup();
     if (this._debugOverlay) this._drawDebugOverlay();
+    // Global state-entry fade-in (Nintendo screen polish)
+    if (this._stateEntryFade > 0) {
+      this._stateEntryFade = Math.max(0, this._stateEntryFade - 0.055);
+      this.ctx.fillStyle = `rgba(0,0,0,${this._stateEntryFade})`;
+      this.ctx.fillRect(0, 0, this.W, this.H);
+    }
   }
   _drawDebugOverlay() {
     const ctx = this.ctx;
@@ -1491,16 +1506,20 @@ class SlashGame {
       // Drop shadow
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.beginPath(); ctx.ellipse(n.cx, cy + nodeR + 4, nodeR * 0.7, 6, 0, 0, Math.PI * 2); ctx.fill();
-      // Node circle — glow for selected
+      // Node circle — themed accent color per stage
+      const accent = PHONICS_DATA.stageList[i]?.accentColor || '#FFD700';
       if (sel) {
-        ctx.shadowColor = '#FFD700';
-        ctx.shadowBlur = 22;
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 26;
+      } else if (unlocked) {
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 8;
       }
-      // Ring
-      ctx.strokeStyle = sel ? '#FFD700' : (unlocked ? 'rgba(255,255,255,0.7)' : 'rgba(80,80,80,0.6)');
+      // Ring — use accent color for unlocked nodes
+      ctx.strokeStyle = sel ? accent : (unlocked ? accent + 'CC' : 'rgba(80,80,80,0.6)');
       ctx.lineWidth = sel ? 4 : 2.5;
       ctx.fillStyle = unlocked
-        ? (sel ? `rgba(255,215,0,0.25)` : 'rgba(255,255,255,0.15)')
+        ? (sel ? accent + '44' : accent + '22')
         : 'rgba(0,0,0,0.55)';
       ctx.beginPath(); ctx.arc(n.cx, cy, nodeR, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
@@ -1605,6 +1624,16 @@ class SlashGame {
   _updateRunner() {
     if (!this.runner) return;
     const _dt = this._frameDtSec || (1 / 60);
+
+    // ── Nintendo 3-2-1 GO! countdown before gameplay ─────────
+    if (this._runnerCountdownAge >= 0) {
+      this._runnerCountdownAge++;
+      this.runner.draw();                            // static first frame
+      this._drawRunnerCountdown(this._runnerCountdownAge);
+      if (this._runnerCountdownAge >= 185) this._runnerCountdownAge = -1;
+      return;
+    }
+
     this.runner.update(_dt);
     this.runner.draw();
     this._updateTutorial(_dt);
@@ -1626,9 +1655,10 @@ class SlashGame {
         `🦖 ${PHONICS_DATA.stageList[this.stageId - 1].bossName} appears!\n⚔️ Time to BLEND!${scoreMsg}`,
         () => this._startBattle(coins),
         130,
+        true,  // show boss cinematic
       );
     } else if (this.runner.outcome === 'death') {
-      this._startTransition('💦 Riku fell! Try again!', () => this._startRunner(), 90);
+      this._startTransition('💦 Riku fell! Try again!', () => this._startRunner(), 90, false);
     } else {
       // Timeout: still go to battle with what was collected
       const coins = this.runner.getCollectedPhonemes();
@@ -1639,11 +1669,52 @@ class SlashGame {
         `⏱ Time's up! Boss battle with ${coins.length} phonemes!`,
         () => this._startBattle(coins),
         100,
+        true,  // show boss cinematic
       );
     }
     if (this.runner) { this.runner.destroy(); this.runner = null; }
     this._hideDpad();
   }
+
+  // ── Nintendo 3-2-1 GO! countdown overlay ─────────────────────
+  _drawRunnerCountdown(age) {
+    const ctx = this.ctx;
+    const W = this.W, H = this.H;
+    // 4 phases × 46 frames each: 3 → 2 → 1 → GO!
+    const phase    = Math.floor(age / 46); // 0=3, 1=2, 2=1, 3=GO!
+    const progress = (age % 46) / 46;      // 0→1 within each phase
+    if (phase > 3) return;
+    const labels = ['3', '2', '1', 'GO!'];
+    const colors = ['#FF5252', '#FF9800', '#FFD700', '#69F0AE'];
+    const label = labels[phase];
+    const color = colors[phase];
+    // Scale: 1.8 → 1.0 (pop in then settle), with bounce at end
+    const scaleBase = phase < 3 ? 1.8 - 0.8 * progress : 1.0 + 0.4 * Math.sin(progress * Math.PI);
+    const alpha = progress < 0.8 ? 1 : 1 - (progress - 0.8) / 0.2;
+    const sz = Math.min(W * 0.22, 100);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = Math.max(0, alpha);
+    // Dark backdrop pill
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(W / 2, H / 2, sz * scaleBase * 0.7, sz * scaleBase * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Number / text
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(scaleBase, scaleBase);
+    ctx.font = `900 ${sz}px "Nunito", Arial Black, sans-serif`;
+    ctx.shadowColor = color; ctx.shadowBlur = 24;
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = Math.max(4, sz * 0.09);
+    ctx.strokeText(label, 0, 0);
+    ctx.fillStyle = color;
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+    ctx.restore();
+  }
+
   // ── TRANSITION UPDATE ────────────────────────────────────────
   _updateTransition() {
     this._transFrames--;
@@ -1657,32 +1728,88 @@ class SlashGame {
   _drawTransition() {
     const ctx = this.ctx;
     const W = this.W; const H = this.H;
-    const prog = 1 - this._transFrames / 130;
+    const dur  = this._transDuration || 130;
+    const prog = 1 - this._transFrames / dur;   // 0→1 over the full duration
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(0,0,0,0.88)';
+
+    // ── Background: deep cinematic black ──────────────────────
+    ctx.fillStyle = 'rgba(0,0,0,0.92)';
     ctx.fillRect(0, 0, W, H);
-    // Dramatic slash line
-    if (prog > 0.2 && prog < 0.8) {
-      const sx = -W * 0.1 + W * 1.2 * (prog - 0.2) / 0.6;
-      ctx.strokeStyle = 'rgba(255,215,0,0.6)';
-      ctx.lineWidth = 6 + Math.sin(prog * Math.PI * 4) * 3;
+
+    // ── Boss cinematic: slide boss sprite in from right ────────
+    const bossStageId = this._transBossStageId;
+    const isBossTrans = bossStageId > 0 && bossStageId <= 6;
+    if (isBossTrans) {
+      const stage     = PHONICS_DATA.stageList[bossStageId - 1];
+      const bossKey   = stage?.bossFile;
+      const bossSpr   = bossKey && this.sprites[bossKey];
+      // Red atmospheric glow that builds as boss approaches
+      const glowAlpha = Math.max(0, (prog - 0.1) / 0.5);
+      const accent     = stage?.accentColor || '#FF3300';
+      const glow = ctx.createRadialGradient(W * 0.72, H * 0.42, 0, W * 0.72, H * 0.42, W * 0.55);
+      glow.addColorStop(0,   `${accent}${Math.round(glowAlpha * 0.45 * 255).toString(16).padStart(2,'0')}`);
+      glow.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, W, H);
+
+      if (bossSpr && bossSpr.complete && bossSpr.naturalWidth > 0) {
+        // Slide from off-screen right → right-third of screen
+        const slideStart  = 0.15;
+        const slideEnd    = 0.55;
+        const slideProg   = Math.max(0, Math.min(1, (prog - slideStart) / (slideEnd - slideStart)));
+        const easeOut     = 1 - Math.pow(1 - slideProg, 3);
+        const bossH       = Math.min(H * 0.52, 280);
+        const ar          = bossSpr.naturalWidth / bossSpr.naturalHeight;
+        const bossW       = bossH * ar;
+        const targetX     = W * 0.58;
+        const bossX       = targetX + (W - targetX + bossW) * (1 - easeOut);
+        const bossY       = H * 0.18;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, slideProg * 2);
+        // Red shadow aura
+        ctx.shadowColor = accent; ctx.shadowBlur = 28 * easeOut;
+        ctx.drawImage(bossSpr, bossX - bossW / 2, bossY, bossW, bossH);
+        ctx.restore();
+      }
+
+      // Menacing eye glow before boss arrives (prog 0.05–0.2)
+      if (prog > 0.05 && prog < 0.30) {
+        const eyeAlpha = Math.min(1, (prog - 0.05) / 0.1) * (1 - Math.max(0, (prog - 0.20) / 0.10));
+        ctx.save();
+        ctx.globalAlpha = eyeAlpha * 0.9;
+        ctx.font = `${Math.min(W * 0.12, 55)}px serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('👁️', W * 0.75, H * 0.38);
+        ctx.fillText('👁️', W * 0.72 - Math.min(W * 0.055, 28), H * 0.38);
+        ctx.restore();
+      }
+    }
+
+    // ── Dramatic slash line sweeps across ─────────────────────
+    if (prog > 0.18 && prog < 0.82) {
+      const sx = -W * 0.1 + W * 1.2 * (prog - 0.18) / 0.64;
+      ctx.strokeStyle = 'rgba(255,215,0,0.55)';
+      ctx.lineWidth = 5 + Math.sin(prog * Math.PI * 4) * 3;
       ctx.beginPath();
-      ctx.moveTo(sx - 60, 0); ctx.lineTo(sx + 60, H);
+      ctx.moveTo(sx - 55, 0); ctx.lineTo(sx + 55, H);
       ctx.stroke();
     }
-    // Message
-    const alpha = Math.min(1, Math.min(prog * 3, (1 - prog) * 3));
+
+    // ── Message text ──────────────────────────────────────────
+    const alpha = Math.min(1, Math.min(prog * 4, (1 - prog) * 4));
     ctx.save();
     ctx.globalAlpha = alpha;
     const lines = this._transMsg.split('\n');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 16;
+    // Shift text left when boss is on the right
+    const textX = isBossTrans ? W * 0.38 : W / 2;
+    ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 18;
     lines.forEach((line, i) => {
-      const size = i === 0 ? Math.min(28, W * 0.06) : Math.min(20, W * 0.04);
+      const size = i === 0 ? Math.min(28, W * 0.062) : Math.min(20, W * 0.044);
       ctx.font = `bold ${size}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = i === 0 ? '#FFD700' : '#fff';
-      ctx.fillText(line, W / 2, H / 2 + (i - (lines.length - 1) / 2) * (size + 10));
+      ctx.fillText(line, textX, H / 2 + (i - (lines.length - 1) / 2) * (size + 10));
     });
     ctx.restore();
   }
@@ -1875,6 +2002,8 @@ class SlashGame {
     const ctx = this.ctx;
     const W = this.W; const H = this.H;
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
+    this._stageWinAge = (this._stageWinAge || 0) + 1;
+    const t = this._stageWinAge;
     ctx.clearRect(0, 0, W, H);
     // Golden sky
     const grad = ctx.createLinearGradient(0, 0, 0, H);
@@ -1905,27 +2034,63 @@ class SlashGame {
         ctx.restore();
       }
     }
-    // Panel
+    // Panel slides down from above (ease-out over 28 frames)
+    const panelSlide = Math.min(1, t / 28);
+    const panelEase  = 1 - Math.pow(1 - panelSlide, 3);
     const pw = Math.min(360, W - 40);
     const ph = 396;
     const px = (W - pw) / 2;
-    const py = (H - ph) / 2;
+    const pyTarget = (H - ph) / 2;
+    const py = pyTarget - (1 - panelEase) * (pyTarget + ph * 0.5);
+    ctx.save();
+    ctx.globalAlpha = panelEase;
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 22); ctx.fill();
     ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = panelEase;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.font = `bold ${Math.min(28, W * 0.062)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
+    ctx.shadowColor = '#FF8C00'; ctx.shadowBlur = 14;
     ctx.fillText('🎉 VICTORY!', W / 2, py + 20);
+    ctx.shadowBlur = 0;
     ctx.font = `bold 16px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
     ctx.fillText(`Stage ${this.stageId}: ${stage.name}`, W / 2, py + 66);
-    // Stars earned
+    ctx.restore();
+
+    // Stars fly in one-by-one (staggered, scale bounce)
     const stars = this.progress.getStars(this.stageId);
-    ctx.font = '36px serif';
+    const starDelay = [30, 44, 58]; // frame when each star arrives
     for (let s = 0; s < 3; s++) {
-      ctx.globalAlpha = s < stars ? 1 : 0.2;
-      ctx.fillText('⭐', W / 2 - 52 + s * 52, py + 98);
+      const starAge = Math.max(0, t - starDelay[s]);
+      const starProg = Math.min(1, starAge / 14);
+      // Scale: 0 → 1.5 → 1.0 (pop then settle)
+      const scl = starProg < 0.6 ? starProg / 0.6 * 1.5 : 1.5 - (starProg - 0.6) / 0.4 * 0.5;
+      const earned = s < stars;
+      const alpha = earned ? Math.min(1, starAge / 8) : 0.2;
+      if (starAge === 0) continue; // not yet revealed
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      const sx = W / 2 - 52 + s * 52;
+      const sy = py + 98;
+      ctx.translate(sx, sy);
+      ctx.scale(scl, scl);
+      if (earned && scl > 1.2) {
+        // Glow burst on pop
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 28);
+        glow.addColorStop(0, 'rgba(255,220,0,0.7)');
+        glow.addColorStop(1, 'rgba(255,220,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(0, 0, 28, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.font = '36px serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('⭐', 0, 0);
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
     ctx.font = '13px system-ui';
@@ -1962,18 +2127,18 @@ class SlashGame {
     }
     // Buttons
     this._resultBtnRects = [
-      { label: '▶ Next Stage', x: W/2 - 100, y: py + 276, w: 200, h: 40,
+      { label: '▶ Next Stage', primary: true, x: W/2 - 100, y: py + 276, w: 200, h: 40,
         action: () => {
           if (this.stageId < 6 && this.progress.isUnlocked(this.stageId + 1)) {
             this.stageId++;
             this._launchStage(this.stageId);
           } else {
-            this.state = 'world-map';
+            this.state = 'world-map'; this._stateEntryFade = 1.0;
           }
         }
       },
-      { label: '🗺 World Map', x: W/2 - 80, y: py + 328, w: 160, h: 36,
-        action: () => { this.state = 'world-map'; }
+      { label: '🗺 World Map', primary: false, x: W/2 - 80, y: py + 328, w: 160, h: 36,
+        action: () => { this.state = 'world-map'; this._stateEntryFade = 1.0; }
       },
     ];
     this._drawResultButtons(ctx);
@@ -1983,43 +2148,102 @@ class SlashGame {
   _drawStageLose() {
     const ctx = this.ctx;
     const W = this.W; const H = this.H;
+    this._stageLoseAge = (this._stageLoseAge || 0) + 1;
+    const t = this._stageLoseAge;
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#1a0505';
+    // Warm amber background — NOT harsh red (Nintendo never shames players)
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#1a0e00');
+    bg.addColorStop(1, '#2a1a00');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
-    const pw = Math.min(340, W - 40);
-    const ph = 280;
+    // Gentle floating rice grains (you still earned some!)
+    for (let i = 0; i < 6; i++) {
+      const gx = ((i * 97 + t * 0.3) % (W + 20)) - 10;
+      const gy = ((t * 0.2 + i * 60) % H);
+      ctx.globalAlpha = 0.08 + 0.05 * Math.sin(t * 0.04 + i);
+      ctx.font = '16px serif'; ctx.textAlign = 'center';
+      ctx.fillText('🌾', gx, gy);
+    }
+    ctx.globalAlpha = 1;
+    // Panel slides up from below
+    const slideIn = Math.min(1, t / 26);
+    const easeOut = 1 - Math.pow(1 - slideIn, 3);
+    const pw = Math.min(360, W - 40);
+    const ph = 320;
     const px = (W - pw) / 2;
-    const py = (H - ph) / 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
-    ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 20); ctx.fill();
-    ctx.strokeStyle = '#F44336'; ctx.lineWidth = 2; ctx.stroke();
+    const pyTarget = (H - ph) / 2;
+    const py = pyTarget + (1 - easeOut) * 60;
+    ctx.save();
+    ctx.globalAlpha = easeOut;
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 22); ctx.fill();
+    // Warm amber border (not scary red)
+    ctx.strokeStyle = '#FF9800'; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.restore();
+    // Riku — still looking determined (not hurt!)
+    const rikuSpr = this.sprites['riku-idle'] || this.sprites['riku-run'];
+    const rikuH = Math.round(ph * 0.26);
+    const bob = Math.sin(t * 0.07) * 4;
+    if (rikuSpr && rikuSpr.complete && rikuSpr.naturalWidth > 0) {
+      const ar = rikuSpr.naturalWidth / rikuSpr.naturalHeight;
+      const rW = rikuH * ar;
+      ctx.save(); ctx.globalAlpha = easeOut;
+      ctx.drawImage(rikuSpr, W / 2 - rW / 2, py + 12 + bob, rW, rikuH);
+      ctx.restore();
+    }
+    // Encouraging headline
+    ctx.save();
+    ctx.globalAlpha = easeOut;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(26, W * 0.058)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FF5252';
-    ctx.fillText('💦 Rice Spilled…', W / 2, py + 22);
-    ctx.font = '15px "Nunito", "Comic Sans MS", system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText("Riku needs more practice!", W / 2, py + 72);
-    ctx.fillText("Collect more phoneme coins in the runner", W / 2, py + 96);
-    ctx.fillText("to get more tiles for blending!", W / 2, py + 116);
+    ctx.font = `bold ${Math.min(24, W * 0.055)}px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFD700';
+    ctx.shadowColor = '#FF8C00'; ctx.shadowBlur = 10;
+    ctx.fillText('💪 So Close!', W / 2, py + rikuH + 22);
+    ctx.shadowBlur = 0;
+    // Warm coaching message
+    const stage = PHONICS_DATA.stageList[this.stageId - 1];
+    ctx.font = `bold ${Math.min(15, W * 0.036)}px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFE082';
+    ctx.fillText("Riku is ready to try again!", W / 2, py + rikuH + 58);
+    ctx.font = `${Math.min(13, W * 0.031)}px "Nunito", system-ui`;
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    const pattern = stage?.pattern || 'phonics';
+    ctx.fillText(`Tip: collect as many coins as you can`, W / 2, py + rikuH + 82);
+    ctx.fillText(`to get more "${pattern}" tiles in the battle!`, W / 2, py + rikuH + 100);
+    ctx.restore();
     this._resultBtnRects = [
-      { label: '🔄 Try Again', x: W/2 - 90, y: py + 158, w: 180, h: 42,
-        action: () => this._launchStage(this.stageId) },
-      { label: '🗺 World Map', x: W/2 - 70, y: py + 214, w: 140, h: 36,
-        action: () => { this.state = 'world-map'; } },
+      { label: '🔄 Try Again', primary: true, x: W/2 - 100, y: py + ph - 118, w: 200, h: 46,
+        action: () => { this._stageLoseAge = 0; this._launchStage(this.stageId); } },
+      { label: '🗺 World Map', primary: false, x: W/2 - 75, y: py + ph - 60, w: 150, h: 36,
+        action: () => { this._stageLoseAge = 0; this.state = 'world-map'; } },
     ];
     this._drawResultButtons(ctx);
     ctx.textBaseline = 'alphabetic';
   }
   _drawResultButtons(ctx) {
-    this._resultBtnRects.forEach(btn => {
+    this._resultBtnRects.forEach((btn, idx) => {
+      const isPrimary = btn.primary !== undefined ? btn.primary : idx === 0;
       // Shadow
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
       ctx.beginPath(); ctx.roundRect(btn.x + 2, btn.y + 3, btn.w, btn.h, 10); ctx.fill();
-      // Button
-      ctx.fillStyle = '#ff4500';
-      ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10); ctx.fill();
-      ctx.strokeStyle = '#ff6633'; ctx.lineWidth = 1.5; ctx.stroke();
+      // Primary = vivid green with glow; secondary = muted slate
+      if (isPrimary) {
+        const g = ctx.createLinearGradient(btn.x, btn.y, btn.x, btn.y + btn.h);
+        g.addColorStop(0, '#43A047');
+        g.addColorStop(1, '#2E7D32');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10); ctx.fill();
+        ctx.strokeStyle = '#76FF03'; ctx.lineWidth = 2;
+        ctx.shadowColor = '#00FF88'; ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      } else {
+        ctx.fillStyle = 'rgba(80,90,100,0.75)';
+        ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10); ctx.fill();
+        ctx.strokeStyle = 'rgba(180,190,200,0.4)'; ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
       // Label
       ctx.fillStyle = '#fff';
       ctx.font = `bold ${Math.min(14, btn.w * 0.08)}px "Nunito", "Comic Sans MS", system-ui`;
@@ -2272,14 +2496,14 @@ class SlashGame {
     const rects = this._modeSelectRects || [];
     for (const r of rects) {
       if (mx >= r.x && mx <= r.x+r.w && my >= r.y && my <= r.y+r.h) {
-        if (r.action === 'endless') { this._startEndlessRunner(); }
-        if (r.action === 'campaign') { this.state = 'world-map'; }
-        if (r.action === 'daily') { this._startDaily(); }
-        if (r.action === 'shop') { this._startShop(); }
-        if (r.action === 'leaderboard') { this.state = 'leaderboard'; }
-        if (r.action === 'achievements') { this.state = 'achievements'; }
-        if (r.action === 'dashboard')    { this.state = 'dashboard'; this._dashScroll = 0; }  // Phase 9
-        if (r.action === 'back') { this.state = 'title'; }
+        if (r.action === 'endless') { this._startEndlessRunner(); this._stateEntryFade = 1.0; }
+        if (r.action === 'campaign') { this.state = 'world-map'; this._stateEntryFade = 1.0; }
+        if (r.action === 'daily') { this._startDaily(); this._stateEntryFade = 1.0; }
+        if (r.action === 'shop') { this._startShop(); this._stateEntryFade = 1.0; }
+        if (r.action === 'leaderboard') { this.state = 'leaderboard'; this._stateEntryFade = 1.0; }
+        if (r.action === 'achievements') { this.state = 'achievements'; this._stateEntryFade = 1.0; }
+        if (r.action === 'dashboard')    { this.state = 'dashboard'; this._dashScroll = 0; this._stateEntryFade = 1.0; }  // Phase 9
+        if (r.action === 'back') { this.state = 'title'; this._stateEntryFade = 1.0; }
         return;
       }
     }
