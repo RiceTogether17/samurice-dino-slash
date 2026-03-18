@@ -3002,8 +3002,9 @@ class EndlessRunnerEngine {
     // Always safe at start
     if (dist < 80) { this._spawnSafeChunk(x); return; }
 
-    // Force DinoGate every 4-8 chunks
-    const gateInterval = Math.max(3, 8 - Math.floor(dist / 300));
+    // Force DinoGate every 5-14 chunks (was 3-8 — was interrupting flow too aggressively)
+    // Fewer gates early = build momentum. Gates stay meaningful at high distance.
+    const gateInterval = Math.max(5, 14 - Math.floor(dist / 350));
     if (this._chunksSinceGate >= gateInterval) {
       this._spawnGateChunk(x);
       this._chunksSinceGate = 0;
@@ -3042,6 +3043,25 @@ class EndlessRunnerEngine {
       const gy = this.groundY - 30 - Math.random() * 60;
       this._grains.push(this._acquireGrain(gx, gy, 8, Math.random() * Math.PI * 2));
     }
+
+    // Rare jackpot grain cluster (7% chance) — a tight star of 8 grains worth 3x each
+    // Variable-ratio reward: keeps players running for "the next big one"
+    if (Math.random() < 0.07) {
+      const jx = x + E_CHUNK_W * 0.5;
+      const jy = this.groundY - 55;
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        const radius = 22;
+        const g = this._acquireGrain(
+          jx + Math.cos(angle) * radius,
+          jy + Math.sin(angle) * radius * 0.55,
+          12, // bigger radius = visually distinct
+          angle,
+        );
+        g._jackpot = true; // flagged for 3x value on collect
+        this._grains.push(g);
+      }
+    }
   }
 
   _spawnSafeChunk(x) {
@@ -3064,9 +3084,11 @@ class EndlessRunnerEngine {
   }
 
   _spawnSpikeChunk(x) {
-    // Ground spikes
-    const numSpikes = 1 + Math.floor(Math.random() * 3);
-    const spacing = 45;
+    // Ground spikes — density scales with distance for escalating danger
+    const dist = this._distM;
+    const maxExtra = dist > 1500 ? 4 : dist > 800 ? 3 : dist > 400 ? 2 : 1;
+    const numSpikes = 1 + Math.floor(Math.random() * (maxExtra + 1));
+    const spacing = dist > 1200 ? 40 : 45; // tighter at high distance
     const startX = x + 100 + Math.random() * 100;
     for (let i = 0; i < numSpikes; i++) {
       this._spikes.push(this._acquireSpike(startX + i * spacing, this.groundY - 26, 28, 26, 'spike'));
@@ -3126,7 +3148,8 @@ class EndlessRunnerEngine {
     g.y = y;
     g.r = r;
     g.collected = false;
-    g.wobble = wobble;
+    g.wobble   = wobble;
+    g._jackpot = false; // reset on pool reuse
     return g;
   }
 
@@ -3142,7 +3165,9 @@ class EndlessRunnerEngine {
     s.y = y;
     s.w = w;
     s.h = h;
-    s.type = type;
+    s.type  = type;
+    s.deadly = true;          // FIX: was never set → all obstacle collision was silently skipped
+    s._nearMissGiven = false; // reset per-object near-miss flag on pool reuse
     return s;
   }
 
@@ -3329,19 +3354,38 @@ class EndlessRunnerEngine {
     this._distM   = Math.round(this._worldX / 60);
     this.score   += Math.round(dx * (0.5 + Math.max(0, this._riceScoreMult - 1) * 0.2));
 
-    // ── Distance milestones ──────────────────────────────────
-    const _milestones = [250, 500, 750, 1000, 1500, 2000, 3000];
-    for (const m of _milestones) {
+    // ── Distance milestones — escalating jackpots, not flat trickle ────────
+    // Bigger milestones = dramatically bigger rewards to create "one more run" hooks
+    const _milestoneData = [
+      { m:  250, grains:  8,  label:'🌾 250m!' },
+      { m:  500, grains: 20,  label:'⭐ 500m BONUS!' },
+      { m:  750, grains: 35,  label:'🔥 750m!!' },
+      { m: 1000, grains: 60,  label:'💥 1000m JACKPOT!' },
+      { m: 1500, grains: 100, label:'🏆 1500m LEGEND!!' },
+      { m: 2000, grains: 160, label:'🌟 2000m MASTER!!!' },
+      { m: 3000, grains: 250, label:'👑 3000m GOD RUN!!!!' },
+    ];
+    for (const { m, grains, label } of _milestoneData) {
       if (this._distM >= m && this._lastMilestoneM < m) {
         this._lastMilestoneM = m;
-        const bonus = Math.floor(m / 50);
-        this.progress?.addRiceGrains?.(bonus);
-        this.score += bonus * 100;
+        this.progress?.addRiceGrains?.(grains);
+        this.score += grains * 120;
         if (this.audio) this.audio.sfxVictory?.();
-        this._milestoneBanner = { text: `🏁 ${m}m! +${bonus} 🍚`, life: 1.0 };
+        this._milestoneBanner = { text: `${label} +${grains} 🌾`, life: 1.4 };
+        // Extra grain burst at major milestones (1000m+) for visual drama
+        if (m >= 1000) {
+          const cx = this.W / 2, cy = this.groundY - 60;
+          for (let i = 0; i < 12; i++) {
+            this._particles.push(new EndlessParticle(cx + (Math.random()-0.5)*80, cy, {
+              color: '#FFD700', r: 6 + Math.random()*5,
+              vx: (Math.random()-0.5)*5, vy: -3 - Math.random()*3,
+              decay: 0.022, gravity: 0.1,
+            }));
+          }
+        }
         break;
       }
-    } // distance score
+    } // distance milestones
 
     // Generate new chunks
     if (this._nextChunkX - this._worldX < this.W + E_CHUNK_W) {
@@ -3418,12 +3462,23 @@ class EndlessRunnerEngine {
       const dx = pcx - g.screenX, dy = pcy - g.y;
       if (Math.sqrt(dx*dx+dy*dy) < pw*0.55 + g.r) {
         g.collected = true;
-        this.grains++;
+        const isJackpot = !!g._jackpot;
+        const grainValue = isJackpot ? 3 : 1;  // jackpot grains worth 3x
+        this.grains += grainValue;
         this._riceScoreMult = Math.min(3.5, 1 + this.grains * 0.025);
-        this.score += Math.round(50 * this._riceScoreMult);
-        this.progress?.addRiceGrains?.(1);
+        this.score += Math.round(50 * grainValue * this._riceScoreMult);
+        this.progress?.addRiceGrains?.(grainValue);
         if (this.audio) this.audio.sfxCoin();
-        this._particles.push(new EndlessParticle(g.screenX, g.y, { color:'#FFD700', type:'star', r:5, vy:-3, decay:0.05 }));
+        const ptColor = isJackpot ? '#FF9800' : '#FFD700';
+        const ptSize  = isJackpot ? 9 : 5;
+        this._particles.push(new EndlessParticle(g.screenX, g.y, { color: ptColor, type:'star', r: ptSize, vy:-3, decay:0.045 }));
+        if (isJackpot) {
+          // Extra fanfare: floating text and extra particles
+          this._particles.push(new EndlessParticle(g.screenX, g.y - 20, {
+            type: 'text', text: '🌾×3', color: '#FF9800',
+            r: 7, vx: 0, vy: -2, decay: 0.02, gravity: 0,
+          }));
+        }
       }
     }
 
@@ -3470,6 +3525,28 @@ class EndlessRunnerEngine {
           }
         } else {
           this._takeHit();
+        }
+      }
+    }
+
+    // Near-miss detection — player skims past a spike without touching it
+    // Creates the adrenaline spike that drives "one more run" desire
+    if (this.player.invincible <= 0) {
+      for (const s of this._spikes) {
+        if (!s.deadly || s.type === 'gap' || s._nearMissGiven) continue;
+        // Check: player bounding box passed the spike's right edge within 20px
+        const rightEdge = s.screenX + s.w;
+        const playerLeft = px + 6;
+        const clearX = playerLeft - rightEdge;
+        const vertOverlap = py + ph > s.y + 4 && py < s.y + s.h;
+        if (clearX > 0 && clearX < 20 && vertOverlap) {
+          s._nearMissGiven = true;
+          this.score += 120;
+          this._particles.push(new EndlessParticle(px + pw / 2, py - 10, {
+            type: 'text', text: '⚡ NEAR MISS!', color: '#FFE033',
+            r: 8, vx: 0, vy: -2.2, decay: 0.016, gravity: 0,
+          }));
+          if (this.audio) this.audio.sfxBoost?.();
         }
       }
     }

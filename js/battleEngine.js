@@ -539,9 +539,9 @@ class BattleEngine {
     if (this.state !== 'idle' && this.state !== 'blending') return;
     if (this._usedTileIdx.has(tileIdx)) return;
     if (this.done) return;
-    // Cooldown: prevent rapid wrong-tile taps from stacking damage/skip
+    // Cooldown: prevent accidental double-taps only (was 300ms — too sluggish for fast blenders)
     const now = Date.now();
-    if (now - (this._lastTileClickMs || 0) < 300) return;
+    if (now - (this._lastTileClickMs || 0) < 80) return;
     this._lastTileClickMs = now;
 
     const expected = this._currentWord.phonemes[this._currentBuilt.length];
@@ -833,15 +833,19 @@ class BattleEngine {
     // Mark special as ready at combo 5
     if (this._combo >= 5) this._specialReady = true;
 
-    // Phase 7: combo burst rings radiate from boss at streak milestones
-    if (this._combo === 3 || this._combo === 5) {
-      const ringColor = this._combo >= 5 ? '#FF4081' : '#FFD700';
+    // Combo burst rings — more milestones, escalating drama
+    const comboMilestones = [3, 5, 8, 12, 20];
+    if (comboMilestones.includes(this._combo)) {
+      const ringColor = this._combo >= 12 ? '#FF00FF'  // legendary: magenta
+                      : this._combo >= 8  ? '#FF4081'  // hot: pink
+                      : this._combo >= 5  ? '#FF8C00'  // fire: orange
+                      :                    '#FFD700';  // starter: gold
+      const ringCount = this._combo >= 12 ? 5 : this._combo >= 8 ? 4 : this._combo >= 5 ? 3 : 2;
       const ringX = Math.round(this.W * 0.72);
       const ringY = Math.round(this.H * 0.58 * 0.50);
-      for (let r = 0; r < (this._combo >= 5 ? 3 : 2); r++) {
-        // Stagger rings slightly so they visually separate
+      for (let r = 0; r < ringCount; r++) {
         const ring = new ComboRing(ringX, ringY, ringColor);
-        ring.radius = 20 + r * 18;  // pre-offset so rings don't stack identically
+        ring.radius = 20 + r * 22;
         this._comboRings.push(ring);
       }
     }
