@@ -313,7 +313,11 @@ class AudioManager {
   sfxWallJump()    { this._tone(380,'triangle',0.10,0.30); this._tone(560,'sine',0.08,0.22,0.06); haptic('jump'); }
   sfxStarPower()   { [523,659,784,880,1047,1319].forEach((f,i) => this._tone(f,'sine',0.10,0.30,i*0.055)); haptic('victory'); }
   sfxSpring()      { this._tone(280,'sine',0.04,0.35); this._tone(540,'sine',0.07,0.30,0.05); this._tone(820,'sine',0.08,0.25,0.09); haptic('jump'); }
-  sfxCheckpoint()  { [523,659,784].forEach((f,i) => this._tone(f,'sine',0.14,0.32,i*0.09)); }
+  sfxCheckpoint()  { if (!this._playBuffer('sfx/checkpoint')) { [523,659,784].forEach((f,i) => this._tone(f,'sine',0.14,0.32,i*0.09)); } haptic('tap'); }
+  sfxOneUp()       { [523,659,784,1047,784,880,1047].forEach((f,i) => this._tone(f,'triangle',0.10,0.22,i*0.07)); haptic('victory'); }
+  sfxShellKick()   { this._tone(340,'square',0.12,0.35); this._tone(500,'sine',0.08,0.22,0.06); haptic('stomp'); }
+  sfxSpinyHit()    { this._tone(180,'sawtooth',0.15,0.40); this._tone(120,'square',0.10,0.30,0.08); haptic('hurt'); }
+  sfxBombExplode() { [80,120,160,200].forEach((f,i) => this._tone(f,'sawtooth',0.18,0.5,i*0.04)); haptic('groundPound'); }
 
   // ── NEW: Combo / power-up / achievement SFX ──────────────────
   sfxCombo(streak) {
@@ -496,25 +500,56 @@ class MusicPlayer {
   _scheduleBeat(t) {
     const { scale, melody, bass, drums, rootHz, bpm } = this._cfg;
     const bi      = this._beatIdx;
-    const beatSec = 60 / bpm;
+    const beatSec = 60 / (bpm * (this._bpmMult || 1));
 
-    // ── Melody (square wave, one octave above root) ──────────
+    // ── Melody lead (square wave, bright chiptune) ────────────
     const mNote = melody[bi] % scale.length;
     const mHz   = rootHz * 2 * Math.pow(2, scale[mNote] / 12);
-    this._playNote(mHz, 'square', beatSec * 0.40, 0.08, t);
+    this._playNote(mHz, 'square', beatSec * 0.38, 0.08, t);
 
-    // ── Bass (triangle, one octave below root, every quarter note) ──
+    // ── Harmony (3rd above melody, soft triangle) ─────────────
+    if (bi % 2 === 0) {
+      const harmNote = (mNote + 2) % scale.length;
+      const harmHz   = rootHz * 2 * Math.pow(2, scale[harmNote] / 12);
+      this._playNote(harmHz, 'triangle', beatSec * 0.36, 0.038, t);
+    }
+
+    // ── Bass line (triangle, quarter-note movement) ────────────
     if (bi % 2 === 0) {
       const bIdx = Math.floor(bi / 2) % bass.length;
       const bHz  = rootHz * 0.5 * Math.pow(2, scale[bass[bIdx] % scale.length] / 12);
-      this._playNote(bHz, 'triangle', beatSec * 0.85, 0.13, t);
+      this._playNote(bHz, 'triangle', beatSec * 0.82, 0.13, t);
+      // Sub-bass doubling for warmth
+      this._playNote(bHz * 0.5, 'sine', beatSec * 0.65, 0.055, t);
     }
 
-    // ── Drums ────────────────────────────────────────────────
+    // ── Arpeggio flourish on bars 1 and 3 (beats 0 and 8) ─────
+    if (bi === 0 || bi === 8) {
+      [0, 2, 4, 2].forEach((offset, i) => {
+        const ni  = (mNote + offset) % scale.length;
+        const ahz = rootHz * 4 * Math.pow(2, scale[ni] / 12);
+        this._playNote(ahz, 'sine', beatSec * 0.20, 0.032, t + i * beatSec * 0.22);
+      });
+    }
+
+    // ── Chord stab every 4 beats ──────────────────────────────
+    if (bi % 4 === 0) {
+      const rootIdxForBass = bass[Math.floor(bi / 2) % bass.length] % scale.length;
+      const chordRoot  = rootHz * Math.pow(2, scale[rootIdxForBass] / 12);
+      const chordFifth = chordRoot * Math.pow(2, 7 / 12);
+      this._playNote(chordRoot,  'sine', beatSec * 1.55, 0.022, t);
+      this._playNote(chordFifth, 'sine', beatSec * 1.55, 0.016, t);
+    }
+
+    // ── Drums ─────────────────────────────────────────────────
     if (drums[bi]) {
       const type = (bi === 0 || bi === 8)  ? 'kick'  :
                    (bi === 4 || bi === 12) ? 'snare' : 'hihat';
       this._playDrum(type, t);
+    }
+    // Off-beat hi-hat for groove
+    if (bi % 2 === 1 && bi !== 4 && bi !== 12) {
+      this._playDrum('hihat', t);
     }
   }
 

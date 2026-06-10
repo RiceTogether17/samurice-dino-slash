@@ -1404,218 +1404,358 @@ class SlashGame {
     const H = this.H;
     const t = this._mapAnim;
     ctx.clearRect(0, 0, W, H);
-    // ── Scenic world map background ──────────────────────────────
-    // Sky gradient
-    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.65);
-    sky.addColorStop(0, '#0a1e6e');
-    sky.addColorStop(0.5, '#1a6bb5');
-    sky.addColorStop(1, '#4eb34e');
+
+    // ── Rich scenic overworld sky ─────────────────────────────
+    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.55);
+    sky.addColorStop(0, '#0a1e8a');
+    sky.addColorStop(0.35, '#1565C0');
+    sky.addColorStop(0.70, '#42A5F5');
+    sky.addColorStop(1, '#80DEEA');
     ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, W, H);
-    // Ground area
-    const gnd = ctx.createLinearGradient(0, H * 0.60, 0, H);
-    gnd.addColorStop(0, '#3d8c2a');
-    gnd.addColorStop(1, '#1b5e20');
-    ctx.fillStyle = gnd;
-    ctx.fillRect(0, H * 0.60, W, H * 0.40);
-    // Animated clouds
-    [{ cx: 0.15, cy: 0.12, r: 0.07 }, { cx: 0.50, cy: 0.08, r: 0.09 },
-     { cx: 0.80, cy: 0.14, r: 0.06 }].forEach((c, i) => {
-      const ox = ((t * 0.18 + i * 200) % (W + 120)) - 60;
-      const cx = (c.cx * W + ox) % (W + 80) - 40;
-      ctx.fillStyle = 'rgba(255,255,255,0.28)';
-      ctx.beginPath(); ctx.ellipse(cx, c.cy * H, c.r * W, c.r * H * 0.45, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(cx - c.r * W * 0.45, c.cy * H + c.r * H * 0.18, c.r * W * 0.68, c.r * H * 0.38, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(cx + c.r * W * 0.48, c.cy * H + c.r * H * 0.15, c.r * W * 0.62, c.r * H * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(0, 0, W, H * 0.55);
+
+    // Lush overworld ground
+    const groundGrad = ctx.createLinearGradient(0, H * 0.50, 0, H);
+    groundGrad.addColorStop(0, '#558B2F');
+    groundGrad.addColorStop(0.3, '#388E3C');
+    groundGrad.addColorStop(1, '#1B5E20');
+    ctx.fillStyle = groundGrad;
+    ctx.fillRect(0, H * 0.50, W, H * 0.50);
+
+    // ── Far mountain silhouettes ──────────────────────────────
+    ctx.fillStyle = 'rgba(25,50,100,0.32)';
+    ctx.beginPath();
+    ctx.moveTo(0, H * 0.52);
+    [0.05,0.12,0.22,0.35,0.48,0.58,0.68,0.78,0.88,0.96,1.0].forEach((fx, i) => {
+      ctx.lineTo(fx * W, H * 0.52 - H * (0.12 + (i % 3) * 0.055));
     });
-    // ── Title ────────────────────────────────────────────────────
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(22, W * 0.052)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFD700';
-    ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 10;
-    ctx.fillText('🗺 World Map', W / 2, 10);
-    ctx.shadowBlur = 0;
-    // Rice points display
-    ctx.font = `bold 13px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFF176';
-    ctx.fillText(`🍚 ${this.progress.getRicePoints()} Rice Points`, W / 2, 38);
-    // Map/List view toggle hint
-    ctx.font = '11px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.fillText('Press M for list view', W / 2, H - 14);
-    // ── Compute stage node positions in a winding path ───────────
-    // Arrange 6 nodes in a winding S-curve across the map
-    const margin = 58;
-    const mapTop = 68;
-    const mapBot = H - 40;
-    const mapH = mapBot - mapTop;
-    // S-curve path: zig-zag across canvas
-    const nodes = [
-      { fx: 0.15, fy: 0.18 }, // Stage 1 — bottom-left
-      { fx: 0.50, fy: 0.30 }, // Stage 2 — center
-      { fx: 0.82, fy: 0.20 }, // Stage 3 — right
-      { fx: 0.65, fy: 0.52 }, // Stage 4 — center-right
-      { fx: 0.30, fy: 0.65 }, // Stage 5 — center-left
-      { fx: 0.72, fy: 0.80 }, // Stage 6 — right (final boss)
+    ctx.lineTo(W, H * 0.52);
+    ctx.closePath(); ctx.fill();
+
+    // ── Rolling hills ─────────────────────────────────────────
+    ctx.fillStyle = 'rgba(76,130,40,0.62)';
+    ctx.beginPath(); ctx.moveTo(0, H * 0.58);
+    for (let x = 0; x <= W; x += 3) {
+      const hy = H * 0.58 - Math.sin(x / W * Math.PI * 4 + t * 0.004) * H * 0.05
+                           - Math.sin(x / W * Math.PI * 7 - t * 0.003) * H * 0.026;
+      ctx.lineTo(x, hy);
+    }
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+
+    // ── Animated clouds ───────────────────────────────────────
+    [{ cx:0.12, cy:0.10, r:0.055, spd:1.0 },
+     { cx:0.46, cy:0.07, r:0.075, spd:0.7 },
+     { cx:0.76, cy:0.12, r:0.060, spd:0.9 }].forEach((c, i) => {
+      const ox  = ((t * 0.14 * c.spd + i * 200) % (W + c.r * W * 2 + 60)) - c.r * W - 30;
+      const cx2 = ((c.cx * W + ox) % (W + c.r * W * 2 + 60)) - c.r * W;
+      const cy2 = c.cy * H;
+      const rw  = c.r * W; const rh = c.r * H * 0.45;
+      ctx.fillStyle = 'rgba(255,255,255,0.84)';
+      ctx.beginPath(); ctx.ellipse(cx2,       cy2,      rw,        rh,        0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx2 - rw * 0.44, cy2 + rh * 0.22, rw * 0.63, rh * 0.78, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx2 + rw * 0.46, cy2 + rh * 0.18, rw * 0.60, rh * 0.74, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(180,210,255,0.28)';
+      ctx.beginPath(); ctx.ellipse(cx2, cy2 + rh * 0.32, rw * 0.84, rh * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // ── World terrain features ────────────────────────────────
+    // Rice paddy (bottom-left, stage 1 area)
+    const rpY = H * 0.73;
+    ctx.fillStyle = 'rgba(100,185,75,0.50)';
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath(); ctx.ellipse(W * (0.04 + i * 0.055), rpY - i * 4, W * 0.038, H * 0.022, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(30,120,30,0.42)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath(); ctx.moveTo(W * (0.04 + i * 0.055), rpY - i * 4 - 18); ctx.lineTo(W * (0.04 + i * 0.055), rpY - i * 4 - 6); ctx.stroke();
+    }
+    // Bamboo grove (stage 2 area, left-center)
+    ctx.strokeStyle = 'rgba(56,142,60,0.52)'; ctx.lineWidth = 5;
+    for (let i = 0; i < 5; i++) {
+      const bx = W * 0.24 + i * 15 + Math.sin(t * 0.016 + i) * 3;
+      ctx.beginPath(); ctx.moveTo(bx, H * 0.82); ctx.lineTo(bx - 4, H * 0.52); ctx.stroke();
+      ctx.strokeStyle = 'rgba(56,142,60,0.32)'; ctx.lineWidth = 1;
+      [0.60, 0.70, 0.76].forEach(fy => {
+        ctx.beginPath(); ctx.moveTo(bx - 3, H * fy); ctx.lineTo(bx + 3, H * fy); ctx.stroke();
+      });
+      ctx.strokeStyle = 'rgba(56,142,60,0.52)'; ctx.lineWidth = 5;
+    }
+    // Cherry blossom tree (stage 3 area, right-center)
+    const cbX = W * 0.76; const cbY = H * 0.42;
+    ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(cbX, H * 0.60); ctx.lineTo(cbX, cbY + 22); ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cbX, cbY + 22); ctx.lineTo(cbX - 30, cbY + 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cbX, cbY + 22); ctx.lineTo(cbX + 26, cbY + 8); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,150,180,0.68)';
+    ctx.beginPath(); ctx.arc(cbX, cbY + 6, 38, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,182,193,0.48)';
+    ctx.beginPath(); ctx.arc(cbX - 25, cbY + 16, 24, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cbX + 23, cbY + 13, 22, 0, Math.PI * 2); ctx.fill();
+    for (let p = 0; p < 7; p++) {
+      const px = cbX - 38 + ((p * 68 + t * 0.42) % 84);
+      const py = cbY + 32 + ((p * 41 + t * 0.62) % (H * 0.24));
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = '#FFB7C5';
+      ctx.beginPath(); ctx.ellipse(px, py, 3, 2, (t * 0.05 + p) % Math.PI, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // Ancient ruin pillars (stage 4 area, center)
+    const ruinX = W * 0.52; const ruinY = H * 0.65;
+    ctx.fillStyle = 'rgba(120,100,80,0.52)';
+    ctx.fillRect(ruinX - 22, ruinY - 32, 44, 32);
+    ctx.fillRect(ruinX - 18, ruinY - 44, 12, 14);
+    ctx.fillRect(ruinX + 4,  ruinY - 44, 12, 14);
+    ctx.fillStyle = 'rgba(100,78,58,0.35)';
+    ctx.fillRect(ruinX - 10, ruinY - 26, 18, 18);
+    // Mountain peak (stage 5 area, upper right)
+    ctx.fillStyle = 'rgba(70,90,130,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(W * 0.84, H * 0.28);
+    ctx.lineTo(W * 0.96, H * 0.52);
+    ctx.lineTo(W * 0.72, H * 0.52);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(240,248,255,0.82)';
+    ctx.beginPath();
+    ctx.moveTo(W * 0.84, H * 0.28);
+    ctx.lineTo(W * 0.90, H * 0.38);
+    ctx.lineTo(W * 0.78, H * 0.38);
+    ctx.closePath(); ctx.fill();
+    // Volcano (stage 6 area, far right)
+    ctx.fillStyle = 'rgba(100,30,10,0.60)';
+    ctx.beginPath();
+    ctx.moveTo(Math.min(W * 0.97, W - 8), H * 0.38);
+    ctx.lineTo(W + 8, H * 0.56);
+    ctx.lineTo(W * 0.88, H * 0.56);
+    ctx.closePath(); ctx.fill();
+    const lavaR = 80 + Math.sin(t * 0.08) * 40;
+    ctx.fillStyle = `rgba(255,${lavaR},0,0.60)`;
+    ctx.beginPath(); ctx.ellipse(Math.min(W * 0.97, W - 8), H * 0.38, 14, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+    // ── Stage node positions ──────────────────────────────────
+    const margin = 52;
+    const mapTop = 66;
+    const mapBot = H - 36;
+    const mapH   = mapBot - mapTop;
+    const nodes  = [
+      { fx: 0.12, fy: 0.74 }, // Stage 1 — rice paddy (bottom-left)
+      { fx: 0.35, fy: 0.60 }, // Stage 2 — bamboo (center-left)
+      { fx: 0.58, fy: 0.48 }, // Stage 3 — temple (center)
+      { fx: 0.44, fy: 0.30 }, // Stage 4 — ruins (upper-center)
+      { fx: 0.68, fy: 0.18 }, // Stage 5 — mountain (upper-right)
+      { fx: 0.88, fy: 0.36 }, // Stage 6 — volcano (right)
     ].map(n => ({
       cx: margin + n.fx * (W - margin * 2),
       cy: mapTop + n.fy * mapH,
     }));
-    const nodeR = Math.max(28, Math.min(36, W * 0.065));
-    this._mapNodeRects = nodes.map(n => ({ cx: n.cx, cy: n.cy, r: nodeR + 6 }));
-    // ── Draw connecting path ─────────────────────────────────────
+    const nodeR = Math.max(26, Math.min(34, W * 0.060));
+    this._mapNodeRects = nodes.map(n => ({ cx: n.cx, cy: n.cy, r: nodeR + 8 }));
+
+    // ── Golden brick path ─────────────────────────────────────
     ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // Shadow pass
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.lineWidth = 22;
+    ctx.beginPath();
+    nodes.forEach((n, i) => { if (i === 0) ctx.moveTo(n.cx + 3, n.cy + 4); else ctx.lineTo(n.cx + 3, n.cy + 4); });
+    ctx.stroke();
+    // Per-segment coloured path
     for (let i = 0; i < nodes.length - 1; i++) {
-      const a = nodes[i];
-      const b = nodes[i + 1];
-      const unlocked = this.progress.isUnlocked(i + 2); // next node unlocked?
-      // Outer path (wide, dark)
-      ctx.strokeStyle = unlocked ? 'rgba(255,215,0,0.35)' : 'rgba(80,80,80,0.4)';
-      ctx.lineWidth = 14;
+      const a = nodes[i]; const b = nodes[i + 1];
+      const unlocked = this.progress.isUnlocked(i + 2);
+      ctx.strokeStyle = unlocked ? '#E65100' : '#546E7A';
+      ctx.lineWidth = 18;
       ctx.beginPath(); ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
-      // Inner path (bright)
-      ctx.strokeStyle = unlocked ? '#FFD700' : '#555';
-      ctx.lineWidth = 6;
+      ctx.strokeStyle = unlocked ? '#FFD700' : '#78909C';
+      ctx.lineWidth = 10;
       ctx.setLineDash(unlocked ? [] : [10, 8]);
       ctx.beginPath(); ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
       ctx.setLineDash([]);
-      // Animated dots travelling along unlocked paths
       if (unlocked) {
-        const prog = ((t * 0.012) % 1);
-        const dotX = a.cx + (b.cx - a.cx) * prog;
-        const dotY = a.cy + (b.cy - a.cy) * prog;
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.beginPath(); ctx.arc(dotX, dotY, 4, 0, Math.PI * 2); ctx.fill();
+        for (let d = 0; d < 2; d++) {
+          const prog = ((t * 0.010 + d * 0.5) % 1);
+          const dotX = a.cx + (b.cx - a.cx) * prog;
+          const dotY = a.cy + (b.cy - a.cy) * prog;
+          ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 6;
+          ctx.fillStyle = 'rgba(255,255,220,0.92)';
+          ctx.beginPath(); ctx.arc(dotX, dotY, 3.5, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+        }
       }
     }
     ctx.restore();
-    // ── Draw stage nodes ─────────────────────────────────────────
+
+    // ── Stage nodes ───────────────────────────────────────────
+    const stageIcons   = ['🌾','🎋','🌸','🏚️','⛰️','🌋'];
+    const stageAccents = ['#8BC34A','#4CAF50','#E91E63','#FF9800','#42A5F5','#FF5722'];
     PHONICS_DATA.stageList.forEach((stage, i) => {
-      const n = nodes[i];
+      const n       = nodes[i];
       if (!n) return;
-      const stageId = i + 1;
-      const summary = this.progress.getStageSummary(stageId);
+      const stageId  = i + 1;
+      const summary  = this.progress.getStageSummary(stageId);
       const unlocked = summary.unlocked;
-      const sel = this._menuSel === i;
-      const stars = summary.stars || 0;
-      const bounce = sel ? Math.sin(t * 0.12) * 5 : 0;
-      const cy = n.cy + bounce;
+      const sel      = this._menuSel === i;
+      const stars    = summary.stars || 0;
+      const accent   = stageAccents[i] || '#FFD700';
+      const bounce   = sel ? Math.sin(t * 0.12) * 5 : 0;
+      const cy       = n.cy + bounce;
+
       // Drop shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.beginPath(); ctx.ellipse(n.cx, cy + nodeR + 4, nodeR * 0.7, 6, 0, 0, Math.PI * 2); ctx.fill();
-      // Node circle — themed accent color per stage
-      const accent = PHONICS_DATA.stageList[i]?.accentColor || '#FFD700';
-      if (sel) {
-        ctx.shadowColor = accent;
-        ctx.shadowBlur = 26;
-      } else if (unlocked) {
-        ctx.shadowColor = accent;
-        ctx.shadowBlur = 8;
+      ctx.fillStyle = 'rgba(0,0,0,0.32)';
+      ctx.beginPath(); ctx.ellipse(n.cx + 2, cy + nodeR + 3, nodeR * 0.72, 7, 0, 0, Math.PI * 2); ctx.fill();
+
+      // Glow
+      if (sel || unlocked) { ctx.shadowColor = accent; ctx.shadowBlur = sel ? 28 : 12; }
+
+      // Radial gradient fill
+      const ng = ctx.createRadialGradient(n.cx - nodeR * 0.3, cy - nodeR * 0.3, nodeR * 0.1, n.cx, cy, nodeR);
+      if (unlocked) {
+        ng.addColorStop(0, sel ? '#FFFDE7' : '#FFF9C4');
+        ng.addColorStop(0.5, accent + 'BB');
+        ng.addColorStop(1, accent + '88');
+      } else {
+        ng.addColorStop(0, '#546E7A');
+        ng.addColorStop(1, '#263238');
       }
-      // Ring — use accent color for unlocked nodes
-      ctx.strokeStyle = sel ? accent : (unlocked ? accent + 'CC' : 'rgba(80,80,80,0.6)');
+      ctx.fillStyle = ng;
+      ctx.strokeStyle = sel ? '#FFD700' : (unlocked ? accent : '#546E7A');
       ctx.lineWidth = sel ? 4 : 2.5;
-      ctx.fillStyle = unlocked
-        ? (sel ? accent + '44' : accent + '22')
-        : 'rgba(0,0,0,0.55)';
       ctx.beginPath(); ctx.arc(n.cx, cy, nodeR, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
       ctx.shadowBlur = 0;
+
+      // Shine highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.beginPath(); ctx.ellipse(n.cx - nodeR * 0.25, cy - nodeR * 0.25, nodeR * 0.5, nodeR * 0.34, -0.5, 0, Math.PI * 2); ctx.fill();
+
       if (!unlocked) {
-        ctx.font = `${Math.round(nodeR * 0.7)}px serif`;
+        ctx.font = `${Math.round(nodeR * 0.75)}px serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillStyle = 'rgba(255,255,255,0.28)';
         ctx.fillText('🔒', n.cx, cy);
       } else {
-        // Stage number
-        ctx.font = `bold ${Math.round(nodeR * 0.52)}px "Nunito", "Comic Sans MS", system-ui`;
+        ctx.font = `900 ${Math.round(nodeR * 0.52)}px "Nunito", "Comic Sans MS", system-ui`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
         ctx.fillStyle = sel ? '#FFD700' : '#fff';
-        ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
-        ctx.fillText(`${stageId}`, n.cx, cy - nodeR * 0.18);
-        // Stage emoji icon
-        const icons = ['🌾','🎋','🌸','🏚️','⛰️','🌋'];
-        ctx.font = `${Math.round(nodeR * 0.4)}px serif`;
-        ctx.fillText(icons[i] || '🗺️', n.cx, cy + nodeR * 0.28);
+        ctx.fillText(`${stageId}`, n.cx, cy - nodeR * 0.22);
+        ctx.font = `${Math.round(nodeR * 0.42)}px serif`;
+        ctx.fillText(stageIcons[i] || '🗺️', n.cx, cy + nodeR * 0.30);
         ctx.shadowBlur = 0;
-        // Stars below node
-        const starSize = Math.max(10, Math.round(nodeR * 0.35));
-        ctx.font = `${starSize}px serif`;
+        const starSz = Math.max(9, Math.round(nodeR * 0.33));
+        ctx.font = `${starSz}px serif`;
         for (let s = 0; s < 3; s++) {
-          ctx.globalAlpha = s < stars ? 1 : 0.2;
-          ctx.fillText('⭐', n.cx - starSize * 1.1 + s * starSize * 1.12, cy + nodeR + 14);
+          ctx.globalAlpha = s < stars ? 1 : 0.18;
+          ctx.fillText('⭐', n.cx - starSz * 1.05 + s * starSz * 1.1, cy + nodeR + 12);
         }
         ctx.globalAlpha = 1;
+        // Mastery badges
+        const mastery = this.progress.getStageMastery?.(stageId);
+        if (mastery?.noHit) {
+          ctx.font = '10px serif'; ctx.textAlign = 'right';
+          ctx.fillText('🛡️', n.cx + nodeR - 1, cy - nodeR + 10);
+        }
+        if (mastery?.speedClear) {
+          ctx.font = '10px serif'; ctx.textAlign = 'left';
+          ctx.fillText('⚡', n.cx - nodeR + 1, cy - nodeR + 10);
+        }
       }
-      // Stage name label below
-      ctx.font = `bold ${Math.max(9, Math.round(W * 0.022))}px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.3)';
+      ctx.font = `bold ${Math.max(8, Math.round(W * 0.022))}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.28)';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
-      const labelY = cy + nodeR + (stars > 0 ? 28 : 18);
-      ctx.fillText(stage.name, n.cx, labelY);
+      ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+      ctx.fillText(stage.name, n.cx, cy + nodeR + (stars > 0 ? 26 : 16));
       ctx.shadowBlur = 0;
     });
-    // ── Animated Riku dot on the map (shows current stage) ───────
-    if (this.stageId <= 6) {
+
+    // ── Animated Riku walking on the map ─────────────────────
+    if (this.stageId >= 1 && this.stageId <= 6) {
       const curNode = nodes[this.stageId - 1];
       if (curNode) {
-        const bob = Math.sin(t * 0.1) * 4;
-        const rikuSp = this.sprites['riku-idle'] || this.sprites['riku-run'];
-        const rH = nodeR * 1.1;
+        const bob       = Math.sin(t * 0.10) * 4;
+        const walkFrame = Math.floor(t / 8) % 4;
+        const rikuKey   = `riku-walk-${walkFrame + 1}`;
+        const rikuSp    = this.sprites[rikuKey] || this.sprites['riku-idle'] || this.sprites['riku-run'];
+        const rH = nodeR * 1.2;
         if (rikuSp && rikuSp.complete && rikuSp.naturalWidth > 0) {
           const ar = rikuSp.naturalWidth / rikuSp.naturalHeight;
           const rW = rH * ar;
           ctx.save();
-          ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 14;
-          ctx.drawImage(rikuSp, curNode.cx - rW / 2, curNode.cy - nodeR * 1.8 + bob, rW, rH);
+          ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 16;
+          ctx.drawImage(rikuSp, curNode.cx - rW / 2, curNode.cy - nodeR * 2.0 + bob, rW, rH);
           ctx.restore();
         } else {
-          ctx.font = `${Math.round(nodeR * 0.8)}px serif`;
+          ctx.font = `${Math.round(nodeR * 0.9)}px serif`;
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText('🍙', curNode.cx, curNode.cy - nodeR * 1.4 + bob);
+          ctx.fillText('🍙', curNode.cx, curNode.cy - nodeR * 1.5 + bob);
         }
+        // Pointer arrow
+        ctx.fillStyle = '#FFD700';
+        ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 8;
+        const ax = curNode.cx, ay = curNode.cy - nodeR * 0.92 + bob;
+        ctx.beginPath();
+        ctx.moveTo(ax - 7, ay); ctx.lineTo(ax + 7, ay); ctx.lineTo(ax, ay + 9);
+        ctx.closePath(); ctx.fill();
+        ctx.shadowBlur = 0;
       }
     }
-    // ── Selected stage info panel + PLAY button (bottom) ────────
+
+    // ── Title header ──────────────────────────────────────────
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const titleSz = Math.min(20, W * 0.046);
+    ctx.font = `900 ${titleSz}px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 12;
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('🗺️  World Map  🗺️', W / 2, 7);
+    ctx.shadowBlur = 0;
+    ctx.font = `bold 12px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFF176';
+    ctx.fillText(`🍚 ${this.progress.getRicePoints()} Rice  ·  Tap a stage to play`, W / 2, 7 + titleSz + 3);
+
+    // ── Selected stage info + PLAY button ─────────────────────
     const selStage = PHONICS_DATA.stageList[this._menuSel];
     this._mapPlayBtnRect = null;
     if (selStage && this.progress.isUnlocked(this._menuSel + 1)) {
-      const playBtnW = Math.min(120, W * 0.28);
-      const playBtnH = Math.round(H * 0.068);
-      const panW = Math.min(W - 24, 380);
+      const playBtnW = Math.min(130, W * 0.30);
+      const playBtnH = Math.round(H * 0.066);
+      const panW = Math.min(W - 20, 400);
       const panH = 56 + playBtnH + 12;
       const panX = (W - panW) / 2;
-      const panY = H - panH - 14;
-      ctx.fillStyle = 'rgba(0,0,0,0.78)';
-      ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 14); ctx.fill();
-      ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.font = `bold ${Math.min(14, W * 0.032)}px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle = '#FFD700';
+      const panY = H - panH - 10;
+      const panGrad = ctx.createLinearGradient(panX, panY, panX, panY + panH);
+      panGrad.addColorStop(0, 'rgba(10,20,40,0.88)');
+      panGrad.addColorStop(1, 'rgba(5,15,30,0.94)');
+      ctx.fillStyle = panGrad;
+      ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 16); ctx.fill();
+      const selAccent = stageAccents[this._menuSel] || '#FFD700';
+      ctx.strokeStyle = selAccent; ctx.lineWidth = 2;
+      ctx.shadowColor = selAccent; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 16); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.font = `bold ${Math.min(14, W * 0.034)}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillStyle = selAccent;
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillText(`${selStage.name} — ${selStage.pattern}`, W / 2, panY + 8);
+      ctx.fillText(`${stageIcons[this._menuSel]}  ${selStage.name}  —  ${selStage.pattern}`, W / 2, panY + 8);
       ctx.font = `${Math.min(11, W * 0.025)}px system-ui`;
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.fillText(`Boss: ${selStage.bossName}`, W / 2, panY + 30);
-      // ▶ PLAY button
-      const btnX = W / 2 - playBtnW / 2;
-      const btnY = panY + 46;
-      const tapPulse = 0.75 + 0.25 * Math.sin(t * 0.09);
-      ctx.shadowColor = '#00FF88'; ctx.shadowBlur = 14 * tapPulse;
-      const btnG = ctx.createLinearGradient(btnX, btnY, btnX, btnY + playBtnH);
-      btnG.addColorStop(0, `rgba(0,210,100,${0.85 + 0.15 * tapPulse})`);
-      btnG.addColorStop(1, `rgba(0,140,55,${0.9 + 0.1 * tapPulse})`);
-      ctx.fillStyle = btnG;
+      ctx.fillStyle = 'rgba(200,220,255,0.75)';
+      ctx.fillText(`Boss: ${selStage.bossName}  ·  ${selStage.words?.length || 8} words`, W / 2, panY + 30);
+      const btnX  = W / 2 - playBtnW / 2;
+      const btnY  = panY + 46;
+      const tapP  = 0.75 + 0.25 * Math.sin(t * 0.10);
+      const btnGd = ctx.createLinearGradient(btnX, btnY, btnX, btnY + playBtnH);
+      btnGd.addColorStop(0, `rgba(0,220,110,${0.88 + 0.12 * tapP})`);
+      btnGd.addColorStop(1, `rgba(0,150,60,${0.92 + 0.08 * tapP})`);
+      ctx.shadowColor = '#00FF88'; ctx.shadowBlur = 14 * tapP;
+      ctx.fillStyle = btnGd;
       ctx.beginPath(); ctx.roundRect(btnX, btnY, playBtnW, playBtnH, playBtnH / 2); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.40)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(btnX, btnY, playBtnW, playBtnH, playBtnH / 2); ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.font = `bold ${Math.min(16, W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('▶ PLAY', W / 2, btnY + playBtnH / 2);
+      ctx.fillText('▶  PLAY', W / 2, btnY + playBtnH / 2);
       this._mapPlayBtnRect = { x: btnX, y: btnY, w: playBtnW, h: playBtnH };
     }
     ctx.textBaseline = 'alphabetic';
