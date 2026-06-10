@@ -763,6 +763,327 @@ class MinionDino {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SHELL DINO — Koopa Troopa equivalent.
+// Normal: patrols left/right. Stomped: retreats into shell.
+// Stationary shell: kick sideways. Moving shell: defeats other enemies.
+// ─────────────────────────────────────────────────────────────
+class ShellDino {
+  constructor(worldX, groundY, sprite = null, size = 72) {
+    this.worldX          = worldX;
+    this.w               = size;
+    this.h               = size;
+    this.groundY         = groundY - this.h;
+    this.vx              = -1.0;
+    this.defeated        = false;
+    this.deathFrames     = 0;
+    this.sx              = 0;
+    this._age            = 0;
+    this._patrolMin      = worldX - 140;
+    this._patrolMax      = worldX + 140;
+    this._sprite         = sprite;
+    this.inShell         = false;
+    this.shellVx         = 0;
+    this._shellKickTimer = 0;
+    this._wakeTimer      = 0;
+  }
+
+  takeStompHit() {
+    if (!this.inShell) {
+      this.inShell     = true;
+      this.vx          = 0;
+      this.shellVx     = 0;
+      this._wakeTimer  = 180;
+      return 'shell';
+    }
+    if (Math.abs(this.shellVx) < 0.5) {
+      this.shellVx         = this.sx < 240 ? 9 : -9;
+      this._shellKickTimer = 10;
+      return 'shell-kick';
+    }
+    this.defeat();
+    return 'stomp';
+  }
+
+  updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
+
+  update(dt = 1 / 60) {
+    if (this.defeated) { this.deathFrames++; return; }
+    this._age++;
+    if (this.inShell) {
+      if (this._wakeTimer > 0) this._wakeTimer--;
+      else { this.inShell = false; this.vx = -1.0; }
+      if (this._shellKickTimer > 0) this._shellKickTimer--;
+      this.worldX += this.shellVx;
+      if (Math.abs(this.shellVx) > 0.1) this.shellVx *= 0.99;
+    } else {
+      this.worldX += this.vx;
+      if (this.worldX < this._patrolMin) this.vx =  Math.abs(this.vx);
+      if (this.worldX > this._patrolMax) this.vx = -Math.abs(this.vx);
+    }
+  }
+
+  checkCollision(player) {
+    if (this.defeated) return null;
+    const pb = player.bounds();
+    const mb = { x: this.sx + 4, y: this.groundY + 4, w: this.w - 8, h: this.h - 8 };
+    if (pb.x >= mb.x + mb.w || pb.x + pb.w <= mb.x ||
+        pb.y >= mb.y + mb.h || pb.y + pb.h <= mb.y) return null;
+    if (player.vy >= 0 && pb.y + pb.h < mb.y + mb.h / 2 + 10) return 'stomp';
+    if (this.inShell && Math.abs(this.shellVx) > 2 && this._shellKickTimer <= 0) return 'hit';
+    if (this.inShell) return 'stomp';
+    return 'hit';
+  }
+
+  checkShellHitsMinion(minion) {
+    if (!this.inShell || Math.abs(this.shellVx) < 2) return false;
+    if (minion.defeated) return false;
+    return !(this.sx + this.w < minion.sx || this.sx > minion.sx + minion.w ||
+             this.groundY + this.h < minion.groundY || this.groundY > minion.groundY + minion.h);
+  }
+
+  defeat() { this.defeated = true; this.deathFrames = 0; }
+  isGone()  { return this.defeated && this.deathFrames > 45; }
+
+  draw(ctx) {
+    if (this.isGone()) return;
+    const x = this.sx;
+    const y = this.groundY;
+    ctx.save();
+    if (this.defeated) {
+      ctx.globalAlpha = Math.max(0, 1 - this.deathFrames / 45);
+      ctx.translate(x + this.w / 2, y + this.h / 2);
+      ctx.rotate(this.deathFrames * 0.18);
+    } else {
+      ctx.translate(x + this.w / 2, y + this.h / 2);
+    }
+    if (this.inShell) {
+      const pulse = Math.abs(this.shellVx) > 2 ? 0.2 : 0;
+      ctx.fillStyle = this._shellKickTimer > 0 ? '#FFD700' : '#0288D1';
+      ctx.shadowColor = '#0288D1'; ctx.shadowBlur = pulse * 20;
+      ctx.beginPath(); ctx.ellipse(0, 2, this.w * 0.42, this.h * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#01579B'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, this.w * 0.3, 0, Math.PI * 1.5); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, this.w * 0.18, Math.PI * 0.5, Math.PI * 1.8); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.beginPath(); ctx.ellipse(-4, -4, 8, 5, -0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    } else {
+      const walk = Math.sin(this._age * 0.18) * 0.08;
+      ctx.rotate(walk);
+      ctx.scale(this.vx > 0 ? -1 : 1, 1);
+      ctx.fillStyle = '#4CAF50';
+      ctx.beginPath(); ctx.ellipse(0, 4, this.w * 0.38, this.h * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#2E7D32'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 2, this.w * 0.28, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#66BB6A';
+      ctx.beginPath(); ctx.ellipse(this.w * 0.28, -this.h * 0.12, this.w * 0.24, this.h * 0.22, 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(this.w * 0.34, -this.h * 0.16, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1a1a1a';
+      ctx.beginPath(); ctx.arc(this.w * 0.35, -this.h * 0.16, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#388E3C';
+      ctx.fillRect(-this.w * 0.24, this.h * 0.28, this.w * 0.16, this.h * 0.14);
+      ctx.fillRect( this.w * 0.06, this.h * 0.28, this.w * 0.16, this.h * 0.14);
+    }
+    if (this.defeated) {
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + this.deathFrames * 0.2;
+        const r = 20 + this.deathFrames * 0.4;
+        ctx.font = '12px serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFD700';
+        ctx.fillText('⭐', Math.cos(a) * r, Math.sin(a) * r - 10);
+      }
+    }
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// SPINY DINO — immune to stomps, only ground-pound defeats it.
+// Walks slowly with menacing spines; warns player visually.
+// ─────────────────────────────────────────────────────────────
+class SpinyDino {
+  constructor(worldX, groundY, sprite = null, size = 68) {
+    this.worldX      = worldX;
+    this.w           = size;
+    this.h           = Math.round(size * 0.72);
+    this.groundY     = groundY - this.h;
+    this.vx          = -0.85;
+    this.defeated    = false;
+    this.deathFrames = 0;
+    this.sx          = 0;
+    this._age        = 0;
+    this._patrolMin  = worldX - 110;
+    this._patrolMax  = worldX + 110;
+    this._sprite     = sprite;
+  }
+
+  updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
+
+  update(dt = 1 / 60) {
+    if (this.defeated) { this.deathFrames++; return; }
+    this._age++;
+    this.worldX += this.vx;
+    if (this.worldX < this._patrolMin) this.vx =  Math.abs(this.vx);
+    if (this.worldX > this._patrolMax) this.vx = -Math.abs(this.vx);
+  }
+
+  checkCollision(player) {
+    if (this.defeated) return null;
+    const pb = player.bounds();
+    const mb = { x: this.sx + 4, y: this.groundY + 4, w: this.w - 8, h: this.h - 8 };
+    if (pb.x >= mb.x + mb.w || pb.x + pb.w <= mb.x ||
+        pb.y >= mb.y + mb.h || pb.y + pb.h <= mb.y) return null;
+    return 'hit'; // always hurts — even a stomp attempt
+  }
+
+  takeGroundPound() { this.defeat(); return 'stomp'; }
+
+  defeat() { this.defeated = true; this.deathFrames = 0; }
+  isGone()  { return this.defeated && this.deathFrames > 45; }
+
+  draw(ctx) {
+    if (this.isGone()) return;
+    const x = this.sx;
+    const y = this.groundY;
+    ctx.save();
+    if (this.defeated) {
+      ctx.globalAlpha = Math.max(0, 1 - this.deathFrames / 45);
+      ctx.translate(x + this.w / 2, y + this.h / 2);
+      ctx.rotate(this.deathFrames * 0.15);
+    } else {
+      ctx.translate(x + this.w / 2, y + this.h / 2);
+    }
+    ctx.scale(this.vx > 0 ? -1 : 1, 1);
+    const bob = Math.sin(this._age * 0.14) * 1.5;
+    ctx.fillStyle = '#B71C1C';
+    ctx.beginPath(); ctx.ellipse(0, 3 + bob, this.w * 0.4, this.h * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#FF8F00';
+    ctx.strokeStyle = '#E65100'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 5; i++) {
+      const sx2 = (i - 2) * (this.w * 0.18);
+      const baseY2 = -this.h * 0.08 + bob;
+      const tipY  = -this.h * 0.44 + bob + (Math.abs(i - 2) * 4);
+      ctx.beginPath();
+      ctx.moveTo(sx2 - 4, baseY2); ctx.lineTo(sx2, tipY); ctx.lineTo(sx2 + 4, baseY2);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    ctx.fillStyle = '#C62828';
+    ctx.beginPath(); ctx.ellipse(this.w * 0.3, -this.h * 0.05 + bob, this.w * 0.22, this.h * 0.2, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#FF6D00';
+    ctx.beginPath(); ctx.arc(this.w * 0.36, -this.h * 0.10 + bob, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(this.w * 0.37, -this.h * 0.10 + bob, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#FF6D00'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(this.w * 0.28, -this.h * 0.17 + bob); ctx.lineTo(this.w * 0.42, -this.h * 0.14 + bob); ctx.stroke();
+    const wp = 0.3 + 0.15 * Math.sin(this._age * 0.20);
+    ctx.strokeStyle = `rgba(255,50,0,${wp})`; ctx.lineWidth = 3;
+    ctx.shadowColor = '#FF0000'; ctx.shadowBlur = 10 * wp;
+    ctx.beginPath(); ctx.ellipse(0, 3 + bob, this.w * 0.44, this.h * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    if (this.defeated) {
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + this.deathFrames * 0.2;
+        const r = 22 + this.deathFrames * 0.5;
+        ctx.font = '12px serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFD700';
+        ctx.fillText('💥', Math.cos(a) * r, Math.sin(a) * r - 10);
+      }
+    }
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// BOMB MINION — Bullet Bill equivalent.
+// Launched from the right edge of the screen, flies straight left.
+// Can be stomped mid-air for a big score reward.
+// ─────────────────────────────────────────────────────────────
+class BombMinion {
+  constructor(worldX, worldY, speed = 4.5) {
+    this.worldX      = worldX;
+    this.worldY      = worldY;
+    this.w           = 56;
+    this.h           = 50;
+    this.vx          = -speed;
+    this.defeated    = false;
+    this.deathFrames = 0;
+    this.sx          = 0;
+    this._age        = 0;
+  }
+
+  updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
+
+  update(dt = 1 / 60) {
+    if (this.defeated) { this.deathFrames++; return; }
+    this._age++;
+    this.worldX += this.vx;
+  }
+
+  checkCollision(player) {
+    if (this.defeated) return null;
+    const pb = player.bounds();
+    const mb = { x: this.sx + 6, y: this.worldY + 6, w: this.w - 12, h: this.h - 12 };
+    if (pb.x >= mb.x + mb.w || pb.x + pb.w <= mb.x ||
+        pb.y >= mb.y + mb.h || pb.y + pb.h <= mb.y) return null;
+    if (player.vy >= 0 && pb.y + pb.h < mb.y + mb.h / 2 + 10) return 'stomp';
+    return 'hit';
+  }
+
+  defeat() { this.defeated = true; this.deathFrames = 0; }
+  isGone()  { return (this.defeated && this.deathFrames > 45) || this.sx + this.w < -140; }
+
+  draw(ctx) {
+    if (this.isGone()) return;
+    const x   = this.sx;
+    const y   = this.worldY;
+    const bob = Math.sin(this._age * 0.10) * 2;
+
+    ctx.save();
+    if (this.defeated) {
+      ctx.globalAlpha = Math.max(0, 1 - this.deathFrames / 45);
+      ctx.translate(x + this.w / 2, y + this.h / 2 + bob);
+      ctx.rotate(this.deathFrames * 0.22);
+      ctx.translate(-this.w / 2, -this.h / 2);
+    }
+    // Smoke trail
+    if (!this.defeated) {
+      for (let i = 1; i <= 3; i++) {
+        ctx.save();
+        ctx.globalAlpha = 0.07 * i;
+        ctx.fillStyle = '#bbb';
+        ctx.beginPath(); ctx.arc(x + this.w * 0.8 + i * 14, y + this.h / 2 + bob, 8 - i * 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+    const cx  = this.defeated ? x + this.w / 2 : x + this.w / 2;
+    const cy2 = this.defeated ? y + this.h / 2 : y + this.h / 2 + bob;
+    const grad = ctx.createRadialGradient(cx - this.w * 0.12, cy2 - this.h * 0.14, 2, cx, cy2, this.w * 0.46);
+    grad.addColorStop(0, '#424242');
+    grad.addColorStop(1, '#1a1a1a');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.ellipse(cx, cy2, this.w * 0.46, this.h * 0.44, 0, 0, Math.PI * 2); ctx.fill();
+    const ey = cy2 - this.h * 0.07;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(cx - this.w * 0.15, ey, 7, 6, -0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + this.w * 0.06, ey, 7, 6,  0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(cx - this.w * 0.15, ey, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + this.w * 0.06, ey, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#8D6E63'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy2 - this.h * 0.44);
+    ctx.lineTo(cx - this.w * 0.06, cy2 - this.h * 0.56);
+    ctx.stroke();
+    if (!this.defeated && this._age % 6 < 3) {
+      ctx.shadowColor = '#FF6D00'; ctx.shadowBlur = 10;
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath(); ctx.arc(cx - this.w * 0.06, cy2 - this.h * 0.56, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // END FLAG
 // ─────────────────────────────────────────────────────────────
 class EndFlag {
@@ -1477,6 +1798,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
     platforms: [], coins: [], minions: [], flag: null,
     movingPlatforms: [], questionBlocks: [], powerUps: [], flyingEnemies: [],
     springs: [], checkpoint: null,
+    shellDinos: [], spinyDinos: [], bombMinions: [],
   };
 
   let wx = 800; // start X (safe spawn zone)
@@ -1514,17 +1836,35 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
       ));
     });
 
-    // Ground minions on even sections (skip first)
-    if (wIdx % 2 === 0 && wIdx > 0) {
-      const mx     = wx + word.phonemes.length * 40;
-      const minion = new MinionDino(
-        mx, groundY,
-        elevated ? (items.platforms[items.platforms.length - 1] ||
-                    items.movingPlatforms[items.movingPlatforms.length - 1]) : null,
-        minionSp, minionSize,
-      );
-      if (difficulty >= 3 && wIdx % 4 === 2) minion.armor = 1; // armored in stage 4+
-      items.minions.push(minion);
+    // Enemies — type mix scales with stage difficulty
+    if (wIdx > 0) {
+      const mx = wx + word.phonemes.length * 40;
+      if (wIdx % 2 === 0) {
+        // Stage 3+: mix in shell dinos on some sections
+        if (difficulty >= 2 && wIdx % 4 === 2) {
+          items.shellDinos.push(new ShellDino(mx, groundY, null, Math.round(minionSize * 0.65)));
+        } else {
+          const minion = new MinionDino(
+            mx, groundY,
+            elevated ? (items.platforms[items.platforms.length - 1] ||
+                        items.movingPlatforms[items.movingPlatforms.length - 1]) : null,
+            minionSp, minionSize,
+          );
+          if (difficulty >= 3 && wIdx % 4 === 2) minion.armor = 1;
+          items.minions.push(minion);
+        }
+      }
+      // Stage 4+: spiny dino on odd sections
+      if (difficulty >= 3 && wIdx % 3 === 1 && wIdx > 1) {
+        items.spinyDinos.push(new SpinyDino(mx + 120, groundY));
+      }
+    }
+
+    // Stage 5+: bomb minions fly in from ahead
+    if (difficulty >= 4 && wIdx % 3 === 0 && wIdx > 0) {
+      const bombX = wx + platW + 350;
+      const bombY = groundY - Math.round(canvasH * 0.40);
+      items.bombMinions.push(new BombMinion(bombX, bombY, 4.5 + difficulty * 0.3));
     }
 
     // Flying enemies in stage 2+, every 3 word sections
@@ -1596,6 +1936,9 @@ class RunnerEngine {
     this._checkpointWorldX = null;  // set when checkpoint is activated
     this.coins            = level.coins;
     this.minions          = level.minions;
+    this.shellDinos       = level.shellDinos  || [];
+    this.spinyDinos       = level.spinyDinos  || [];
+    this.bombMinions      = level.bombMinions || [];
     this.flag             = level.flag;
     this.levelW           = level.totalWidth;
 
@@ -1894,6 +2237,78 @@ class RunnerEngine {
     });
     this.minions = this.minions.filter(m => !m.isGone());
 
+    // Shell dinos (Koopa-style)
+    this.shellDinos.forEach(sd => {
+      sd.updateScreen(this.camOffset);
+      sd.update();
+      if (!sd.defeated) {
+        const res = sd.checkCollision(this.player);
+        if (res === 'stomp' || res === 'shell-kick') {
+          const result = sd.takeStompHit();
+          if (result === 'shell') {
+            this.player.vy = -8;
+            this._screenShake = 4;
+            if (this.audio) this.audio.sfxStomp();
+            this.particles.push(new RunnerParticle(sd.sx, sd.groundY, '🐢 SHELL!', '#00BCD4', -5));
+          } else if (result === 'shell-kick') {
+            this.player.vy = -6;
+            if (this.audio) this.audio.sfxStomp?.();
+            this.particles.push(new RunnerParticle(sd.sx, sd.groundY, '💨 KICK!', '#FFD700', -5));
+            // Shell defeats other minions it slides into
+            this.minions.forEach(m => { if (sd.checkShellHitsMinion(m)) { m.defeat(); this._doStomp(m.sx, m.groundY); } });
+          } else {
+            this._doStomp(sd.sx, sd.groundY);
+          }
+        } else if (res === 'hit') {
+          if (this.player._starTimer > 0) { sd.defeat(); this._doStomp(sd.sx, sd.groundY); }
+          else this._doPlayerHit();
+        }
+      }
+    });
+    this.shellDinos = this.shellDinos.filter(sd => !sd.isGone());
+
+    // Spiny dinos (stomp-immune)
+    this.spinyDinos.forEach(sp => {
+      sp.updateScreen(this.camOffset);
+      sp.update();
+      if (!sp.defeated) {
+        const res = sp.checkCollision(this.player);
+        if (res === 'hit') {
+          if (this.player._starTimer > 0) {
+            sp.defeat(); this._doStomp(sp.sx, sp.groundY);
+          } else if (this._screenShake >= 16) {
+            // Screen shake from ground-pound indicates a just-landed pound
+            sp.takeGroundPound();
+            this._doStomp(sp.sx, sp.groundY);
+            this.particles.push(new RunnerParticle(sp.sx, sp.groundY - 10, '💥 GROUND POUND!', '#FF6F00', -5));
+          } else {
+            // Attempting to stomp a spiny — warn player
+            this._doPlayerHit();
+            this.particles.push(new RunnerParticle(sp.sx, sp.groundY - 20, '⚠️ Spiny!', '#FF5252', -4));
+          }
+        }
+      }
+    });
+    this.spinyDinos = this.spinyDinos.filter(sp => !sp.isGone());
+
+    // Bomb minions (Bullet Bill-style)
+    this.bombMinions.forEach(bm => {
+      bm.updateScreen(this.camOffset);
+      bm.update();
+      if (!bm.defeated) {
+        const res = bm.checkCollision(this.player);
+        if (res === 'stomp') {
+          bm.defeat();
+          this._doStomp(bm.sx + bm.w / 2, bm.worldY);
+          this.particles.push(new RunnerParticle(bm.sx + bm.w / 2, bm.worldY, '💥 AERIAL STOMP!', '#FF8F00', -6));
+        } else if (res === 'hit') {
+          if (this.player._starTimer > 0) { bm.defeat(); this._doStomp(bm.sx, bm.worldY); }
+          else this._doPlayerHit();
+        }
+      }
+    });
+    this.bombMinions = this.bombMinions.filter(bm => !bm.isGone());
+
     // Flying enemies
     this.flyingEnemies.forEach(fe => {
       fe.updateScreen(this.camOffset);
@@ -2114,8 +2529,11 @@ class RunnerEngine {
     // Power-up items
     this.powerUps.filter(pu => pu.isVisible(this.W) && !pu.collected).forEach(pu => pu.draw(ctx));
 
-    // Ground minions
+    // Ground minions + new enemy types
     this.minions.forEach(m => m.draw(ctx));
+    this.shellDinos.forEach(sd => sd.draw(ctx));
+    this.spinyDinos.forEach(sp => sp.draw(ctx));
+    this.bombMinions.forEach(bm => bm.draw(ctx));
 
     // Flying enemies
     this.flyingEnemies.forEach(fe => fe.draw(ctx));
@@ -2236,6 +2654,11 @@ class RunnerEngine {
     // Grass strip
     ctx.fillStyle = gc;
     ctx.fillRect(0, gy, W, 16);
+
+    // World-specific accent strip below grass
+    const stageDecorColors = ['#5a9e3c','#2d6b20','#C2185B','#6D4C41','#388E3C','#880E4F'];
+    ctx.fillStyle = stageDecorColors[(this.stage?.id || 1) - 1] || '#5a9e3c';
+    ctx.fillRect(0, gy + 16, W, 5);
 
     // Scrolling grass tufts
     const tileW  = 38;
