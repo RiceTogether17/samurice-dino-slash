@@ -211,6 +211,17 @@ class BattleEngine {
     this._wordQueue     = this._buildAdaptiveWordQueue();
     this._wordQueueIdx  = 0;
     this._currentWord   = null;
+
+    // ── Sound Detective challenge rounds (phonemic-awareness modes) ──
+    // Periodically a round asks the child to ISOLATE a sound (first /
+    // last / middle / missing) instead of blending a whole word. This
+    // mirrors the listen-and-identify modes that strong phonics apps use
+    // and builds positional sound vocabulary.
+    this._roundNum      = 0;
+    this._isChallenge   = false;
+    this._challenge     = null;
+    this._challengeEvery = 4;   // every Nth round is a detective round
+    this._challengesSolved = 0;
     this._shuffledPh    = [];   // shuffled phoneme tiles for current word
     this._usedTileIdx   = new Set();  // which tile positions have been clicked
 
@@ -282,6 +293,25 @@ class BattleEngine {
     if (this.state !== 'idle' && this.state !== 'blending') return;
     // Ignore modifier combos (Ctrl+R reload etc.)
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    // Sound Detective rounds: match a letter key to an option tile.
+    if (this._isChallenge && this._challenge) {
+      const key = e.key;
+      if (key.length !== 1) return;
+      const k = key.toLowerCase();
+      for (const pass of ['exact', 'prefix']) {
+        for (let i = 0; i < this._challenge.options.length; i++) {
+          const ph = this._challenge.options[i].toLowerCase();
+          const match = pass === 'exact' ? ph === k : ph.startsWith(k);
+          if (match && this._tileEls[i]) {
+            e.preventDefault();
+            this._onChallengeTileClick(this._challenge.options[i], this._tileEls[i]);
+            return;
+          }
+        }
+      }
+      return;
+    }
 
     const key = e.key;
     if (key === 'Backspace' || key === 'Delete') {
@@ -430,6 +460,7 @@ class BattleEngine {
   // ── Start next word ──────────────────────────────────────────
   _startNextWord() {
     if (this.done) return;
+    this._roundNum++;
 
     // Cycle through queue (re-shuffle when exhausted)
     if (this._wordQueueIdx >= this._wordQueue.length) {
@@ -437,6 +468,17 @@ class BattleEngine {
       this._wordQueueIdx = 0;
     }
     this._currentWord   = this._wordQueue[this._wordQueueIdx++];
+
+    // Every Nth round (after a warm-up) becomes a Sound Detective round —
+    // but only if the chosen word can pose a clear isolation question.
+    const warmedUp = this._roundNum >= 3;
+    if (warmedUp && this._roundNum % this._challengeEvery === 0 &&
+        this._validChallengeTypes(this._currentWord).length > 0) {
+      this._startChallengeRound(this._currentWord);
+      return;
+    }
+    this._isChallenge = false;
+    this._challenge   = null;
     this._shuffledPh    = this._shuffleArray([...this._currentWord.phonemes]); // randomise tile order
     this._wrongAttempts  = 0;
     this._currentBuilt   = [];
@@ -455,6 +497,256 @@ class BattleEngine {
     setTimeout(() => {
       if (!this.done) this.audio?.playWord(this._currentWord.word);
     }, 350);
+  }
+
+  // ═════════════════════════════════════════════════════════════
+  // SOUND DETECTIVE — phonemic-awareness challenge rounds
+  // The child isolates a single sound by position instead of
+  // blending the whole word: First / Last / Middle / Missing.
+  // One mechanic (pick the sound for the highlighted slot) framed
+  // four ways to teach positional sound vocabulary.
+  // ═════════════════════════════════════════════════════════════
+
+  // Which question types make sense for a given word?
+  _validChallengeTypes(wordObj) {
+    const len = wordObj?.phonemes?.length || 0;
+    if (len < 2) return [];
+    const types = ['first', 'last', 'missing'];
+    if (len === 3) types.push('middle');   // clean single middle sound
+    return types;
+  }
+
+  // Blank-slot index for each question type.
+  _challengeBlankIndex(type, len) {
+    switch (type) {
+      case 'first':  return 0;
+      case 'last':   return len - 1;
+      case 'middle': return Math.floor(len / 2);
+      case 'missing':
+      default:       return Math.floor(Math.random() * len);
+    }
+  }
+
+  // Build a pool of distractor phonemes drawn from this stage's words.
+  _distractorPool() {
+    if (this._distractorCache) return this._distractorCache;
+    const set = new Set();
+    (this.stage.words || []).forEach(w =>
+      (w.phonemes || []).forEach(p => set.add(p.toLowerCase())));
+    // Guarantee a few basics so small stages still have options.
+    ['s','t','m','n','p','b','a','e','i','o','u'].forEach(p => set.add(p));
+    this._distractorCache = [...set];
+    return this._distractorCache;
+  }
+
+  _startChallengeRound(baseWord) {
+    this._isChallenge   = true;
+    this._wrongAttempts = 0;
+    this._showFirstHint = false;
+    this.state          = 'idle';
+
+    const phonemes = baseWord.phonemes;
+    const types    = this._validChallengeTypes(baseWord);
+    const type     = types[Math.floor(Math.random() * types.length)];
+    const blankIdx = this._challengeBlankIndex(type, phonemes.length);
+    const answer   = phonemes[blankIdx].toLowerCase();
+
+    // Pick 2 distractors of the same broad kind where possible.
+    const answerIsVowel = /^[aeiou]$/.test(answer);
+    const pool = this._distractorPool().filter(p =>
+      p !== answer && /^[aeiou]$/.test(p) === answerIsVowel);
+    const fallback = this._distractorPool().filter(p => p !== answer);
+    const distractors = [];
+    const src = pool.length >= 2 ? pool : fallback;
+    const shuffledSrc = this._shuffleArray([...src]);
+    for (const p of shuffledSrc) {
+      if (distractors.length >= 2) break;
+      if (!distractors.includes(p)) distractors.push(p);
+    }
+
+    const options = this._shuffleArray([answer, ...distractors]);
+
+    const labels = {
+      first:   { instr: '🕵️ Which sound does it START with?', tag: 'FIRST SOUND' },
+      last:    { instr: '🕵️ Which sound does it END with?',   tag: 'LAST SOUND'  },
+      middle:  { instr: '🕵️ Find the MIDDLE sound!',          tag: 'MIDDLE SOUND'},
+      missing: { instr: '🕵️ Which sound is MISSING?',         tag: 'MISSING SOUND'},
+    };
+
+    this._challenge = {
+      type, baseWord, phonemes, blankIdx, answer, options,
+      instr: labels[type].instr, tag: labels[type].tag,
+    };
+    this._currentWord = baseWord;   // Hear button still speaks the whole word
+
+    this._renderChallengePrompt();
+    this._renderChallengeTiles();
+    this._setFeedback(this._challenge.instr, '#80D8FF');
+    if (this._hintBtn) this._hintBtn.disabled = false;
+
+    // Speak the word so the child can listen for the target sound.
+    setTimeout(() => { if (!this.done) this.audio?.playWord(baseWord.word); }, 350);
+  }
+
+  // Prompt: emoji + the word shown as slots, the queried slot a glowing "?".
+  _renderChallengePrompt() {
+    const c = this._challenge;
+    this._targetEmojiEl.textContent = c.baseWord.hint || '🔊';
+
+    const html = c.phonemes.map((ph, i) => {
+      if (i === c.blankIdx) {
+        return `<span class="be-blank be-blank-query">?</span>`;
+      }
+      return `<span class="be-blank be-blank-ghost">${ph.toUpperCase()}</span>`;
+    }).join('');
+    this._blanksEl.innerHTML = html;
+
+    if (this._wordPreviewEl) {
+      this._wordPreviewEl.textContent = `🕵️ SOUND DETECTIVE — ${c.tag}`;
+      this._wordPreviewEl.style.color = '#80D8FF';
+    }
+  }
+
+  _renderChallengeTiles() {
+    this._poolEl.innerHTML = '';
+    this._tileEls = [];
+    const c = this._challenge;
+    c.options.forEach((ph, idx) => {
+      const colorClass = this._getPhonemeColorClass(ph);
+      const isHint = this._showFirstHint && ph === c.answer;
+      const tile = document.createElement('button');
+      tile.className   = 'be-tile ' + colorClass + (isHint ? ' be-tile-hint' : '');
+      tile.textContent = ph.toUpperCase();
+      tile.dataset.phoneme = ph;
+      tile.setAttribute('role', 'button');
+      tile.setAttribute('aria-label', `Sound ${ph.toUpperCase()}`);
+      tile.setAttribute('title', `${ph.toUpperCase()} — press '${ph[0].toUpperCase()}' key`);
+      tile.addEventListener('click', () => this._onChallengeTileClick(ph, tile));
+      tile.addEventListener('mouseenter', () => { this.audio?.playPhoneme(ph); });
+      tile.addEventListener('touchstart', () => { this.audio?.playPhoneme(ph); }, { passive: true });
+      tile.addEventListener('touchend', (e) => { e.preventDefault(); this._onChallengeTileClick(ph, tile); });
+      this._tileEls.push(tile);
+      this._poolEl.appendChild(tile);
+    });
+  }
+
+  _onChallengeTileClick(phoneme, tileEl) {
+    if (this.done || !this._isChallenge) return;
+    if (this.state !== 'idle') return;
+    const now = Date.now();
+    if (now - (this._lastTileClickMs || 0) < 80) return;
+    this._lastTileClickMs = now;
+
+    this.audio?.playPhoneme(phoneme);
+    if (phoneme === this._challenge.answer) {
+      this._flashTileFeedback(tileEl, 'ok');
+      this._challengeSuccess(tileEl);
+    } else {
+      this._flashTileFeedback(tileEl, 'bad');
+      this._onWrongChallenge(tileEl);
+    }
+  }
+
+  _onWrongChallenge(tileEl) {
+    this.audio?.sfxWrongBlend?.();
+    this._wrongAttempts++;
+    this._setFeedback(`❌ Listen again… find the ${this._challenge.tag.toLowerCase()}.`, '#FF8A80');
+    setTimeout(() => { if (!this.done) this.audio?.playPhoneme?.(this._challenge.answer); }, 500);
+
+    const pokeDmg = Math.max(2, Math.floor(this.stage.bossAttack * 0.14));
+    this.rikuHp = Math.max(0, this.rikuHp - this._applyIncomingDamage(pokeDmg, 'wrong-order'));
+    this._rikuShake = 7;
+    this._combo = 0; this._streak = 0;
+
+    if (this._wrongAttempts >= MAX_WRONGS) {
+      this._challengeReveal();
+      return;
+    }
+    // Glow the correct tile on the final attempt to keep it fair.
+    this._showFirstHint = this._wrongAttempts >= MAX_WRONGS - 1;
+    this._renderChallengeTiles();
+    if (this.rikuHp <= 0) this._lose();
+  }
+
+  // Out of tries: reveal the answer, light boss poke, move on.
+  _challengeReveal() {
+    if (this.done) return;
+    this._stopBlendTimer();
+    this.state = 'boss-attack';
+    const ans = this._challenge.answer.toUpperCase();
+    this._setFeedback(`💦 The ${this._challenge.tag.toLowerCase()} was "${ans}"`, '#FF9800');
+    this.audio?.sfxHurt?.();
+    setTimeout(() => {
+      if (this._destroyed) return;
+      if (this.rikuHp <= 0) { this._lose(); return; }
+      this.state = 'idle';
+      this._startNextWord();
+      this._startBlendTimer();
+    }, 1500);
+  }
+
+  _challengeSuccess(tileEl) {
+    this._stopBlendTimer();
+    this.state = 'riku-attack';
+
+    const timeBonus = Math.max(0, this._blendTimeLeft / this._blendTime);
+    const streakMult = 1 + Math.min(this._streak, 8) * 0.12;
+    const phaseMult  = this._bossPhase === 3 ? 1.2 : this._bossPhase === 2 ? 1.1 : 1.0;
+    // Detective rounds are a single decisive strike — solid but not huge.
+    const base   = Math.max(12, Math.floor(this.stage.bossAttack * 1.1));
+    const damage = Math.floor(base * streakMult * (0.78 + timeBonus * 0.22) * phaseMult);
+
+    this._combo++; this._streak++; this._attemptedBlends++; this._correctBlends++;
+    this._challengesSolved++;
+    this.bossHp = Math.max(0, this.bossHp - damage);
+    this.score += Math.floor(damage * 2.0);
+    this._bossShake = 22;
+    if (this._combo >= 5) this._specialReady = true;
+
+    // Slash sparks + trail from tile → boss (reuse the blend visuals).
+    if (this.canvas && tileEl) {
+      const cr = this.canvas.getBoundingClientRect();
+      const tr = tileEl.getBoundingClientRect();
+      const scx = this.W / cr.width, scy = this.H / cr.height;
+      const tx = (tr.left + tr.width / 2 - cr.left) * scx;
+      const ty = (tr.top + tr.height / 2 - cr.top) * scy;
+      const bossX = Math.round(this.W * 0.72);
+      const bossY = Math.round(this.H * 0.58 * 0.50);
+      this._slashTrails.push(new SlashTrail(tx, ty, bossX, bossY));
+      for (let i = 0; i < 4; i++) this.slashParticles.push(new SlashParticle(tx, ty));
+    }
+
+    // Credit the isolated sound toward phoneme mastery (lightens its weak-count).
+    if (this.progress) {
+      this.progress.recordBlend(this.stage.id, this._challenge.baseWord.word,
+        true, timeBonus > 0.82, [this._challenge.answer]);
+    }
+
+    if (this.audio) { this.audio.sfxSlash(); this.audio.sfxBlendChime?.(); this.audio.sfxBossHit(); }
+
+    const bossX = Math.round(this.W * 0.72);
+    const bossY = Math.round(this.H * 0.58 * 0.50);
+    const praise = this._combo >= 3 ? `🕵️ DETECTIVE STREAK ×${this._combo}!` : '🕵️ GOOD EAR!';
+    this.damagePops.push(new DamagePop(bossX, bossY - 40, `-${damage}`, '#80D8FF'));
+    this.damagePops.push(new DamagePop(bossX, bossY - 80, praise, '#fff'));
+    this._gradeFloat = { text: praise, life: 1.0, color: '#40C4FF' };
+    this._setFeedback(`🕵️ Correct! "${this._challenge.answer.toUpperCase()}" — ${praise} (${damage} dmg)`, '#80D8FF');
+
+    // Reinforce: say the whole word so they hear the sound in context.
+    setTimeout(() => {
+      if (this._destroyed) return;
+      this.audio?.playBlendSequence?.(this._challenge.baseWord.phonemes, this._challenge.baseWord.word);
+    }, 220);
+
+    this._checkBossPhase();
+
+    setTimeout(() => {
+      if (this._destroyed) return;
+      if (this.bossHp <= 0) { this._win(); return; }
+      this.state = 'idle';
+      this._startNextWord();
+      this._startBlendTimer();
+    }, 1400);
   }
 
   // ── Render target hint (emoji + blank slots) ─────────────────
@@ -679,6 +971,34 @@ class BattleEngine {
     this._renderCurrentWordTiles();
     this._renderBlanks();
     if (this.rikuHp <= 0) this._lose();
+  }
+
+  // ── Incoming-damage filter: shop/companion effects can soften hits ──
+  _applyIncomingDamage(baseDmg, label = 'blocked') {
+    // Starter shield from companion blocks one incoming hit.
+    if (this._starterShield) {
+      this._starterShield = false;
+      this.damagePops.push(new DamagePop(Math.round(this.W * 0.24), Math.round(this.H * 0.30), '🛡️ BLOCK!', '#80D8FF'));
+      this._setFeedback('🛡️ Companion shield blocked the hit!', '#80D8FF');
+      return 0;
+    }
+    // Companion mercy grants a few free mistakes before HP damage.
+    if (this._companionMercy > 0) {
+      this._companionMercy--;
+      this.damagePops.push(new DamagePop(Math.round(this.W * 0.24), Math.round(this.H * 0.33), '🐾 SAVE!', '#C5E1A5'));
+      this._setFeedback('🐾 Companion helped! No damage this time.', '#C5E1A5');
+      return 0;
+    }
+    return baseDmg;
+  }
+
+  _getSwordDamageMult() {
+    return this._equippedEffects.swordDamageMult || 1;
+  }
+
+  getAccuracyPercent() {
+    if (this._attemptedBlends <= 0) return 100;
+    return Math.max(0, Math.min(100, Math.round((this._correctBlends / this._attemptedBlends) * 100)));
   }
 
   // ── Wrong order: let player try again ────────────────────────
@@ -989,6 +1309,7 @@ class BattleEngine {
 
   // ── Clear build (keep current word, reset attempts) ──────────
   _clearBuild() {
+    if (this._isChallenge) return;   // nothing to clear in a detective round
     if (this.state === 'riku-attack' || this.state === 'boss-attack') return;
     this._currentBuilt   = [];
     this._builtTileIdxes = [];
@@ -1001,16 +1322,23 @@ class BattleEngine {
 
   // ── Phase 8: explicit hint — reveal the next correct tile ───
   _useHint() {
-    if (this.done || !this._currentWord) return;
+    if (this.done) return;
     // Disable button so it can't be spammed mid-word
     if (this._hintBtn) this._hintBtn.disabled = true;
     this._showFirstHint = true;
+    if (this._isChallenge && this._challenge) {
+      this._renderChallengeTiles();
+      this._setFeedback('💡 Hint: the right sound is glowing!', '#FFD700');
+      return;
+    }
+    if (!this._currentWord) return;
     this._renderCurrentWordTiles();
     this._setFeedback('💡 Hint: look for the glowing tile!', '#FFD700');
   }
 
   // ── Undo: remove the last placed tile ───────────────────────
   _undoLastTile() {
+    if (this._isChallenge) return;   // no tile placement to undo in a detective round
     if (this.state === 'riku-attack' || this.state === 'boss-attack') return;
     if (!this._currentBuilt.length) return;
     this._currentBuilt.pop();

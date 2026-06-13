@@ -433,6 +433,38 @@ PHONICS_DATA.dailySets = [
     { word:"snap",   phonemes:["sn","a","p"],    hint:"🫰" },
     { word:"shrimp", phonemes:["shr","i","mp"],  hint:"🦐" },
   ]},
+  { theme:"CK Endings", emoji:"🦆", wordObjs:[
+    { word:"duck",  phonemes:["d","u","ck"],  hint:"🦆" },
+    { word:"kick",  phonemes:["k","i","ck"],  hint:"🦵" },
+    { word:"lock",  phonemes:["l","o","ck"],  hint:"🔒" },
+    { word:"rock",  phonemes:["r","o","ck"],  hint:"🪨" },
+    { word:"sock",  phonemes:["s","o","ck"],  hint:"🧦" },
+    { word:"sick",  phonemes:["s","i","ck"],  hint:"🤒" },
+  ]},
+  { theme:"NG Endings", emoji:"🔔", wordObjs:[
+    { word:"ring",  phonemes:["r","i","ng"],  hint:"💍" },
+    { word:"king",  phonemes:["k","i","ng"],  hint:"👑" },
+    { word:"song",  phonemes:["s","o","ng"],  hint:"🎵" },
+    { word:"long",  phonemes:["l","o","ng"],  hint:"📏" },
+    { word:"wing",  phonemes:["w","i","ng"],  hint:"🪽" },
+    { word:"sing",  phonemes:["s","i","ng"],  hint:"🎤" },
+  ]},
+  { theme:"Final Blends", emoji:"🐜", wordObjs:[
+    { word:"ant",   phonemes:["a","n","t"],   hint:"🐜" },
+    { word:"jump",  phonemes:["j","u","mp"],  hint:"🤸" },
+    { word:"hand",  phonemes:["h","a","nd"],  hint:"✋" },
+    { word:"milk",  phonemes:["m","i","lk"],  hint:"🥛" },
+    { word:"belt",  phonemes:["b","e","lt"],  hint:"🥋" },
+    { word:"lamp",  phonemes:["l","a","mp"],  hint:"💡" },
+  ]},
+  { theme:"Long-U", emoji:"🎲", wordObjs:[
+    { word:"cube",  phonemes:["c","u","be"],  hint:"🎲" },
+    { word:"tube",  phonemes:["t","u","be"],  hint:"🧴" },
+    { word:"mule",  phonemes:["m","u","le"],  hint:"🐴" },
+    { word:"cute",  phonemes:["c","u","te"],  hint:"🥰" },
+    { word:"fuse",  phonemes:["f","u","se"],  hint:"🧨" },
+    { word:"dune",  phonemes:["d","u","ne"],  hint:"🏜️" },
+  ]},
 ];
 
 // ── HELPERS ──────────────────────────────────────────────────

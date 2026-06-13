@@ -809,6 +809,26 @@ body {
     animation: tilePop 0.18s cubic-bezier(0.34,1.56,0.64,1) both;
 }
 
+/* ── Sound Detective: ghost (shown) sounds + the queried "?" slot ── */
+.be-blank.be-blank-ghost {
+    background: rgba(255,255,255,0.06);
+    border: 2.5px solid rgba(128,216,255,0.35);
+    color: rgba(200,235,255,0.75);
+    font-weight: 800;
+}
+.be-blank.be-blank-query {
+    background: linear-gradient(160deg, #4FC3F7, #0288D1);
+    border: 2.5px solid #80D8FF;
+    color: #fff;
+    font-size: 1.4rem;
+    box-shadow: 0 0 14px rgba(128,216,255,0.8), inset 0 1px 0 rgba(255,255,255,0.5);
+    animation: beQueryPulse 0.85s ease-in-out infinite;
+}
+@keyframes beQueryPulse {
+    0%, 100% { transform: scale(1);    box-shadow: 0 0 12px rgba(128,216,255,0.7); }
+    50%      { transform: scale(1.08); box-shadow: 0 0 22px rgba(128,216,255,1); }
+}
+
 
 /* ── Word being built (kept for fallback reference) ──────── */
 .be-build {
