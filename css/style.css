@@ -2298,3 +2298,354 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 
 /* Battle tiles stay above the gesture bar so the bottom row is tappable */
 .battle-overlay { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+
+/* ============================================================
+   HOME SCREEN V2 — campaign-first, engagement chrome in panel
+   Overrides the old hero/buttons layout with a cleaner design.
+   Engagement chrome lives in .mc-rewards-panel (slide-up).
+============================================================ */
+
+/* Override hero: now a flex column that fills available space */
+.mc-hero {
+    padding: 6px 20px 4px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: calc(52px + env(safe-area-inset-top));
+}
+.mc-hero .mc-mascot {
+    height: clamp(90px, 20vh, 185px);
+}
+.mc-hero .mc-title {
+    font-size: clamp(1.7rem, 7vw, 2.8rem);
+    margin-bottom: 4px;
+}
+.mc-hero .mc-sub {
+    font-size: clamp(0.82rem, 2.6vw, 1.05rem);
+}
+
+/* ── Top corner strip: streak chip + level badge ── */
+.mc-top-strip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    padding: calc(8px + env(safe-area-inset-top)) 14px 6px;
+    z-index: 2;
+    gap: 10px;
+    pointer-events: none;
+}
+.mc-top-strip > * { pointer-events: auto; }
+.mc-top-spacer { flex: 1; }
+.mc-level-badge {
+    background: linear-gradient(135deg, #FFD700 0%, #FF9800 100%);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 900;
+    padding: 4px 13px;
+    border-radius: 12px;
+    box-shadow: 0 3px 0 rgba(170,70,0,0.45);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    white-space: nowrap;
+}
+/* Compact streak chip in the top strip */
+.mc-top-strip .mc-streak-chip {
+    margin: 0;
+    padding: 4px 12px;
+    max-width: none;
+    font-size: 0.76rem;
+    gap: 4px;
+}
+.mc-top-strip .mc-streak-chip .streak-theme,
+.mc-top-strip .mc-streak-chip .login-badge {
+    display: none;
+}
+
+/* ── Hero CTA wrap ── */
+.mc-cta-wrap {
+    flex-shrink: 0;
+    padding: 0 18px 6px;
+    width: 100%;
+    max-width: 520px;
+    align-self: center;
+}
+
+/* BIG PLAY button */
+.mc-play-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 22px;
+    background: linear-gradient(135deg, #FFD700 0%, #FFA000 45%, #FF4500 100%);
+    border: 4px solid rgba(255,255,255,0.45);
+    border-radius: 28px;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow: 0 10px 0 rgba(170,60,0,0.5), 0 8px 28px rgba(255,100,0,0.4);
+    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s;
+    position: relative;
+    overflow: hidden;
+}
+.mc-play-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(170deg, rgba(255,255,255,0.22) 0%, transparent 50%);
+    pointer-events: none;
+}
+.mc-play-btn:hover  { transform: translateY(-5px); box-shadow: 0 15px 0 rgba(170,60,0,0.5), 0 12px 36px rgba(255,100,0,0.5); }
+.mc-play-btn:active { transform: translateY(6px);  box-shadow: 0 4px 0 rgba(170,60,0,0.5); }
+
+.mc-play-icon {
+    font-size: clamp(2.6rem, 8.5vw, 3.4rem);
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+    flex-shrink: 0;
+    animation: playIconWiggle 3.2s ease-in-out infinite;
+}
+@keyframes playIconWiggle {
+    0%, 75%, 100% { transform: rotate(0deg) scale(1); }
+    82% { transform: rotate(-13deg) scale(1.1); }
+    90% { transform: rotate(8deg) scale(1.05); }
+}
+.mc-play-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+}
+.mc-play-name {
+    font-size: clamp(1.6rem, 5.5vw, 2.2rem);
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 3px 0 rgba(160,55,0,0.6);
+    letter-spacing: 0.05em;
+    line-height: 1.1;
+}
+.mc-play-sub {
+    font-size: clamp(0.8rem, 2.5vw, 0.96rem);
+    color: rgba(255,240,200,0.92);
+    font-weight: bold;
+}
+.mc-play-arrow {
+    font-size: 1.7rem;
+    color: rgba(255,255,255,0.9);
+    flex-shrink: 0;
+    animation: playArrowBounce 1.6s ease-in-out infinite;
+}
+@keyframes playArrowBounce {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(8px); }
+}
+.mc-stage-hint {
+    text-align: center;
+    font-size: 0.8rem;
+    color: rgba(255,240,200,0.62);
+    font-weight: bold;
+    margin-top: 5px;
+    min-height: 1.1em;
+    letter-spacing: 0.02em;
+}
+
+/* ── Secondary row: 3 equal buttons ── */
+.mc-secondary {
+    flex-shrink: 0;
+    display: flex;
+    gap: 10px;
+    padding: 0 18px calc(18px + env(safe-area-inset-bottom));
+    width: 100%;
+    max-width: 520px;
+    align-self: center;
+}
+.mc-sec-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 12px 8px;
+    background: rgba(255,255,255,0.12);
+    border: 2.5px solid rgba(255,255,255,0.22);
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: inherit;
+    color: #fff;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.25);
+    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s, background 0.15s;
+    position: relative;
+}
+.mc-sec-btn:hover  {
+    transform: translateY(-3px);
+    box-shadow: 0 7px 0 rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.3);
+    background: rgba(255,255,255,0.2);
+}
+.mc-sec-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,0.3); }
+.mc-sec-icon {
+    font-size: clamp(1.5rem, 5vw, 1.9rem);
+    filter: drop-shadow(0 2px 5px rgba(0,0,0,0.4));
+    line-height: 1;
+}
+.mc-sec-label {
+    font-size: clamp(0.68rem, 2.2vw, 0.82rem);
+    font-weight: 900;
+    color: rgba(255,240,200,0.9);
+}
+.mc-notif-dot {
+    position: absolute;
+    top: 6px; right: 7px;
+    min-width: 16px; height: 16px;
+    background: #FF3232;
+    border-radius: 999px;
+    border: 2px solid rgba(255,255,255,0.9);
+    font-size: 0.58rem;
+    font-weight: 900;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    animation: notifPulse 1.8s ease-in-out infinite;
+}
+@keyframes notifPulse { 0%,100%{transform:scale(1)} 55%{transform:scale(1.3)} }
+
+/* ── Rewards slide-up panel ── */
+.mc-rewards-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0);
+    z-index: 90;
+    transition: background 0.3s;
+    pointer-events: none;
+}
+.mc-rewards-backdrop.mc-rewards-backdrop-visible {
+    background: rgba(0,0,0,0.55);
+    pointer-events: auto;
+    backdrop-filter: blur(2px);
+}
+.mc-rewards-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(180deg, #1c3f2a 0%, #0d2018 100%);
+    border-radius: 24px 24px 0 0;
+    border-top: 3px solid rgba(255,215,0,0.35);
+    box-shadow: 0 -8px 40px rgba(0,0,0,0.7);
+    padding: 28px 20px calc(28px + env(safe-area-inset-bottom));
+    z-index: 95;
+    transform: translateY(100%);
+    transition: transform 0.38s cubic-bezier(0.34,1.2,0.64,1);
+    overflow-y: auto;
+    max-height: 80vh;
+}
+.mc-rewards-panel.mc-rewards-open {
+    transform: translateY(0);
+}
+.mc-rewards-drag-handle {
+    width: 42px; height: 5px;
+    background: rgba(255,255,255,0.25);
+    border-radius: 999px;
+    margin: 0 auto 14px;
+}
+.mc-rewards-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 14px;
+}
+.mc-rewards-title {
+    font-size: 1.15rem;
+    font-weight: 900;
+    color: #FFD700;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    flex: 1;
+    text-align: center;
+    margin: 0;
+}
+.mc-rewards-close {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.22);
+    color: rgba(255,255,255,0.8);
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-family: inherit;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.mc-rewards-close:hover { background: rgba(255,255,255,0.22); }
+/* Tighten spacing of contained elements inside the panel */
+.mc-rewards-panel .mc-xp-bar-wrap { padding: 0; max-width: none; margin: 0 0 8px; }
+.mc-rewards-panel .mc-meta-row    { margin: 0 0 12px; }
+.mc-rewards-panel .mc-engage-strip { margin: 0; }
+
+/* ============================================================
+   SEGMENT IT — PhonicsQuest-inspired Sound Detective variant
+   Player picks the correct phoneme segmentation from 4 cards.
+============================================================ */
+.be-pool-segment {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px;
+    padding: 6px 4px;
+    align-content: start;
+}
+.be-segment-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 12px 10px;
+    background: linear-gradient(135deg, #1a3a5c 0%, #0d2040 100%);
+    border: 3px solid rgba(128,216,255,0.4);
+    border-radius: 18px;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow: 0 6px 0 rgba(0,0,0,0.45);
+    transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.12s;
+    min-height: 52px;
+}
+.be-segment-card:hover  { transform: translateY(-3px); box-shadow: 0 9px 0 rgba(0,0,0,0.45); }
+.be-segment-card:active { transform: translateY(3px);  box-shadow: 0 3px 0 rgba(0,0,0,0.45); }
+.be-segment-card.be-tile-hint {
+    border-color: rgba(255,215,0,0.75);
+    box-shadow: 0 6px 0 rgba(0,0,0,0.45), 0 0 18px rgba(255,215,0,0.55);
+    animation: tileHint 0.6s ease-in-out infinite alternate;
+}
+.be-segment-card.be-tile-flash-ok  { background: linear-gradient(135deg,#1b5e20,#2e7d32) !important; border-color: #81c784 !important; }
+.be-segment-card.be-tile-flash-bad { background: linear-gradient(135deg,#5c1a1a,#c62828) !important; border-color: #ef9a9a !important; }
+.be-seg-ph {
+    font-size: clamp(1.05rem, 3.6vw, 1.4rem);
+    font-weight: 900;
+    color: #80D8FF;
+    text-shadow: 0 2px 8px rgba(128,216,255,0.4);
+    letter-spacing: 0.04em;
+    min-width: 20px;
+    text-align: center;
+}
+.be-seg-dot {
+    font-size: 1.15rem;
+    color: rgba(255,215,0,0.6);
+    font-weight: 900;
+    margin: 0 1px;
+}
+/* Full word shown in segment-it prompt slots */
+.be-word-full {
+    font-size: clamp(2rem, 7vw, 3rem) !important;
+    letter-spacing: 0.1em !important;
+    color: rgba(200,235,255,0.95) !important;
+    padding: 6px 22px !important;
+    min-width: auto !important;
+    min-height: auto !important;
+}

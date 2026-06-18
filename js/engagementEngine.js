@@ -228,9 +228,16 @@ class EngagementEngine {
     const levelEl = document.getElementById('mc-xp-level');
     const fillEl  = document.getElementById('mc-xp-fill');
     const nextEl  = document.getElementById('mc-xp-next');
+    const badgeEl = document.getElementById('mc-level-badge');
     if (levelEl) levelEl.textContent = `Lv.${level}`;
+    if (badgeEl) badgeEl.textContent = `Lv.${level}`;
     if (fillEl)  { fillEl.style.width = '0%'; setTimeout(() => { fillEl.style.width = pct + '%'; }, 80); }
     if (nextEl)  nextEl.textContent = `${xpInLevel}/${xpForLevel} XP`;
+  }
+
+  // Whether there are uncollected daily rewards (drives notification dot)
+  hasUncollectedRewards() {
+    return this.canSpinJar() || (this._t.canClaimLoginReward?.() ?? false);
   }
 
   _renderCalendar() {

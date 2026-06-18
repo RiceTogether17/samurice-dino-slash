@@ -297,6 +297,16 @@ class BattleEngine {
     // Sound Detective rounds: match a letter key to an option tile.
     if (this._isChallenge && this._challenge) {
       const key = e.key;
+      // Segment It: number keys 1–4 select option cards
+      if (this._challenge.type === 'segment-it') {
+        const idx = parseInt(key) - 1;
+        if (!isNaN(idx) && idx >= 0 && idx < this._tileEls.length) {
+          e.preventDefault();
+          const card = this._tileEls[idx];
+          this._onSegmentCardClick(card.dataset.segKey, card);
+        }
+        return;
+      }
       if (key.length !== 1) return;
       const k = key.toLowerCase();
       for (const pass of ['exact', 'prefix']) {
@@ -506,13 +516,86 @@ class BattleEngine {
   // One mechanic (pick the sound for the highlighted slot) framed
   // four ways to teach positional sound vocabulary.
   // ═════════════════════════════════════════════════════════════
+  // ── SEGMENT IT challenge (PhonicsQuest-inspired) ─────────────
+  // Player sees the full word and picks the correct phoneme split.
+  _startSegmentItRound(baseWord) {
+    const phonemes  = baseWord.phonemes;
+    const options   = this._generateSegmentItOptions(phonemes);
+    const correctKey = phonemes.join('|');
+    this._challenge = {
+      type: 'segment-it', baseWord, phonemes,
+      blankIdx: -1, answer: correctKey, options,
+      instr: '🕵️ How do you BREAK UP the sounds?',
+      tag:   'SEGMENT IT',
+    };
+    this._currentWord = baseWord;
+    this._renderChallengePrompt();
+    this._renderChallengeTiles();
+    this._setFeedback(this._challenge.instr, '#CE93D8');
+    if (this._hintBtn) this._hintBtn.disabled = false;
+    setTimeout(() => { if (!this.done) this.audio?.playWord(baseWord.word); }, 350);
+  }
+
+  _generateSegmentItOptions(phonemes) {
+    const correct = { key: phonemes.join('|'), phonemes: [...phonemes] };
+    const d = [];
+    if (phonemes.length === 3) {
+      d.push({ key: `${phonemes[0]+phonemes[1]}|${phonemes[2]}`, phonemes: [phonemes[0]+phonemes[1], phonemes[2]] });
+      d.push({ key: `${phonemes[0]}|${phonemes[1]+phonemes[2]}`, phonemes: [phonemes[0], phonemes[1]+phonemes[2]] });
+      d.push({ key: phonemes.join(''), phonemes: [phonemes.join('')] });
+    } else if (phonemes.length >= 4) {
+      const p = phonemes;
+      d.push({ key: [p[0]+p[1], ...p.slice(2)].join('|'), phonemes: [p[0]+p[1], ...p.slice(2)] });
+      d.push({ key: [...p.slice(0,-2), p[p.length-2]+p[p.length-1]].join('|'), phonemes: [...p.slice(0,-2), p[p.length-2]+p[p.length-1]] });
+      d.push({ key: [p[0], p[1]+p[2], ...p.slice(3)].join('|'), phonemes: [p[0], p[1]+p[2], ...p.slice(3)] });
+    } else {
+      d.push({ key: phonemes.join(''), phonemes: [phonemes.join('')] });
+      d.push({ key: [phonemes[1],phonemes[0]].join('|'), phonemes: [phonemes[1],phonemes[0]] });
+      d.push({ key: [phonemes[0],phonemes[0]].join('|'), phonemes: [phonemes[0],phonemes[0]] });
+    }
+    return this._shuffleArray([correct, ...d.slice(0, 3)]);
+  }
+
+  _renderSegmentItTiles() {
+    this._poolEl.classList.add('be-pool-segment');
+    this._tileEls = [];
+    const c = this._challenge;
+    c.options.forEach((opt) => {
+      const isHint = this._showFirstHint && opt.key === c.answer;
+      const card = document.createElement('button');
+      card.className = 'be-segment-card' + (isHint ? ' be-tile-hint' : '');
+      card.innerHTML = opt.phonemes.map(p => `<span class="be-seg-ph">${p.toUpperCase()}</span>`).join('<span class="be-seg-dot">•</span>');
+      card.dataset.segKey = opt.key;
+      card.setAttribute('role', 'button');
+      card.setAttribute('aria-label', `Segments: ${opt.phonemes.join(' - ')}`);
+      card.addEventListener('click', () => this._onSegmentCardClick(opt.key, card));
+      card.addEventListener('touchend', (e) => { e.preventDefault(); this._onSegmentCardClick(opt.key, card); });
+      this._tileEls.push(card);
+      this._poolEl.appendChild(card);
+    });
+  }
+
+  _onSegmentCardClick(key, cardEl) {
+    if (this.done || !this._isChallenge) return;
+    if (this.state !== 'idle') return;
+    const now = Date.now();
+    if (now - (this._lastTileClickMs || 0) < 80) return;
+    this._lastTileClickMs = now;
+    if (key === this._challenge.answer) {
+      this._flashTileFeedback(cardEl, 'ok');
+      this._challengeSuccess(cardEl);
+    } else {
+      this._flashTileFeedback(cardEl, 'bad');
+      this._onWrongChallenge(cardEl);
+    }
+  }
 
   // Which question types make sense for a given word?
   _validChallengeTypes(wordObj) {
     const len = wordObj?.phonemes?.length || 0;
     if (len < 2) return [];
     const types = ['first', 'last', 'missing'];
-    if (len === 3) types.push('middle');   // clean single middle sound
+    if (len === 3) { types.push('middle'); types.push('segment-it'); }
     return types;
   }
 
@@ -548,6 +631,9 @@ class BattleEngine {
     const phonemes = baseWord.phonemes;
     const types    = this._validChallengeTypes(baseWord);
     const type     = types[Math.floor(Math.random() * types.length)];
+
+    if (type === 'segment-it') { this._startSegmentItRound(baseWord); return; }
+
     const blankIdx = this._challengeBlankIndex(type, phonemes.length);
     const answer   = phonemes[blankIdx].toLowerCase();
 
@@ -593,6 +679,15 @@ class BattleEngine {
     const c = this._challenge;
     this._targetEmojiEl.textContent = c.baseWord.hint || '🔊';
 
+    if (c.type === 'segment-it') {
+      this._blanksEl.innerHTML = `<span class="be-blank be-blank-ghost be-word-full">${c.baseWord.word.toUpperCase()}</span>`;
+      if (this._wordPreviewEl) {
+        this._wordPreviewEl.textContent = '🕵️ SOUND DETECTIVE — SEGMENT IT';
+        this._wordPreviewEl.style.color = '#CE93D8';
+      }
+      return;
+    }
+
     const html = c.phonemes.map((ph, i) => {
       if (i === c.blankIdx) {
         return `<span class="be-blank be-blank-query">?</span>`;
@@ -609,8 +704,10 @@ class BattleEngine {
 
   _renderChallengeTiles() {
     this._poolEl.innerHTML = '';
+    this._poolEl.classList.remove('be-pool-segment');
     this._tileEls = [];
     const c = this._challenge;
+    if (c.type === 'segment-it') { this._renderSegmentItTiles(); return; }
     c.options.forEach((ph, idx) => {
       const colorClass = this._getPhonemeColorClass(ph);
       const isHint = this._showFirstHint && ph === c.answer;
@@ -651,7 +748,11 @@ class BattleEngine {
     this.audio?.sfxWrongBlend?.();
     this._wrongAttempts++;
     this._setFeedback(`❌ Listen again… find the ${this._challenge.tag.toLowerCase()}.`, '#FF8A80');
-    setTimeout(() => { if (!this.done) this.audio?.playPhoneme?.(this._challenge.answer); }, 500);
+    if (this._challenge.type === 'segment-it') {
+      setTimeout(() => { if (!this.done) this.audio?.playBlendSequence?.(this._challenge.phonemes, this._challenge.baseWord.word); }, 500);
+    } else {
+      setTimeout(() => { if (!this.done) this.audio?.playPhoneme?.(this._challenge.answer); }, 500);
+    }
 
     const pokeDmg = Math.max(2, Math.floor(this.stage.bossAttack * 0.14));
     this.rikuHp = Math.max(0, this.rikuHp - this._applyIncomingDamage(pokeDmg, 'wrong-order'));
@@ -673,7 +774,9 @@ class BattleEngine {
     if (this.done) return;
     this._stopBlendTimer();
     this.state = 'boss-attack';
-    const ans = this._challenge.answer.toUpperCase();
+    const ans = this._challenge.type === 'segment-it'
+      ? this._challenge.phonemes.map(p => p.toUpperCase()).join(' • ')
+      : this._challenge.answer.toUpperCase();
     this._setFeedback(`💦 The ${this._challenge.tag.toLowerCase()} was "${ans}"`, '#FF9800');
     this.audio?.sfxHurt?.();
     setTimeout(() => {
