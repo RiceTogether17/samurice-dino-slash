@@ -2316,26 +2316,24 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
    Engagement chrome lives in .mc-rewards-panel (slide-up).
 ============================================================ */
 
-/* Override hero: now a flex column that fills available space */
+/* Override hero: mascot dominates the top half */
 .mc-hero {
-    padding: 6px 20px 4px;
+    padding: calc(48px + env(safe-area-inset-top)) 20px 4px;
     flex: 1;
     min-height: 0;
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding-top: calc(52px + env(safe-area-inset-top));
 }
 .mc-hero .mc-mascot {
-    height: clamp(90px, 20vh, 185px);
+    height: clamp(170px, 36vh, 380px);
+    margin-bottom: 8px;
 }
 .mc-hero .mc-title {
-    font-size: clamp(1.7rem, 7vw, 2.8rem);
-    margin-bottom: 4px;
-}
-.mc-hero .mc-sub {
-    font-size: clamp(0.82rem, 2.6vw, 1.05rem);
+    font-size: clamp(2rem, 8vw, 3rem);
+    margin-bottom: 0;
 }
 
 /* ── Top corner strip: streak chip + level badge ── */
@@ -2380,19 +2378,20 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 /* ── Hero CTA wrap ── */
 .mc-cta-wrap {
     flex-shrink: 0;
-    padding: 0 18px 6px;
+    padding: 14px 18px 8px;
     width: 100%;
-    max-width: 520px;
+    max-width: 480px;
     align-self: center;
 }
 
-/* BIG PLAY button */
+/* BIG PLAY button — centred, no left/right sub-labels */
 .mc-play-btn {
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 18px 22px;
+    justify-content: center;
+    gap: 18px;
+    padding: 22px 28px;
     background: linear-gradient(135deg, #FFD700 0%, #FFA000 45%, #FF4500 100%);
     border: 4px solid rgba(255,255,255,0.45);
     border-radius: 28px;
@@ -2414,7 +2413,7 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 .mc-play-btn:active { transform: translateY(6px);  box-shadow: 0 4px 0 rgba(170,60,0,0.5); }
 
 .mc-play-icon {
-    font-size: clamp(2.6rem, 8.5vw, 3.4rem);
+    font-size: clamp(2.8rem, 8vw, 3.5rem);
     filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
     flex-shrink: 0;
     animation: playIconWiggle 3.2s ease-in-out infinite;
@@ -2424,28 +2423,16 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
     82% { transform: rotate(-13deg) scale(1.1); }
     90% { transform: rotate(8deg) scale(1.05); }
 }
-.mc-play-text {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    text-align: left;
-}
 .mc-play-name {
-    font-size: clamp(1.6rem, 5.5vw, 2.2rem);
+    font-size: clamp(2rem, 7vw, 2.8rem);
     font-weight: 900;
     color: #fff;
     text-shadow: 0 3px 0 rgba(160,55,0,0.6);
-    letter-spacing: 0.05em;
-    line-height: 1.1;
-}
-.mc-play-sub {
-    font-size: clamp(0.8rem, 2.5vw, 0.96rem);
-    color: rgba(255,240,200,0.92);
-    font-weight: bold;
+    letter-spacing: 0.08em;
+    line-height: 1;
 }
 .mc-play-arrow {
-    font-size: 1.7rem;
+    font-size: 2rem;
     color: rgba(255,255,255,0.9);
     flex-shrink: 0;
     animation: playArrowBounce 1.6s ease-in-out infinite;
@@ -2453,15 +2440,6 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 @keyframes playArrowBounce {
     0%, 100% { transform: translateX(0); }
     50% { transform: translateX(8px); }
-}
-.mc-stage-hint {
-    text-align: center;
-    font-size: 0.8rem;
-    color: rgba(255,240,200,0.62);
-    font-weight: bold;
-    margin-top: 5px;
-    min-height: 1.1em;
-    letter-spacing: 0.02em;
 }
 
 /* ── Secondary row: 3 equal buttons ── */
