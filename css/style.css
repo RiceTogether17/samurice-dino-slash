@@ -2228,3 +2228,73 @@ body {
     white-space: nowrap;
     animation: burstUp 1.2s ease forwards;
 }
+
+/* ============================================================
+   UX POLISH PASS — accessibility, safe-area, transitions, feel
+   Appended last so same-specificity overrides win in the cascade.
+   The reduced-motion media query above disables these animations
+   via its `*{animation-duration:.001ms}` !important rule.
+============================================================ */
+
+/* ── Keyboard-only focus rings ───────────────────────────────
+   A clear gold ring for keyboard / switch-access users, hidden
+   for mouse & touch so it never flashes during normal play.   */
+:focus { outline: none; }
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+[role="button"]:focus-visible,
+.be-tile:focus-visible,
+.ebe-tile:focus-visible {
+    outline: 3px solid #FFD700;
+    outline-offset: 3px;
+}
+/* The game canvases capture taps for play — never ring them. */
+#slashCanvas:focus-visible,
+#flappyCanvas:focus-visible { outline: none; }
+
+/* ── Kill the grey mobile tap-flash + 300ms delay app-wide ── */
+button, [role="button"], a, input, .mc-btn, .dpad-btn {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+/* ── Smooth screen entrance ──────────────────────────────────
+   Opacity-only fade is safe for canvas screens (no layout shift
+   that could mis-size the canvas); menu screens also rise.    */
+.screen.active { animation: screenFade 0.3s ease both; }
+@keyframes screenFade { from { opacity: 0; } to { opacity: 1; } }
+#modeChooser.active,
+#progressScreen.active { animation: screenRise 0.42s cubic-bezier(0.22,1,0.36,1) both; }
+@keyframes screenRise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* ── Safe-area insets ────────────────────────────────────────
+   Keep controls clear of notches, camera cut-outs and the
+   gesture / home bar on modern phones. Needs viewport-fit=cover
+   on the viewport meta (set in index.html) to report non-zero. */
+.slash-exit-btn  { top: max(10px, env(safe-area-inset-top));
+                   right: max(10px, env(safe-area-inset-right)); }
+.slash-fs-btn    { top: max(10px, env(safe-area-inset-top));
+                   right: calc(max(10px, env(safe-area-inset-right)) + 52px); }
+.slash-pause-btn { top: max(10px, env(safe-area-inset-top));
+                   left: max(10px, env(safe-area-inset-left)); }
+
+/* Friendlier 44px tap targets (was 40px — below the recommended min) */
+.slash-exit-btn, .slash-fs-btn, .slash-pause-btn { width: 44px; height: 44px; }
+
+/* D-pad clears the home/gesture bar and side edges */
+.runner-controls {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    padding-left:  calc(16px + env(safe-area-inset-left));
+    padding-right: calc(16px + env(safe-area-inset-right));
+}
+
+/* Mode chooser breathes around the notch & gesture bar */
+.mc-hero    { padding-top: calc(20px + env(safe-area-inset-top)); }
+.mc-buttons { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+
+/* Battle tiles stay above the gesture bar so the bottom row is tappable */
+.battle-overlay { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
