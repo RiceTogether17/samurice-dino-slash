@@ -2,12 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0d2b08">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#E0541A">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="description" content="Samurice Dino Games — Phonics runner where you slash dinosaurs with the power of words!">
-    <title>⚔️ Samurice Dino Games</title>
+    <meta name="apple-mobile-web-app-title" content="Dino Slash">
+    <meta name="description" content="Samurice Dino Slash — Phonics runner where you slash dinosaurs with the power of words!">
+    <title>⚔️ Samurice Dino Slash</title>
+    <!-- App icons / logo -->
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="assets/icons/icon-180.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap">
@@ -43,15 +48,60 @@
      MODE CHOOSER (external entry point — choose game type)
 ═══════════════════════════════════════════════════════════════ -->
 <div id="modeChooser" class="screen active">
+
+    <!-- ── Top strip: streak chip + level badge ── -->
+    <div class="mc-top-strip">
+        <div id="mc-streak-chip" class="mc-streak-chip" style="display:none"></div>
+        <div class="mc-top-spacer"></div>
+        <div class="mc-level-badge" id="mc-level-badge">Lv.1</div>
+    </div>
+
+    <!-- ── Hero area: mascot + title + tagline ── -->
     <div class="mc-hero">
         <img src="assets/sprites/riku-idle.png" class="mc-mascot" alt="Riku the Samurice" onerror="this.style.display='none'">
-        <h1 class="mc-title">⚔️ Samurice Dino Games 🦖</h1>
+        <h1 class="mc-title">⚔️ Samurice Dino Slash</h1>
         <p class="mc-sub">Learn to read! Slash dinos with WORD POWER!</p>
-        <!-- Daily streak + rice grains engagement strip -->
-        <div id="mc-streak-chip" class="mc-streak-chip" style="display:none"></div>
-        <div class="mc-meta-row">
-            <div id="mc-rice-counter" class="mc-rice-counter"></div>
-            <div id="mc-countdown" class="mc-countdown"></div>
+    </div>
+
+    <!-- ── HERO CTA: Campaign Mode ── -->
+    <div class="mc-cta-wrap">
+        <button class="mc-play-btn" id="launchSlashBtn">
+            <span class="mc-play-icon">⚔️</span>
+            <div class="mc-play-text">
+                <span class="mc-play-name">PLAY!</span>
+                <span class="mc-play-sub">Dino Slash Adventure</span>
+            </div>
+            <span class="mc-play-arrow">▶</span>
+        </button>
+        <div class="mc-stage-hint" id="mc-stage-hint"></div>
+    </div>
+
+    <!-- ── Secondary row: Dino Dash · Rewards · Progress ── -->
+    <div class="mc-secondary">
+        <button class="mc-sec-btn" id="launchFlappyBtn">
+            <span class="mc-sec-icon">🦕</span>
+            <span class="mc-sec-label">Dino Dash</span>
+        </button>
+        <button class="mc-sec-btn" id="mc-rewards-btn" aria-label="Open daily rewards">
+            <span class="mc-sec-icon">🎁</span>
+            <span class="mc-sec-label">Rewards</span>
+            <span class="mc-notif-dot" id="mc-rewards-dot" style="display:none">!</span>
+        </button>
+        <button class="mc-sec-btn" id="launchProgressBtn">
+            <span class="mc-sec-icon">📊</span>
+            <span class="mc-sec-label">Progress</span>
+        </button>
+    </div>
+
+    <!-- ── Rewards backdrop (click to close) ── -->
+    <div class="mc-rewards-backdrop" id="mc-rewards-backdrop"></div>
+
+    <!-- ── Rewards slide-up panel ── -->
+    <div class="mc-rewards-panel" id="mc-rewards-panel" aria-hidden="true">
+        <div class="mc-rewards-drag-handle"></div>
+        <div class="mc-rewards-header">
+            <h3 class="mc-rewards-title">🌾 Daily Rewards</h3>
+            <button class="mc-rewards-close" id="mc-rewards-close" aria-label="Close rewards">✕</button>
         </div>
         <!-- XP Level bar -->
         <div id="mc-xp-bar-wrap" class="mc-xp-bar-wrap">
@@ -61,48 +111,24 @@
             </div>
             <span class="mc-xp-next" id="mc-xp-next">0 XP</span>
         </div>
+        <!-- Rice + countdown -->
+        <div class="mc-meta-row">
+            <div id="mc-rice-counter" class="mc-rice-counter"></div>
+            <div id="mc-countdown" class="mc-countdown"></div>
+        </div>
+        <!-- Lucky Jar + 7-Day Calendar + Streak Shield -->
+        <div class="mc-engage-strip">
+            <div class="mc-jar-wrap" id="mc-jar-wrap">
+                <div class="mc-jar-btn" id="mc-jar-btn">🫙</div>
+                <div class="mc-jar-label" id="mc-jar-label">Lucky Jar</div>
+            </div>
+            <div class="mc-calendar" id="mc-calendar"></div>
+            <div class="mc-shield-wrap" id="mc-shield-wrap" style="display:none">
+                <button class="mc-shield-btn" id="mc-shield-btn">🛡️ Shield Streak</button>
+            </div>
+        </div>
         <!-- Welcome back bonus banner -->
         <div id="mc-welcome-back" class="mc-welcome-back" style="display:none"></div>
-    </div>
-
-    <!-- ── Engagement row: Lucky Jar + 7-Day Calendar + Streak Shield ── -->
-    <div class="mc-engage-strip">
-        <!-- Lucky Jar -->
-        <div class="mc-jar-wrap" id="mc-jar-wrap">
-            <div class="mc-jar-btn" id="mc-jar-btn">🫙</div>
-            <div class="mc-jar-label" id="mc-jar-label">Lucky Jar</div>
-        </div>
-        <!-- 7-Day Login Calendar -->
-        <div class="mc-calendar" id="mc-calendar"></div>
-        <!-- Streak Shield -->
-        <div class="mc-shield-wrap" id="mc-shield-wrap" style="display:none">
-            <button class="mc-shield-btn" id="mc-shield-btn">🛡️ Shield Streak</button>
-        </div>
-    </div>
-
-    <div class="mc-buttons">
-        <button class="mc-btn slash-btn" id="launchSlashBtn">
-            <span class="mc-icon">⚔️</span>
-            <div class="mc-text">
-                <span class="mc-name">Dino Slash Adventure!</span>
-                <span class="mc-desc">Run, jump, spell words & fight dino bosses!</span>
-            </div>
-        </button>
-        <button class="mc-btn flap-btn" id="launchFlappyBtn">
-            <span class="mc-icon">🦕</span>
-            <div class="mc-text">
-                <span class="mc-name">Dino Dash!</span>
-                <span class="mc-desc">Fly through the sky! How far can you go?</span>
-            </div>
-        </button>
-        <!-- Parent / Teacher Progress Dashboard -->
-        <button class="mc-btn progress-btn" id="launchProgressBtn">
-            <span class="mc-icon">📊</span>
-            <div class="mc-text">
-                <span class="mc-name">Progress Dashboard</span>
-                <span class="mc-desc">Parent & teacher view — phonics mastery heatmap &amp; stats</span>
-            </div>
-        </button>
     </div>
 </div>
 <!-- ══════════════════════════════════════════════════════════
@@ -272,6 +298,54 @@ document.addEventListener('DOMContentLoaded', function() {
   // Init parent dashboard + engagement engine (both defer until _progressTracker is ready)
   initParentDashboard();
   initEngagementEngine();
+
+  // ── Rewards panel toggle ─────────────────────────────────────
+  function _openRewards() {
+    document.getElementById('mc-rewards-panel')?.classList.add('mc-rewards-open');
+    document.getElementById('mc-rewards-backdrop')?.classList.add('mc-rewards-backdrop-visible');
+    document.getElementById('mc-rewards-panel')?.setAttribute('aria-hidden','false');
+  }
+  function _closeRewards() {
+    document.getElementById('mc-rewards-panel')?.classList.remove('mc-rewards-open');
+    document.getElementById('mc-rewards-backdrop')?.classList.remove('mc-rewards-backdrop-visible');
+    document.getElementById('mc-rewards-panel')?.setAttribute('aria-hidden','true');
+  }
+  document.getElementById('mc-rewards-btn')?.addEventListener('click', _openRewards);
+  document.getElementById('mc-rewards-close')?.addEventListener('click', _closeRewards);
+  document.getElementById('mc-rewards-backdrop')?.addEventListener('click', _closeRewards);
+
+  // ── Stage progress hint ──────────────────────────────────────
+  function _updateStageHint() {
+    const hint = document.getElementById('mc-stage-hint');
+    const t    = window._progressTracker;
+    if (!hint) return;
+    if (!t) { setTimeout(_updateStageHint, 300); return; }
+    let nextStage = 1;
+    for (let i = 1; i <= 6; i++) {
+      if (t.getStage(i)?.completedAt) nextStage = Math.min(i + 1, 6);
+    }
+    const allDone = [1,2,3,4,5,6].every(i => t.getStage(i)?.completedAt);
+    if (allDone) {
+      hint.textContent = '🏆 All 6 stages complete! Play for mastery!';
+    } else if (nextStage > 1) {
+      const name = (typeof PHONICS_DATA !== 'undefined' && PHONICS_DATA[`stage${nextStage}`]?.name) || `Stage ${nextStage}`;
+      hint.textContent = `Continue  Stage ${nextStage}: ${name}`;
+    } else {
+      hint.textContent = 'Begin your adventure in Stage 1!';
+    }
+  }
+  _updateStageHint();
+
+  // ── Rewards notification dot ─────────────────────────────────
+  function _updateRewardsDot() {
+    const dot = document.getElementById('mc-rewards-dot');
+    const ee  = window._engagementEngine;
+    if (!dot || !ee) { setTimeout(_updateRewardsDot, 400); return; }
+    const show = ee.canSpinJar() || (window._progressTracker?.canClaimLoginReward?.());
+    dot.style.display = show ? 'flex' : 'none';
+  }
+  _updateRewardsDot();
+
   // Mode chooser
   document.getElementById('launchSlashBtn')?.addEventListener('click', () => launchSlashGame());
   document.getElementById('launchFlappyBtn')?.addEventListener('click', () => launchFlappyGame());
@@ -279,6 +353,9 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('slashExitBtn')?.addEventListener('click', () => {
     exitSlash();
     if (window._engagementEngine) window._engagementEngine.refresh();
+    _updateStageHint();
+    _updateRewardsDot();
+    _closeRewards();
   });
   document.getElementById('slashFsBtn')?.addEventListener('click', () => toggleFullscreen('slashWrapper'));
   document.getElementById('slashPauseBtn')?.addEventListener('click', () => _slashPause());
@@ -342,8 +419,9 @@ function _slashPause() {
 
 <!-- Phase 9: PWA install banner (hidden until beforeinstallprompt fires) -->
 <div id="pwa-install-banner" aria-live="polite" role="complementary">
+  <img src="assets/icons/icon-192.png" class="pwa-logo" alt="" aria-hidden="true">
   <div class="pwa-text">
-    ⚔️ <strong>Play offline!</strong>
+    <strong>Play offline!</strong>
     <small>Add Samurice Dino Slash to your home screen</small>
   </div>
   <button id="pwa-install-btn" aria-label="Add to home screen">Install</button>

@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────
 'use strict';
 
-const CACHE_VERSION = 'samurice-v2';
+const CACHE_VERSION = 'samurice-v3';
 const CACHE_NAME    = `${CACHE_VERSION}-static`;
 
 // Assets that should be pre-cached at install time (critical path).
@@ -23,7 +23,14 @@ const PRECACHE_URLS = [
   './js/battleEngine.js',
   './js/tutorial.js',
   './js/slashGame.js',
+  './js/parentDashboard.js',
+  './js/engagementEngine.js',
   './manifest.json',
+  './assets/icons/icon-192.png',
+  './assets/icons/icon-512.png',
+  './assets/icons/maskable-512.png',
+  './assets/icons/icon-180.png',
+  './assets/icons/favicon-32.png',
 ];
 
 // ── Install: pre-cache critical files ────────────────────────
