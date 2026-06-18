@@ -59,7 +59,7 @@ const PHONICS_DATA = {
       { word:"beg",  phonemes:["b","e","g"],  damage:15, hint:"🙏" },
       { word:"peg",  phonemes:["p","e","g"],  damage:15, hint:"📌" },
       { word:"web",  phonemes:["w","e","b"],  damage:15, hint:"🕸️" },
-      { word:"gem",  phonemes:["g","e","m"],  damage:15, hint:"💎" },
+      { word:"jet",  phonemes:["j","e","t"],  damage:15, hint:"✈️" },
     ],
   },
 
