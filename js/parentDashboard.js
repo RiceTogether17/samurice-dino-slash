@@ -89,7 +89,7 @@ class ParentDashboard {
     if (!container) return;
     container.innerHTML = '';
 
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= (PHONICS_DATA.stageCount || 6); i++) {
       const stage = PHONICS_DATA.stageList[i - 1];
       const data  = this._tracker.getStage(i);
       const { stars, unlocked, wordsMastered = [], totalBlends = 0, correctBlends = 0 } = data;
@@ -133,7 +133,7 @@ class ParentDashboard {
 
     // Aggregate weak scores across all stages
     const scores = {};
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= (PHONICS_DATA.stageCount || 6); i++) {
       const weak = this._tracker.getWeakPhonemes(i);
       for (const [ph, s] of Object.entries(weak)) {
         scores[ph] = (scores[ph] || 0) + s;
@@ -207,7 +207,7 @@ class ParentDashboard {
       '📚 Stage Scores:',
     ];
 
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= (PHONICS_DATA.stageCount || 6); i++) {
       const d = t.getStage(i);
       if (!d.unlocked) continue;
       const acc = d.totalBlends > 0

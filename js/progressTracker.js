@@ -57,7 +57,7 @@ const ACHIEVEMENTS = [
   { id:'words-50',      name:'Word Apprentice',    desc:'Blend 50 words total',                       emoji:'📚' },
   { id:'words-200',     name:'Word Master',        desc:'Blend 200 words total',                      emoji:'🧙' },
   { id:'perfect-10',    name:'Perfect 10',         desc:'Get 10 perfect blends in one run',           emoji:'💯' },
-  { id:'all-stages',    name:'Dino Slayer',        desc:'Complete all 6 campaign stages',             emoji:'🦕' },
+  { id:'all-stages',    name:'Dino Slayer',        desc:'Complete all 30 campaign stages',            emoji:'🦕' },
   { id:'ricegrain-500', name:'Rice Baron',         desc:'Collect 500 rice grains total',              emoji:'🌾' },
   { id:'slip-recover',  name:'Oof Recovery',       desc:'Miss a blend but keep running anyway',       emoji:'😅' },
 ];
@@ -426,9 +426,13 @@ class ProgressTracker {
     else if (acc >= 0.7) s.stars = Math.max(s.stars, 2);
     else if (acc >= 0.5) s.stars = Math.max(s.stars, 1);
     this.data.stages[stageId] = s;
-    if (stageId < 6) this.unlockStage(stageId + 1);
+    const totalStages = (typeof PHONICS_DATA !== 'undefined' && PHONICS_DATA.stageCount) || 6;
+    if (stageId < totalStages) this.unlockStage(stageId + 1);
     this.addRiceGrains(s.stars * 50 + Math.floor(score / 10));
-    const allDone = [1,2,3,4,5,6].every(id => this.data.stages[id]?.completedAt);
+    let allDone = true;
+    for (let id = 1; id <= totalStages; id++) {
+      if (!this.data.stages[id]?.completedAt) { allDone = false; break; }
+    }
     if (allDone) this.unlock('all-stages');
     this._save();
   }

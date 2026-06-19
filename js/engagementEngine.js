@@ -80,7 +80,8 @@ class EngagementEngine {
     xp += t.getEndlessBestDist()         * 1;
     xp += (t.getBestCombo()              * 8);
     xp += (t.data?.achievements?.length || 0) * 75;
-    for (let i = 1; i <= 6; i++) {
+    const _stageTotal = (typeof PHONICS_DATA !== 'undefined' && PHONICS_DATA.stageCount) || 6;
+    for (let i = 1; i <= _stageTotal; i++) {
       const s = t.getStage(i);
       if (s.completedAt)  xp += 200;
       xp += (s.stars || 0) * 60;

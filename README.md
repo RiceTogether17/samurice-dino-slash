@@ -24,8 +24,30 @@ Deployed on GitHub Pages:
 
 ## Game Modes
 
-- **Dino Slash Adventure** — Campaign: 6 stages, runner + boss battles, shop, achievements, daily challenge, endless mode
-- **Dino Dash** — Flappy-style side mode
+**Campaign (main mode)** — a Mario-style world map: **6 Worlds × 5 stages = 30 stages**,
+sequenced by the science-of-reading progression so children master every phonics process:
+
+| World | Theme | Phonics Skill |
+|-------|-------|---------------|
+| 1 · Rice Paddy Valley | 🌾 | Phonemic Awareness & Letter Sounds (first/last/middle sounds, rhyming, letter→sound) |
+| 2 · Bamboo Dojo Forest | 🎋 | CVC Blending & Segmenting (short a/e/i/o/u) |
+| 3 · Cherry Blossom Temple | 🌸 | Digraphs (sh, ch, th, wh) & Consonant Blends |
+| 4 · Ancient Rice Ruins | 🏯 | Long Vowels — Magic-e & Vowel Teams |
+| 5 · Mountain Terraces | ⛰️ | Sight Words & Word Families |
+| 6 · Volcanic Peak | 🌋 | Multisyllabic Words & Mastery |
+
+Each stage = an auto-runner (collect phoneme coins = **segmenting**) + a battle that mixes
+**blending** with mini-games tuned per stage:
+
+- 🕵️ **Sound Detective** — isolate the first / last / middle / missing sound (phonemic awareness)
+- 🔡 **Letter Sounds** — hear a sound, tap the letter that makes it
+- 🎵 **Rhyme Time** — pick the word that rhymes
+- 🧩 **Segment It** — choose how a word breaks into sounds
+- 👁️ **Sight Words** — read tricky high-frequency words on sight
+
+Plus shop, achievements, daily challenge, and an endless mode.
+
+**Dino Dash** — Flappy-style side mode.
 
 ## Development
 
