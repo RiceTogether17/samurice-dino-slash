@@ -290,6 +290,13 @@
 <script>
 // ── Button event listeners (replaces inline onclick attributes) ──
 document.addEventListener('DOMContentLoaded', function() {
+  // First-run default: start new/young readers in Relaxed Mode (no timer
+  // pressure). They can switch the timer on anytime via the stage-select
+  // toggle. Only sets the default once — never overrides a chosen value.
+  if (localStorage.getItem('samurice_relaxed') === null) {
+    localStorage.setItem('samurice_relaxed', '1');
+  }
+
   // Init parent dashboard + engagement engine (both defer until _progressTracker is ready)
   initParentDashboard();
   initEngagementEngine();

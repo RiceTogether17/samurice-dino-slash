@@ -45,6 +45,15 @@ Each stage = an auto-runner (collect phoneme coins = **segmenting**) + a battle 
 - 🧩 **Segment It** — choose how a word breaks into sounds
 - 👁️ **Sight Words** — read tricky high-frequency words on sight
 
+**Teaching design (teach → then test):**
+
+- 🎓 **Skill Coach** — the first time each mini-game skill appears in a battle, the game
+  models it in plain language and reads an example aloud *before* asking the child.
+- 👁️ **Sight words stay whole** — in the runner, irregular sight words (the, was, said…)
+  are collected as one whole-word coin instead of being sounded out letter-by-letter.
+- 😊 **Relaxed Mode on by default** for new readers (no timer pressure); the timer can be
+  switched on anytime from the stage-select screen for an extra challenge.
+
 Plus shop, achievements, daily challenge, and an endless mode.
 
 **Dino Dash** — Flappy-style side mode.

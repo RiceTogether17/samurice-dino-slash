@@ -690,13 +690,47 @@ class BattleEngine {
     const types = this._stageActivityTypes(baseWord);
     const type  = types[Math.floor(Math.random() * types.length)];
 
+    // Teach-before-test: the FIRST time each skill appears in a battle,
+    // model it in plain language before asking (explicit instruction).
+    if (!this._skillCoached) this._skillCoached = new Set();
+    const firstTime = !this._skillCoached.has(type);
+    this._skillCoached.add(type);
+
     switch (type) {
-      case 'segment-it':   return this._startSegmentItRound(baseWord);
-      case 'rhyme':        return this._startRhymeRound(baseWord);
-      case 'sight-word':   return this._startSightWordRound(baseWord);
-      case 'letter-sound': return this._startLetterSoundRound(baseWord);
-      default:             return this._startSoundIsoRound(type, baseWord);
+      case 'segment-it':   this._startSegmentItRound(baseWord); break;
+      case 'rhyme':        this._startRhymeRound(baseWord); break;
+      case 'sight-word':   this._startSightWordRound(baseWord); break;
+      case 'letter-sound': this._startLetterSoundRound(baseWord); break;
+      default:             this._startSoundIsoRound(type, baseWord); break;
     }
+    if (firstTime) this._coachSkill(type, baseWord);
+  }
+
+  // ── Skill Coach — plain-language "I do" before the child's "you do" ──
+  _coachSkill(type, baseWord) {
+    const tips = {
+      first:        '🎓 NEW! FIRST SOUND — listen to the sound the word STARTS with.',
+      last:         '🎓 NEW! LAST SOUND — listen to the sound the word ENDS with.',
+      middle:       '🎓 NEW! MIDDLE SOUND — listen for the vowel sound in the middle.',
+      missing:      '🎓 NEW! MISSING SOUND — which sound do you hear that isn’t shown?',
+      'letter-sound':'🎓 NEW! LETTER SOUNDS — tap the letter that MAKES that sound.',
+      rhyme:        '🎓 NEW! RHYMING — rhyming words end the same, like cat & hat.',
+      'sight-word': '🎓 NEW! SIGHT WORDS — some words you just KNOW. Find the one you hear.',
+      'segment-it': '🎓 NEW! SEGMENT IT — break the word into its separate sounds.',
+    };
+    const tip = tips[type];
+    if (!tip) return;
+    // The coaching banner replaces the round prompt until the child acts,
+    // and we model the example aloud a beat after it appears.
+    this._setFeedback(tip, '#FFE082');
+    setTimeout(() => {
+      if (this._destroyed || this.done) return;
+      if (type === 'letter-sound' && this._challenge?.playTarget) {
+        this.audio?.playPhoneme(this._challenge.playTarget);
+      } else if (baseWord) {
+        this.audio?.playWord(baseWord.word);
+      }
+    }, 750);
   }
 
   // ── Phonemic awareness: isolate First / Last / Middle / Missing sound ──

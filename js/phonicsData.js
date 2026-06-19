@@ -346,8 +346,9 @@ const _WORLD_STAGES = {
       words:[ _w("cake",["c","a","ke"],"🎂"), _w("frog",["fr","o","g"],"🐸"),
         _w("robot",["ro","bot"],"🤖"), _w("the",["th","e"],"📘",{sight:true}),
         _w("crash",["cr","a","sh"],"💥"), _w("ship",["sh","i","p"],"🚢"),
-        _w("jump",["j","u","mp"],"🤸",{rime:"ump"}), _w("volcano",["vol","ca","no"],"🌋"),
-        _w("light",["l","igh","t"],"💡"), _w("blend",["bl","e","nd"],"🌀") ] },
+        _w("jump",["j","u","mp"],"🤸",{rime:"ump"}), _w("bump",["b","u","mp"],"💥",{rime:"ump"}),
+        _w("volcano",["vol","ca","no"],"🌋"), _w("light",["l","igh","t"],"💡"),
+        _w("blend",["bl","e","nd"],"🌀") ] },
   ],
 };
 
@@ -725,9 +726,15 @@ PHONICS_DATA.getRunnerCoins = function(stageId) {
   const selected = stage.words.slice(0, 5);
   const coins = [];
   selected.forEach((w, wIdx) => {
-    w.phonemes.forEach((ph, pIdx) => {
-      coins.push({ phoneme: ph, wordId: wIdx, phIdx: pIdx, hint: w.hint, word: w.word });
-    });
+    // Sight words are collected as one whole-word coin (recognise on sight),
+    // every other word is broken into its phoneme coins.
+    if (w.sight) {
+      coins.push({ phoneme: w.word, wordId: wIdx, phIdx: 0, hint: w.hint, word: w.word, sight: true });
+    } else {
+      w.phonemes.forEach((ph, pIdx) => {
+        coins.push({ phoneme: ph, wordId: wIdx, phIdx: pIdx, hint: w.hint, word: w.word });
+      });
+    }
   });
   return coins;
 };
