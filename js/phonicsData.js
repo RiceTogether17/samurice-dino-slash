@@ -1,183 +1,420 @@
 'use strict';
-// === CHANGE LOG ===
-// Step 4 (Progression & Content): expanded phonics content with
-// long-vowel, sight-word, and multisyllabic category packs.
 // ============================================================
 // PHONICS DATA — js/phonicsData.js
-// Campaign stages (6) + Endless mode tiers + Daily challenge sets
+// ------------------------------------------------------------
+// CAMPAIGN = the main game mode.
+//   6 Worlds × 5 stages = 30 stages, sequenced by the
+//   science-of-reading progression children master phonics with:
+//
+//     World 1 · Rice Paddy Valley  → Phonemic Awareness & Letter Sounds
+//     World 2 · Bamboo Dojo Forest → CVC Blending & Segmenting
+//     World 3 · Cherry Blossom Temple → Digraphs & Consonant Blends
+//     World 4 · Ancient Rice Ruins → Long Vowels (Magic-e & Vowel Teams)
+//     World 5 · Mountain Terraces  → Sight Words & Word Families
+//     World 6 · Volcanic Peak      → Multisyllabic Words & Mastery
+//
+//   Each stage tags a `skill` (what it teaches) and `activities`
+//   (which mini-game types the boss battle uses):
+//     first | last | middle | missing  → phonemic awareness (isolate a sound)
+//     letter-sound                      → grapheme→phoneme letter sounds
+//     rhyme                             → rhyming (phonemic awareness)
+//     segment-it                        → segmenting & blending
+//     sight-word                        → whole-word sight recognition
+//   `challengeEvery` controls how often a mini-game round appears
+//   (1 = every round is a mini-game; great for sight-word stages).
 // ============================================================
 
-const PHONICS_DATA = {
+const PHONICS_DATA = {};
 
-  // ── STAGE 1 ── Short-a CVC ──────────────────────────────────
-  stage1: {
-    id: 1, name: "Rice Paddy Valley",
-    pattern: "Short-a Words", patternDesc: "short 'a' · cat · bat · fan · map",
-    bg: "stage-1-rice-paddy", bossFile: "stage-1-rex", bossName: "Rex the Rapscallion",
-    blendTime: 26, bossHp: 120, bossAttack: 14, minionFile: "stage-1-tri",
-    skyColor: ["#87CEEB","#c5e8f8"], groundColor: "#5a8a3c", accentColor: "#ff6b35",
-    runnerSpeed: 3.2,
-    words: [
-      { word:"cat",  phonemes:["c","a","t"],  damage:14, hint:"🐱" },
-      { word:"bat",  phonemes:["b","a","t"],  damage:14, hint:"🦇" },
-      { word:"hat",  phonemes:["h","a","t"],  damage:14, hint:"🎩" },
-      { word:"mat",  phonemes:["m","a","t"],  damage:14, hint:"🛏️" },
-      { word:"rat",  phonemes:["r","a","t"],  damage:14, hint:"🐀" },
-      { word:"fan",  phonemes:["f","a","n"],  damage:14, hint:"🌬️" },
-      { word:"man",  phonemes:["m","a","n"],  damage:14, hint:"🧑" },
-      { word:"can",  phonemes:["c","a","n"],  damage:14, hint:"🥫" },
-      { word:"pan",  phonemes:["p","a","n"],  damage:14, hint:"🍳" },
-      { word:"ran",  phonemes:["r","a","n"],  damage:14, hint:"🏃" },
-      { word:"cap",  phonemes:["c","a","p"],  damage:14, hint:"🧢" },
-      { word:"map",  phonemes:["m","a","p"],  damage:14, hint:"🗺️" },
-      { word:"tap",  phonemes:["t","a","p"],  damage:14, hint:"🚰" },
-      { word:"bag",  phonemes:["b","a","g"],  damage:14, hint:"👜" },
-      { word:"sad",  phonemes:["s","a","d"],  damage:14, hint:"😢" },
-    ],
+// ── World themes (reuse the 6 existing art sets) ──────────────
+// dmg / blendTime / bossHp / bossAttack / runnerSpeed are the
+// world's *base* values; stages ramp difficulty within the world.
+const _WORLDS_META = [
+  {
+    id:1, name:"Rice Paddy Valley", icon:"🌾",
+    skill:"Phonemic Awareness & Letter Sounds",
+    desc:"Tune your ears! Hear first, last & rhyming sounds and learn the sound each letter makes.",
+    bg:"stage-1-rice-paddy", bossFile:"stage-1-rex", minionFile:"stage-1-tri",
+    bossName:"Rex the Rapscallion",
+    skyColor:["#87CEEB","#c5e8f8"], groundColor:"#5a8a3c", accentColor:"#ff6b35",
+    dmg:14, blendTime:30, bossHp:110, bossAttack:12, runnerSpeed:3.0,
   },
+  {
+    id:2, name:"Bamboo Dojo Forest", icon:"🎋",
+    skill:"CVC Blending & Segmenting",
+    desc:"Break words into sounds and blend them back together — the heart of reading!",
+    bg:"stage-2-bamboo", bossFile:"stage-2-rapi", minionFile:"stage-2-stego",
+    bossName:"Rapi the Ruthless",
+    skyColor:["#4CAF50","#81C784"], groundColor:"#2E7D32", accentColor:"#8BC34A",
+    dmg:16, blendTime:26, bossHp:130, bossAttack:14, runnerSpeed:3.4,
+  },
+  {
+    id:3, name:"Cherry Blossom Temple", icon:"🌸",
+    skill:"Digraphs & Consonant Blends",
+    desc:"Two letters, one sound (sh, ch, th) and zippy blends (cl, fr, st)!",
+    bg:"stage-3-cherry-temple", bossFile:"stage-3-brachio", minionFile:"stage-3-ptera",
+    bossName:"Brachio the Bold",
+    skyColor:["#FFB7C5","#FF69B4"], groundColor:"#C2185B", accentColor:"#FF80AB",
+    dmg:18, blendTime:24, bossHp:150, bossAttack:16, runnerSpeed:3.8,
+  },
+  {
+    id:4, name:"Ancient Rice Ruins", icon:"🏯",
+    skill:"Long Vowels — Magic-e & Vowel Teams",
+    desc:"Magic-e and vowel teams make vowels say their names: cake, bike, rain, boat!",
+    bg:"stage-4-ruins", bossFile:"stage-4-anky", minionFile:"stage-4-anky",
+    bossName:"Anky the Armored",
+    skyColor:["#795548","#a1887f"], groundColor:"#4E342E", accentColor:"#FF9800",
+    dmg:20, blendTime:22, bossHp:170, bossAttack:18, runnerSpeed:4.1,
+  },
+  {
+    id:5, name:"Mountain Rice Terraces", icon:"⛰️",
+    skill:"Sight Words & Word Families",
+    desc:"Snap up tricky sight words on sight and master rhyming word families.",
+    bg:"stage-5-mountain-terraces", bossFile:"stage-5-spino", minionFile:"stage-5-pachy",
+    bossName:"Spino the Spinner",
+    skyColor:["#1565C0","#42A5F5"], groundColor:"#1B5E20", accentColor:"#4CAF50",
+    dmg:22, blendTime:20, bossHp:185, bossAttack:20, runnerSpeed:4.4,
+  },
+  {
+    id:6, name:"Volcanic Samurai Peak", icon:"🌋",
+    skill:"Multisyllabic Words & Mastery",
+    desc:"Chunk big words syllable by syllable and prove your phonics mastery!",
+    bg:"stage-6-volcanic", bossFile:"stage-6-dilo", minionFile:"stage-6-dilo",
+    bossName:"Dilo the Destroyer",
+    skyColor:["#212121","#B71C1C"], groundColor:"#880E4F", accentColor:"#FF6F00",
+    dmg:24, blendTime:18, bossHp:200, bossAttack:22, runnerSpeed:4.8,
+  },
+];
 
-  // ── STAGE 2 ── Short-e CVC ──────────────────────────────────
-  stage2: {
-    id: 2, name: "Bamboo Dojo Forest",
-    pattern: "Short-e Words", patternDesc: "short 'e' · bed · pet · ten · leg",
-    bg: "stage-2-bamboo", bossFile: "stage-2-rapi", bossName: "Rapi the Ruthless",
-    blendTime: 24, bossHp: 130, bossAttack: 15, minionFile: "stage-2-stego",
-    skyColor: ["#4CAF50","#81C784"], groundColor: "#2E7D32", accentColor: "#8BC34A",
-    runnerSpeed: 3.6,
-    words: [
-      { word:"bed",  phonemes:["b","e","d"],  damage:15, hint:"🛏️" },
-      { word:"red",  phonemes:["r","e","d"],  damage:15, hint:"🔴" },
-      { word:"pet",  phonemes:["p","e","t"],  damage:15, hint:"🐾" },
-      { word:"wet",  phonemes:["w","e","t"],  damage:15, hint:"💧" },
-      { word:"set",  phonemes:["s","e","t"],  damage:15, hint:"⚙️" },
-      { word:"ten",  phonemes:["t","e","n"],  damage:15, hint:"🔟" },
-      { word:"hen",  phonemes:["h","e","n"],  damage:15, hint:"🐔" },
-      { word:"pen",  phonemes:["p","e","n"],  damage:15, hint:"🖊️" },
-      { word:"den",  phonemes:["d","e","n"],  damage:15, hint:"🦁" },
-      { word:"net",  phonemes:["n","e","t"],  damage:15, hint:"🥅" },
-      { word:"leg",  phonemes:["l","e","g"],  damage:15, hint:"🦵" },
-      { word:"beg",  phonemes:["b","e","g"],  damage:15, hint:"🙏" },
-      { word:"peg",  phonemes:["p","e","g"],  damage:15, hint:"📌" },
-      { word:"web",  phonemes:["w","e","b"],  damage:15, hint:"🕸️" },
-      { word:"jet",  phonemes:["j","e","t"],  damage:15, hint:"✈️" },
-    ],
-  },
+// Tiny word helper — keeps stage tables readable.
+function _w(word, phonemes, hint, extra) {
+  return Object.assign({ word, phonemes, hint }, extra || {});
+}
 
-  // ── STAGE 3 ── Short-i CVC ──────────────────────────────────
-  stage3: {
-    id: 3, name: "Cherry Blossom Temple",
-    pattern: "Short-i Words", patternDesc: "short 'i' · sit · bit · win · pig",
-    bg: "stage-3-cherry-temple", bossFile: "stage-3-brachio", bossName: "Brachio the Bold",
-    blendTime: 22, bossHp: 140, bossAttack: 16, minionFile: "stage-3-ptera",
-    skyColor: ["#FFB7C5","#FF69B4"], groundColor: "#C2185B", accentColor: "#FF80AB",
-    runnerSpeed: 4.0,
-    words: [
-      { word:"sit",  phonemes:["s","i","t"],  damage:16, hint:"🪑" },
-      { word:"bit",  phonemes:["b","i","t"],  damage:16, hint:"🦷" },
-      { word:"hit",  phonemes:["h","i","t"],  damage:16, hint:"⚔️" },
-      { word:"pit",  phonemes:["p","i","t"],  damage:16, hint:"🕳️" },
-      { word:"win",  phonemes:["w","i","n"],  damage:16, hint:"🏆" },
-      { word:"bin",  phonemes:["b","i","n"],  damage:16, hint:"🗑️" },
-      { word:"tin",  phonemes:["t","i","n"],  damage:16, hint:"🥫" },
-      { word:"lip",  phonemes:["l","i","p"],  damage:16, hint:"💋" },
-      { word:"dip",  phonemes:["d","i","p"],  damage:16, hint:"🌊" },
-      { word:"tip",  phonemes:["t","i","p"],  damage:16, hint:"💡" },
-      { word:"dig",  phonemes:["d","i","g"],  damage:16, hint:"⛏️" },
-      { word:"big",  phonemes:["b","i","g"],  damage:16, hint:"🐘" },
-      { word:"pig",  phonemes:["p","i","g"],  damage:16, hint:"🐷" },
-      { word:"mix",  phonemes:["m","i","x"],  damage:16, hint:"🥣" },
-      { word:"fix",  phonemes:["f","i","x"],  damage:16, hint:"🔧" },
-    ],
-  },
+// ── Per-world stage tables ────────────────────────────────────
+// Each entry: { name, pattern, patternDesc, skill, activities,
+//               challengeEvery?, miniName?, words:[...] }
+const _WORLD_STAGES = {
 
-  // ── STAGE 4 ── Short-o CVC ──────────────────────────────────
-  stage4: {
-    id: 4, name: "Ancient Rice Ruins",
-    pattern: "Short-o Words", patternDesc: "short 'o' · dog · hot · hop · log",
-    bg: "stage-4-ruins", bossFile: "stage-4-anky", bossName: "Anky the Armored",
-    blendTime: 21, bossHp: 150, bossAttack: 17, minionFile: "stage-4-anky",
-    skyColor: ["#795548","#a1887f"], groundColor: "#4E342E", accentColor: "#FF9800",
-    runnerSpeed: 4.2,
-    words: [
-      { word:"hot",  phonemes:["h","o","t"],  damage:17, hint:"🔥" },
-      { word:"dog",  phonemes:["d","o","g"],  damage:17, hint:"🐶" },
-      { word:"hop",  phonemes:["h","o","p"],  damage:17, hint:"🐸" },
-      { word:"top",  phonemes:["t","o","p"],  damage:17, hint:"🔝" },
-      { word:"fog",  phonemes:["f","o","g"],  damage:17, hint:"🌫️" },
-      { word:"log",  phonemes:["l","o","g"],  damage:17, hint:"🪵" },
-      { word:"dot",  phonemes:["d","o","t"],  damage:17, hint:"⚫" },
-      { word:"got",  phonemes:["g","o","t"],  damage:17, hint:"✅" },
-      { word:"pot",  phonemes:["p","o","t"],  damage:17, hint:"🍯" },
-      { word:"mop",  phonemes:["m","o","p"],  damage:17, hint:"🧹" },
-      { word:"cop",  phonemes:["c","o","p"],  damage:17, hint:"👮" },
-      { word:"sob",  phonemes:["s","o","b"],  damage:17, hint:"😭" },
-      { word:"job",  phonemes:["j","o","b"],  damage:17, hint:"💼" },
-      { word:"box",  phonemes:["b","o","x"],  damage:17, hint:"📦" },
-      { word:"cob",  phonemes:["c","o","b"],  damage:17, hint:"🌽" },
-    ],
-  },
+  // ════════ WORLD 1 — Phonemic Awareness & Letter Sounds ════════
+  1: [
+    { name:"First Sound Forest", pattern:"First Sounds",
+      patternDesc:"Hear the sound a word STARTS with", skill:"Phonemic Awareness",
+      activities:["first","letter-sound"], challengeEvery:2, miniName:"Sound Sprout",
+      words:[ _w("sun",["s","u","n"],"☀️"), _w("map",["m","a","p"],"🗺️"),
+        _w("dog",["d","o","g"],"🐶"), _w("fan",["f","a","n"],"🌬️"),
+        _w("leg",["l","e","g"],"🦵"), _w("bug",["b","u","g"],"🐛"),
+        _w("pig",["p","i","g"],"🐷"), _w("top",["t","o","p"],"🔝"),
+        _w("net",["n","e","t"],"🥅"), _w("web",["w","e","b"],"🕸️") ] },
+    { name:"Last Sound Lagoon", pattern:"Last Sounds",
+      patternDesc:"Hear the sound a word ENDS with", skill:"Phonemic Awareness",
+      activities:["last","letter-sound"], challengeEvery:2, miniName:"Echo Imp",
+      words:[ _w("cat",["c","a","t"],"🐱"), _w("bus",["b","u","s"],"🚌"),
+        _w("hop",["h","o","p"],"🐸"), _w("bed",["b","e","d"],"🛏️"),
+        _w("can",["c","a","n"],"🥫"), _w("mud",["m","u","d"],"🌧️"),
+        _w("jet",["j","e","t"],"✈️"), _w("fox",["f","o","x"],"🦊"),
+        _w("pen",["p","e","n"],"🖊️"), _w("bag",["b","a","g"],"👜") ] },
+    { name:"Rhyme Rice Fields", pattern:"Rhyming Words",
+      patternDesc:"Words that sound the same at the end", skill:"Phonemic Awareness · Rhyme",
+      activities:["rhyme","last"], challengeEvery:2, miniName:"Rhyme Sprite",
+      words:[ _w("cat",["c","a","t"],"🐱",{rime:"at"}), _w("hat",["h","a","t"],"🎩",{rime:"at"}),
+        _w("bat",["b","a","t"],"🦇",{rime:"at"}), _w("mat",["m","a","t"],"🟫",{rime:"at"}),
+        _w("man",["m","a","n"],"🧑",{rime:"an"}), _w("pan",["p","a","n"],"🍳",{rime:"an"}),
+        _w("fan",["f","a","n"],"🌬️",{rime:"an"}), _w("can",["c","a","n"],"🥫",{rime:"an"}),
+        _w("pig",["p","i","g"],"🐷",{rime:"ig"}), _w("wig",["w","i","g"],"💇",{rime:"ig"}),
+        _w("dig",["d","i","g"],"⛏️",{rime:"ig"}), _w("big",["b","i","g"],"🐘",{rime:"ig"}) ] },
+    { name:"Letter Sound Trail", pattern:"Letter Sounds",
+      patternDesc:"Which letter makes that sound?", skill:"Letter Sounds (Phonics)",
+      activities:["letter-sound","first"], challengeEvery:2, miniName:"Glyph Goblin",
+      words:[ _w("van",["v","a","n"],"🚐"), _w("kit",["k","i","t"],"🧰"),
+        _w("yak",["y","a","k"],"🐃"), _w("jam",["j","a","m"],"🍓"),
+        _w("wet",["w","e","t"],"💧"), _w("him",["h","i","m"],"🙋"),
+        _w("log",["l","o","g"],"🪵"), _w("bud",["b","u","d"],"🌱"),
+        _w("zip",["z","i","p"],"🤐"), _w("sun",["s","u","n"],"☀️") ] },
+    { name:"Sound Smash Showdown", pattern:"Sound Detective Boss",
+      patternDesc:"First, last, middle & rhyming sounds — all of it!", skill:"Phonemic Awareness Boss",
+      activities:["first","last","middle","rhyme"], challengeEvery:2,
+      words:[ _w("cat",["c","a","t"],"🐱",{rime:"at"}), _w("hat",["h","a","t"],"🎩",{rime:"at"}),
+        _w("sun",["s","u","n"],"☀️",{rime:"un"}), _w("run",["r","u","n"],"🏃",{rime:"un"}),
+        _w("dog",["d","o","g"],"🐶"), _w("pig",["p","i","g"],"🐷"),
+        _w("man",["m","a","n"],"🧑",{rime:"an"}), _w("pan",["p","a","n"],"🍳",{rime:"an"}),
+        _w("bed",["b","e","d"],"🛏️"), _w("top",["t","o","p"],"🔝") ] },
+  ],
 
-  // ── STAGE 5 ── Short-u CVC ──────────────────────────────────
-  stage5: {
-    id: 5, name: "Mountain Rice Terraces",
-    pattern: "Short-u Words", patternDesc: "short 'u' · cup · bug · fun · run",
-    bg: "stage-5-mountain-terraces", bossFile: "stage-5-spino", bossName: "Spino the Spinner",
-    blendTime: 20, bossHp: 160, bossAttack: 18, minionFile: "stage-5-pachy",
-    skyColor: ["#1565C0","#42A5F5"], groundColor: "#1B5E20", accentColor: "#4CAF50",
-    runnerSpeed: 4.5,
-    words: [
-      { word:"cup",  phonemes:["c","u","p"],  damage:18, hint:"☕" },
-      { word:"bug",  phonemes:["b","u","g"],  damage:18, hint:"🐛" },
-      { word:"fun",  phonemes:["f","u","n"],  damage:18, hint:"🎉" },
-      { word:"tug",  phonemes:["t","u","g"],  damage:18, hint:"💪" },
-      { word:"run",  phonemes:["r","u","n"],  damage:18, hint:"🏃" },
-      { word:"mud",  phonemes:["m","u","d"],  damage:18, hint:"🌧️" },
-      { word:"sun",  phonemes:["s","u","n"],  damage:18, hint:"☀️" },
-      { word:"bun",  phonemes:["b","u","n"],  damage:18, hint:"🍞" },
-      { word:"cut",  phonemes:["c","u","t"],  damage:18, hint:"✂️" },
-      { word:"hug",  phonemes:["h","u","g"],  damage:18, hint:"🤗" },
-      { word:"gut",  phonemes:["g","u","t"],  damage:18, hint:"💥" },
-      { word:"hut",  phonemes:["h","u","t"],  damage:18, hint:"🛖" },
-      { word:"nut",  phonemes:["n","u","t"],  damage:18, hint:"🥜" },
-      { word:"dug",  phonemes:["d","u","g"],  damage:18, hint:"⛏️" },
-      { word:"mug",  phonemes:["m","u","g"],  damage:18, hint:"🫖" },
-    ],
-  },
+  // ════════ WORLD 2 — CVC Blending & Segmenting ════════
+  2: [
+    { name:"Short-A Arena", pattern:"Short-a CVC",
+      patternDesc:"a · cat · bat · map", skill:"Blending & Segmenting",
+      activities:["segment-it","middle"], miniName:"Paddy Pup",
+      words:[ _w("cat",["c","a","t"],"🐱"), _w("hat",["h","a","t"],"🎩"),
+        _w("bat",["b","a","t"],"🦇"), _w("man",["m","a","n"],"🧑"),
+        _w("fan",["f","a","n"],"🌬️"), _w("can",["c","a","n"],"🥫"),
+        _w("map",["m","a","p"],"🗺️"), _w("bag",["b","a","g"],"👜"),
+        _w("tap",["t","a","p"],"🚰"), _w("rat",["r","a","t"],"🐀") ] },
+    { name:"Short-E Encampment", pattern:"Short-e CVC",
+      patternDesc:"e · bed · pet · ten", skill:"Blending & Segmenting",
+      activities:["segment-it","last"], miniName:"Bamboo Bub",
+      words:[ _w("bed",["b","e","d"],"🛏️"), _w("red",["r","e","d"],"🔴"),
+        _w("pet",["p","e","t"],"🐾"), _w("net",["n","e","t"],"🥅"),
+        _w("ten",["t","e","n"],"🔟"), _w("hen",["h","e","n"],"🐔"),
+        _w("pen",["p","e","n"],"🖊️"), _w("leg",["l","e","g"],"🦵"),
+        _w("jet",["j","e","t"],"✈️"), _w("web",["w","e","b"],"🕸️") ] },
+    { name:"Short-I Inlet", pattern:"Short-i CVC",
+      patternDesc:"i · sit · pig · win", skill:"Blending & Segmenting",
+      activities:["segment-it","middle"], miniName:"Reed Raptor",
+      words:[ _w("sit",["s","i","t"],"🪑"), _w("bit",["b","i","t"],"🦷"),
+        _w("pig",["p","i","g"],"🐷"), _w("big",["b","i","g"],"🐘"),
+        _w("win",["w","i","n"],"🏆"), _w("pin",["p","i","n"],"📌"),
+        _w("lip",["l","i","p"],"💋"), _w("dig",["d","i","g"],"⛏️"),
+        _w("fix",["f","i","x"],"🔧"), _w("zip",["z","i","p"],"🤐") ] },
+    { name:"Short-O & U Outpost", pattern:"Short-o / Short-u CVC",
+      patternDesc:"o & u · dog · cup · run", skill:"Blending & Segmenting",
+      activities:["segment-it","first"], miniName:"Dojo Dino",
+      words:[ _w("hot",["h","o","t"],"🔥"), _w("dog",["d","o","g"],"🐶"),
+        _w("pot",["p","o","t"],"🍯"), _w("mop",["m","o","p"],"🧹"),
+        _w("box",["b","o","x"],"📦"), _w("cup",["c","u","p"],"☕"),
+        _w("bug",["b","u","g"],"🐛"), _w("run",["r","u","n"],"🏃"),
+        _w("sun",["s","u","n"],"☀️"), _w("nut",["n","u","t"],"🥜") ] },
+    { name:"Blend Master Battle", pattern:"CVC Boss",
+      patternDesc:"Blend & segment all five short vowels!", skill:"Blending Boss",
+      activities:["segment-it","middle","last"],
+      words:[ _w("cat",["c","a","t"],"🐱"), _w("bed",["b","e","d"],"🛏️"),
+        _w("pig",["p","i","g"],"🐷"), _w("dog",["d","o","g"],"🐶"),
+        _w("cup",["c","u","p"],"☕"), _w("man",["m","a","n"],"🧑"),
+        _w("net",["n","e","t"],"🥅"), _w("win",["w","i","n"],"🏆"),
+        _w("pot",["p","o","t"],"🍯"), _w("bug",["b","u","g"],"🐛") ] },
+  ],
 
-  // ── STAGE 6 ── Consonant Blends ─────────────────────────────
-  stage6: {
-    id: 6, name: "Volcanic Samurai Peak",
-    pattern: "Consonant Blends",
-    patternDesc: "bl · cl · fl · cr · dr · sn · st — two sounds together!",
-    bg: "stage-6-volcanic", bossFile: "stage-6-dilo", bossName: "Dilo the Destroyer",
-    blendTime: 18, bossHp: 180, bossAttack: 20, minionFile: "stage-6-dilo",
-    skyColor: ["#212121","#B71C1C"], groundColor: "#880E4F", accentColor: "#FF6F00",
-    runnerSpeed: 5.0,
-    words: [
-      { word:"clap",  phonemes:["cl","a","p"],  damage:22, hint:"👏" },
-      { word:"flag",  phonemes:["fl","a","g"],  damage:22, hint:"🚩" },
-      { word:"glad",  phonemes:["gl","a","d"],  damage:22, hint:"😄" },
-      { word:"plan",  phonemes:["pl","a","n"],  damage:22, hint:"📋" },
-      { word:"crab",  phonemes:["cr","a","b"],  damage:24, hint:"🦀" },
-      { word:"drip",  phonemes:["dr","i","p"],  damage:22, hint:"💧" },
-      { word:"frog",  phonemes:["fr","o","g"],  damage:24, hint:"🐸" },
-      { word:"grin",  phonemes:["gr","i","n"],  damage:22, hint:"😁" },
-      { word:"trip",  phonemes:["tr","i","p"],  damage:24, hint:"🧳" },
-      { word:"slip",  phonemes:["sl","i","p"],  damage:22, hint:"🫨" },
-      { word:"snap",  phonemes:["sn","a","p"],  damage:24, hint:"🫰" },
-      { word:"spin",  phonemes:["sp","i","n"],  damage:24, hint:"🌀" },
-      { word:"step",  phonemes:["st","e","p"],  damage:24, hint:"👟" },
-      { word:"swim",  phonemes:["sw","i","m"],  damage:24, hint:"🏊" },
-      { word:"blob",  phonemes:["bl","o","b"],  damage:22, hint:"🫧" },
-    ],
-  },
+  // ════════ WORLD 3 — Digraphs & Consonant Blends ════════
+  3: [
+    { name:"SH & CH Shrine", pattern:"sh · ch Digraphs",
+      patternDesc:"Two letters, one sound: ship · chip", skill:"Digraphs",
+      activities:["first","segment-it"], miniName:"Petal Ptero",
+      words:[ _w("ship",["sh","i","p"],"🚢"), _w("shop",["sh","o","p"],"🏪"),
+        _w("shed",["sh","e","d"],"🛖"), _w("fish",["f","i","sh"],"🐟"),
+        _w("chip",["ch","i","p"],"🍟"), _w("chat",["ch","a","t"],"💬"),
+        _w("chin",["ch","i","n"],"😀"), _w("much",["m","u","ch"],"🔆") ] },
+    { name:"TH & WH Wing", pattern:"th · wh Digraphs",
+      patternDesc:"thin · that · when", skill:"Digraphs",
+      activities:["first","last"], miniName:"Blossom Brachi",
+      words:[ _w("thin",["th","i","n"],"📏"), _w("that",["th","a","t"],"👆"),
+        _w("this",["th","i","s"],"👇"), _w("then",["th","e","n"],"➡️"),
+        _w("bath",["b","a","th"],"🛁"), _w("with",["w","i","th"],"🤝"),
+        _w("when",["wh","e","n"],"❓"), _w("whip",["wh","i","p"],"🎠") ] },
+    { name:"L-Blends Lookout", pattern:"L-Blends",
+      patternDesc:"bl · cl · fl · gl · pl · sl", skill:"Consonant Blends",
+      activities:["segment-it","first"], miniName:"Temple Tri",
+      words:[ _w("clap",["cl","a","p"],"👏"), _w("flag",["fl","a","g"],"🚩"),
+        _w("glad",["gl","a","d"],"😄"), _w("plan",["pl","a","n"],"📋"),
+        _w("slip",["sl","i","p"],"🫨"), _w("blob",["bl","o","b"],"🫧"),
+        _w("club",["cl","u","b"],"🃏"), _w("flat",["fl","a","t"],"🛹") ] },
+    { name:"R & S-Blends Ridge", pattern:"R-Blends · S-Blends",
+      patternDesc:"cr · dr · fr · gr · tr · st · sn · sp", skill:"Consonant Blends",
+      activities:["segment-it","first"], miniName:"Sakura Stego",
+      words:[ _w("crab",["cr","a","b"],"🦀"), _w("drip",["dr","i","p"],"💧"),
+        _w("frog",["fr","o","g"],"🐸"), _w("grin",["gr","i","n"],"😁"),
+        _w("trip",["tr","i","p"],"🧳"), _w("stop",["st","o","p"],"🛑"),
+        _w("snap",["sn","a","p"],"🫰"), _w("spin",["sp","i","n"],"🌀"),
+        _w("swim",["sw","i","m"],"🏊"), _w("step",["st","e","p"],"👟") ] },
+    { name:"Blend Storm Boss", pattern:"Digraph & Blend Boss",
+      patternDesc:"Digraphs and blends collide!", skill:"Digraph & Blend Boss",
+      activities:["segment-it","first","last"],
+      words:[ _w("ship",["sh","i","p"],"🚢"), _w("chat",["ch","a","t"],"💬"),
+        _w("that",["th","a","t"],"👆"), _w("clap",["cl","a","p"],"👏"),
+        _w("frog",["fr","o","g"],"🐸"), _w("snap",["sn","a","p"],"🫰"),
+        _w("step",["st","e","p"],"👟"), _w("thin",["th","i","n"],"📏"),
+        _w("flag",["fl","a","g"],"🚩"), _w("grin",["gr","i","n"],"😁") ] },
+  ],
+
+  // ════════ WORLD 4 — Long Vowels ════════
+  4: [
+    { name:"Magic-E Manor · A", pattern:"a_e (Magic-e)",
+      patternDesc:"Silent e makes a say its name: cake", skill:"Long Vowels · Magic-e",
+      activities:["segment-it","middle"], miniName:"Ruin Raptor",
+      words:[ _w("cake",["c","a","ke"],"🎂"), _w("lake",["l","a","ke"],"🏞️"),
+        _w("make",["m","a","ke"],"🔨"), _w("bake",["b","a","ke"],"👨‍🍳"),
+        _w("gate",["g","a","te"],"🚪"), _w("name",["n","a","me"],"🏷️"),
+        _w("game",["g","a","me"],"🎮"), _w("tape",["t","a","pe"],"📼"),
+        _w("cane",["c","a","ne"],"🦯"), _w("wave",["w","a","ve"],"🌊") ] },
+    { name:"Magic-E Manor · I & O", pattern:"i_e · o_e (Magic-e)",
+      patternDesc:"bike · hope", skill:"Long Vowels · Magic-e",
+      activities:["segment-it","middle"], miniName:"Stone Stego",
+      words:[ _w("bike",["b","i","ke"],"🚲"), _w("kite",["k","i","te"],"🪁"),
+        _w("time",["t","i","me"],"⏰"), _w("ride",["r","i","de"],"🛷"),
+        _w("hope",["h","o","pe"],"🕊️"), _w("rose",["r","o","se"],"🌹"),
+        _w("note",["n","o","te"],"🎵"), _w("bone",["b","o","ne"],"🦴"),
+        _w("hole",["h","o","le"],"🕳️"), _w("nose",["n","o","se"],"👃") ] },
+    { name:"Vowel Team Vale · I", pattern:"ai · ay · ee · ea",
+      patternDesc:"rain · play · feet · leaf", skill:"Long Vowels · Vowel Teams",
+      activities:["segment-it","rhyme"], miniName:"Relic Ptero",
+      words:[ _w("rain",["r","ai","n"],"🌧️",{rime:"ain"}), _w("pain",["p","ai","n"],"🤕",{rime:"ain"}),
+        _w("play",["pl","ay"],"🛝",{rime:"ay"}), _w("day",["d","ay"],"📅",{rime:"ay"}),
+        _w("feet",["f","ee","t"],"🦶",{rime:"eet"}), _w("seed",["s","ee","d"],"🌱",{rime:"eed"}),
+        _w("leaf",["l","ea","f"],"🍃",{rime:"eaf"}), _w("read",["r","ea","d"],"📖",{rime:"ead"}) ] },
+    { name:"Vowel Team Vale · O", pattern:"oa · igh · oo",
+      patternDesc:"boat · light · moon", skill:"Long Vowels · Vowel Teams",
+      activities:["segment-it","last"], miniName:"Ancient Anky",
+      words:[ _w("boat",["b","oa","t"],"⛵",{rime:"oat"}), _w("coat",["c","oa","t"],"🧥",{rime:"oat"}),
+        _w("goat",["g","oa","t"],"🐐",{rime:"oat"}), _w("road",["r","oa","d"],"🛣️"),
+        _w("light",["l","igh","t"],"💡",{rime:"ight"}), _w("night",["n","igh","t"],"🌙",{rime:"ight"}),
+        _w("moon",["m","oo","n"],"🌕",{rime:"oon"}), _w("soon",["s","oo","n"],"⏳",{rime:"oon"}),
+        _w("food",["f","oo","d"],"🍔") ] },
+    { name:"Long Vowel Boss", pattern:"Long Vowel Boss",
+      patternDesc:"Magic-e and vowel teams unite!", skill:"Long Vowel Boss",
+      activities:["segment-it","middle","rhyme"],
+      words:[ _w("cake",["c","a","ke"],"🎂"), _w("bike",["b","i","ke"],"🚲"),
+        _w("hope",["h","o","pe"],"🕊️"), _w("rain",["r","ai","n"],"🌧️",{rime:"ain"}),
+        _w("boat",["b","oa","t"],"⛵",{rime:"oat"}), _w("feet",["f","ee","t"],"🦶"),
+        _w("kite",["k","i","te"],"🪁"), _w("rose",["r","o","se"],"🌹"),
+        _w("goat",["g","oa","t"],"🐐",{rime:"oat"}), _w("light",["l","igh","t"],"💡") ] },
+  ],
+
+  // ════════ WORLD 5 — Sight Words & Word Families ════════
+  5: [
+    { name:"Sight Word Summit I", pattern:"Sight Words",
+      patternDesc:"Read tricky words on sight: the · was · said", skill:"Sight Words",
+      activities:["sight-word"], challengeEvery:1, miniName:"Terrace Pachy",
+      words:[ _w("the",["th","e"],"📘",{sight:true}), _w("was",["w","a","s"],"⏪",{sight:true}),
+        _w("said",["s","ai","d"],"🗣️",{sight:true}), _w("you",["y","ou"],"🫵",{sight:true}),
+        _w("are",["ar","e"],"〰️",{sight:true}), _w("for",["f","or"],"🎁",{sight:true}),
+        _w("to",["t","oo"],"➡️",{sight:true}), _w("he",["h","e"],"👦",{sight:true}) ] },
+    { name:"Sight Word Summit II", pattern:"Sight Words",
+      patternDesc:"have · they · come · some", skill:"Sight Words",
+      activities:["sight-word"], challengeEvery:1, miniName:"Crag Spino",
+      words:[ _w("have",["h","a","ve"],"🤲",{sight:true}), _w("they",["th","ey"],"👥",{sight:true}),
+        _w("come",["c","o","me"],"🙌",{sight:true}), _w("some",["s","o","me"],"🔢",{sight:true}),
+        _w("were",["w","er","e"],"👣",{sight:true}), _w("what",["wh","a","t"],"❔",{sight:true}),
+        _w("when",["wh","e","n"],"❓",{sight:true}), _w("from",["fr","o","m"],"📨",{sight:true}) ] },
+    { name:"Word Family Falls I", pattern:"-all · -ing · -uck",
+      patternDesc:"ball · ring · duck", skill:"Word Families · Rhyme",
+      activities:["rhyme","last"], challengeEvery:2, miniName:"Peak Pachy",
+      words:[ _w("ball",["b","all"],"⚽",{rime:"all"}), _w("call",["c","all"],"📞",{rime:"all"}),
+        _w("fall",["f","all"],"🍂",{rime:"all"}), _w("wall",["w","all"],"🧱",{rime:"all"}),
+        _w("ring",["r","ing"],"💍",{rime:"ing"}), _w("king",["k","ing"],"👑",{rime:"ing"}),
+        _w("sing",["s","ing"],"🎤",{rime:"ing"}), _w("wing",["w","ing"],"🪽",{rime:"ing"}),
+        _w("duck",["d","u","ck"],"🦆",{rime:"uck"}), _w("luck",["l","u","ck"],"🍀",{rime:"uck"}) ] },
+    { name:"Word Family Falls II", pattern:"-ump · -and · -est",
+      patternDesc:"jump · hand · nest", skill:"Word Families · Final Blends",
+      activities:["segment-it","last"], challengeEvery:2, miniName:"Summit Spino",
+      words:[ _w("jump",["j","u","mp"],"🤸",{rime:"ump"}), _w("bump",["b","u","mp"],"💥",{rime:"ump"}),
+        _w("dump",["d","u","mp"],"🚮",{rime:"ump"}), _w("hand",["h","a","nd"],"✋",{rime:"and"}),
+        _w("band",["b","a","nd"],"🎸",{rime:"and"}), _w("land",["l","a","nd"],"🏝️",{rime:"and"}),
+        _w("nest",["n","e","st"],"🪺",{rime:"est"}), _w("best",["b","e","st"],"🏅",{rime:"est"}) ] },
+    { name:"Power Word Boss", pattern:"Sight & Family Boss",
+      patternDesc:"Sight words and rhyming families together!", skill:"Sight & Family Boss",
+      activities:["sight-word","rhyme"], challengeEvery:1,
+      words:[ _w("the",["th","e"],"📘",{sight:true}), _w("was",["w","a","s"],"⏪",{sight:true}),
+        _w("said",["s","ai","d"],"🗣️",{sight:true}), _w("have",["h","a","ve"],"🤲",{sight:true}),
+        _w("they",["th","ey"],"👥",{sight:true}), _w("ball",["b","all"],"⚽",{rime:"all"}),
+        _w("call",["c","all"],"📞",{rime:"all"}), _w("ring",["r","ing"],"💍",{rime:"ing"}),
+        _w("king",["k","ing"],"👑",{rime:"ing"}), _w("jump",["j","u","mp"],"🤸") ] },
+  ],
+
+  // ════════ WORLD 6 — Multisyllabic Words & Mastery ════════
+  6: [
+    { name:"Two-Syllable Trail", pattern:"2-Syllable Words",
+      patternDesc:"Chunk it: ro·bot · ti·ger", skill:"Multisyllabic · Syllables",
+      activities:["segment-it"], miniName:"Ash Dilo",
+      words:[ _w("robot",["ro","bot"],"🤖"), _w("tiger",["ti","ger"],"🐯"),
+        _w("sunset",["sun","set"],"🌇"), _w("muffin",["muf","fin"],"🧁"),
+        _w("rabbit",["rab","bit"],"🐰"), _w("napkin",["nap","kin"],"🧻"),
+        _w("basket",["bas","ket"],"🧺"), _w("picnic",["pic","nic"],"🧺") ] },
+    { name:"Compound Crater", pattern:"Compound Words",
+      patternDesc:"Two words, one word: cup·cake", skill:"Multisyllabic · Compounds",
+      activities:["segment-it","first"], miniName:"Cinder Dilo",
+      words:[ _w("cupcake",["cup","cake"],"🧁"), _w("cobweb",["cob","web"],"🕸️"),
+        _w("laptop",["lap","top"],"💻"), _w("bathtub",["bath","tub"],"🛁"),
+        _w("sandbox",["sand","box"],"🏖️"), _w("hotdog",["hot","dog"],"🌭"),
+        _w("popcorn",["pop","corn"],"🍿"), _w("sunset",["sun","set"],"🌇") ] },
+    { name:"Three-Syllable Summit", pattern:"3-Syllable Words",
+      patternDesc:"vol·ca·no · ba·na·na", skill:"Multisyllabic · Syllables",
+      activities:["segment-it"], miniName:"Magma Dilo",
+      words:[ _w("volcano",["vol","ca","no"],"🌋"), _w("banana",["ba","na","na"],"🍌"),
+        _w("samurai",["sa","mu","rai"],"⚔️"), _w("dinosaur",["di","no","saur"],"🦕"),
+        _w("butterfly",["but","ter","fly"],"🦋"), _w("elephant",["el","e","phant"],"🐘"),
+        _w("umbrella",["um","brel","la"],"☂️"), _w("computer",["com","pu","ter"],"💻") ] },
+    { name:"Expert Blend Bluff", pattern:"Expert Blends",
+      patternDesc:"crash · sprint · thrust", skill:"Advanced Blends",
+      activities:["segment-it","last"], miniName:"Obsidian Dilo",
+      words:[ _w("crash",["cr","a","sh"],"💥"), _w("blend",["bl","e","nd"],"🌀"),
+        _w("stomp",["st","o","mp"],"🦶"), _w("chest",["ch","e","st"],"📦"),
+        _w("sprint",["spr","i","nt"],"🏃"), _w("shrub",["shr","u","b"],"🌿"),
+        _w("crisp",["cr","i","sp"],"🍪"), _w("thrust",["thr","u","st"],"🚀") ] },
+    { name:"Grand Mastery Boss", pattern:"Mastery Boss",
+      patternDesc:"Every phonics skill — one final battle!", skill:"Mastery Boss",
+      activities:["segment-it","rhyme","sight-word","middle"], challengeEvery:2,
+      words:[ _w("cake",["c","a","ke"],"🎂"), _w("frog",["fr","o","g"],"🐸"),
+        _w("robot",["ro","bot"],"🤖"), _w("the",["th","e"],"📘",{sight:true}),
+        _w("crash",["cr","a","sh"],"💥"), _w("ship",["sh","i","p"],"🚢"),
+        _w("jump",["j","u","mp"],"🤸",{rime:"ump"}), _w("bump",["b","u","mp"],"💥",{rime:"ump"}),
+        _w("volcano",["vol","ca","no"],"🌋"), _w("light",["l","igh","t"],"💡"),
+        _w("blend",["bl","e","nd"],"🌀") ] },
+  ],
 };
 
-// ── Ordered array for easy stage iteration ───────────────────
-PHONICS_DATA.stageList = [
-  PHONICS_DATA.stage1, PHONICS_DATA.stage2, PHONICS_DATA.stage3,
-  PHONICS_DATA.stage4, PHONICS_DATA.stage5, PHONICS_DATA.stage6,
-];
+// ── Build the flat stage list (global ids 1..30) ──────────────
+PHONICS_DATA.WORLDS = [];
+PHONICS_DATA.stageList = [];
+(function _buildCampaign() {
+  let gid = 0;
+  _WORLDS_META.forEach((w) => {
+    const stageTables = _WORLD_STAGES[w.id] || [];
+    const worldStageIds = [];
+    stageTables.forEach((st, sIdx) => {
+      gid++;
+      const isBoss = sIdx === stageTables.length - 1;
+      const stage = {
+        id: gid,
+        world: w.id,
+        worldName: w.name,
+        worldIcon: w.icon,
+        local: sIdx + 1,
+        localCount: stageTables.length,
+        isBoss,
+        name: st.name,
+        pattern: st.pattern,
+        patternDesc: st.patternDesc,
+        skill: st.skill || w.skill,
+        activities: st.activities || [],
+        challengeEvery: st.challengeEvery ?? (isBoss ? 3 : 4),
+        // theme / art (reuse the world's existing art set)
+        bg: w.bg,
+        bossFile: w.bossFile,
+        minionFile: w.minionFile,
+        bossName: isBoss ? w.bossName : (st.miniName || `${w.name} Guardian`),
+        skyColor: w.skyColor,
+        groundColor: w.groundColor,
+        accentColor: w.accentColor,
+        // difficulty ramp within the world
+        runnerSpeed: +(w.runnerSpeed + sIdx * 0.15).toFixed(2),
+        blendTime: Math.max(14, Math.round(w.blendTime - sIdx * 1.5)),
+        bossHp: w.bossHp + sIdx * 12 + (isBoss ? 30 : 0),
+        bossAttack: w.bossAttack + sIdx + (isBoss ? 3 : 0),
+        words: st.words.map((x) => Object.assign({ damage: w.dmg + (isBoss ? 4 : 0) }, x)),
+      };
+      PHONICS_DATA.stageList.push(stage);
+      PHONICS_DATA[`stage${gid}`] = stage; // legacy lookup compatibility
+      worldStageIds.push(gid);
+    });
+    PHONICS_DATA.WORLDS.push({
+      id: w.id, name: w.name, icon: w.icon, skill: w.skill, desc: w.desc,
+      accentColor: w.accentColor, bossName: w.bossName,
+      stageIds: worldStageIds,
+      startId: worldStageIds[0],
+      stageCount: worldStageIds.length,
+    });
+  });
+})();
+
+PHONICS_DATA.stageCount = PHONICS_DATA.stageList.length;
+PHONICS_DATA.worldCount = PHONICS_DATA.WORLDS.length;
+
+// ── World / stage navigation helpers ─────────────────────────
+PHONICS_DATA.getStage      = (id) => PHONICS_DATA.stageList[id - 1] || null;
+PHONICS_DATA.getWorld      = (worldId) => PHONICS_DATA.WORLDS[worldId - 1] || null;
+PHONICS_DATA.worldOf       = (stageId) => PHONICS_DATA.stageList[stageId - 1]?.world || 1;
+PHONICS_DATA.stagesInWorld = (worldId) => PHONICS_DATA.WORLDS[worldId - 1]?.stageIds || [];
+PHONICS_DATA.worldStartId  = (worldId) => PHONICS_DATA.WORLDS[worldId - 1]?.startId || 1;
 
 // ── ENDLESS MODE WORD TIERS ──────────────────────────────────
 // Words unlocked progressively as runner distance increases.
@@ -296,7 +533,7 @@ PHONICS_DATA.endlessTiers = [
   },
 ];
 
-// ── CONTENT CATEGORY PACKS (Step 4 expansion) ─────────────────
+// ── CONTENT CATEGORY PACKS ────────────────────────────────────
 PHONICS_DATA.categoryPacks = {
   longVowels: [
     { word:"cake", phonemes:["c","a","ke"], hint:"🎂" },
@@ -319,7 +556,6 @@ PHONICS_DATA.categoryPacks = {
 };
 
 // ── DAILY CHALLENGE WORD SETS (seeded by day-of-year) ────────
-// Inline wordObjs with phoneme data — no lookup needed.
 PHONICS_DATA.dailySets = [
   { theme:"SH Words", emoji:"🚢", wordObjs:[
     { word:"ship",  phonemes:["sh","i","p"],  hint:"🚢" },
@@ -484,15 +720,21 @@ PHONICS_DATA.getEndlessWords = function(distMeters) {
   return pool;
 };
 
-// Campaign helpers (unchanged)
+// Campaign helpers (stageId is the global 1..30 id)
 PHONICS_DATA.getRunnerCoins = function(stageId) {
   const stage = PHONICS_DATA.stageList[stageId - 1];
   const selected = stage.words.slice(0, 5);
   const coins = [];
   selected.forEach((w, wIdx) => {
-    w.phonemes.forEach((ph, pIdx) => {
-      coins.push({ phoneme: ph, wordId: wIdx, phIdx: pIdx, hint: w.hint, word: w.word });
-    });
+    // Sight words are collected as one whole-word coin (recognise on sight),
+    // every other word is broken into its phoneme coins.
+    if (w.sight) {
+      coins.push({ phoneme: w.word, wordId: wIdx, phIdx: 0, hint: w.hint, word: w.word, sight: true });
+    } else {
+      w.phonemes.forEach((ph, pIdx) => {
+        coins.push({ phoneme: ph, wordId: wIdx, phIdx: pIdx, hint: w.hint, word: w.word });
+      });
+    }
   });
   return coins;
 };

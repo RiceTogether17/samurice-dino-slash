@@ -1829,12 +1829,20 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
       items.questionBlocks.push(new QuestionBlock(blockX, blockY, rewardType));
     }
 
-    // Phoneme coins
-    word.phonemes.forEach((ph, pIdx) => {
+    // Phoneme coins. Sight words (the, was, said…) are irregular, so
+    // they become ONE whole-word coin — recognised on sight rather than
+    // sounded out letter-by-letter (matches how the boss battle treats them).
+    if (word.sight) {
       items.coins.push(new PhonemeCoin(
-        wx + pIdx * 82, coinY, ph, wIdx, pIdx, word.hint, word.word,
+        wx, coinY, word.word, wIdx, 0, word.hint, word.word,
       ));
-    });
+    } else {
+      word.phonemes.forEach((ph, pIdx) => {
+        items.coins.push(new PhonemeCoin(
+          wx + pIdx * 82, coinY, ph, wIdx, pIdx, word.hint, word.word,
+        ));
+      });
+    }
 
     // Enemies — type mix scales with stage difficulty
     if (wIdx > 0) {
@@ -2456,7 +2464,7 @@ class RunnerEngine {
   _checkWordCompletion(wordId, latestPhIdx) {
     const word    = this.stage.words[wordId];
     if (!word) return;
-    const needed  = word.phonemes.length;
+    const needed  = word.sight ? 1 : word.phonemes.length;
     let   seqLen  = 0;
     for (let i = 0; i < needed; i++) {
       if (this.collectedCoinIds.has(`${wordId}-${i}`)) seqLen++;

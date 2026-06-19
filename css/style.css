@@ -2629,6 +2629,10 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
     font-weight: 900;
     margin: 0 1px;
 }
+/* Rhyme / Sight-Word choice cards reuse the segment-card layout */
+.be-word-card { flex-direction: column; gap: 2px; }
+.be-word-card .be-seg-ph  { color: #FFF3C4; font-size: clamp(1.15rem, 4.4vw, 1.6rem); text-transform: none; letter-spacing: 0.02em; }
+.be-word-card .be-seg-dot { font-size: 1.7rem; margin: 0; }
 /* Full word shown in segment-it prompt slots */
 .be-word-full {
     font-size: clamp(2rem, 7vw, 3rem) !important;

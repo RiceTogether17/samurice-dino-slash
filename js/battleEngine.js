@@ -220,7 +220,8 @@ class BattleEngine {
     this._roundNum      = 0;
     this._isChallenge   = false;
     this._challenge     = null;
-    this._challengeEvery = 4;   // every Nth round is a detective round
+    this._challengeEvery = stageData.challengeEvery ?? 4;   // every Nth round is a mini-game round (1 = every round)
+    this._stageActivities = Array.isArray(stageData.activities) ? stageData.activities : [];
     this._challengesSolved = 0;
     this._shuffledPh    = [];   // shuffled phoneme tiles for current word
     this._usedTileIdx   = new Set();  // which tile positions have been clicked
@@ -304,6 +305,16 @@ class BattleEngine {
           e.preventDefault();
           const card = this._tileEls[idx];
           this._onSegmentCardClick(card.dataset.segKey, card);
+        }
+        return;
+      }
+      // Word-choice rounds (Rhyme / Sight Word): number keys 1–4 pick a card.
+      if (this._challenge.cardKind === 'word') {
+        const idx = parseInt(key) - 1;
+        if (!isNaN(idx) && idx >= 0 && idx < this._tileEls.length) {
+          e.preventDefault();
+          const card = this._tileEls[idx];
+          this._onWordCardClick(card.dataset.wordKey, card);
         }
         return;
       }
@@ -479,11 +490,15 @@ class BattleEngine {
     }
     this._currentWord   = this._wordQueue[this._wordQueueIdx++];
 
-    // Every Nth round (after a warm-up) becomes a Sound Detective round —
-    // but only if the chosen word can pose a clear isolation question.
+    // Mini-game rounds (Sound Detective, Rhyme, Letter Sound, Sight Word…).
+    // challengeEvery === 1 → EVERY round is a mini-game (used by sight-word
+    // stages so irregular words are never sounded out letter-by-letter).
+    // Otherwise every Nth round becomes a mini-game after a short warm-up.
+    const alwaysChallenge = this._challengeEvery <= 1;
     const warmedUp = this._roundNum >= 3;
-    if (warmedUp && this._roundNum % this._challengeEvery === 0 &&
-        this._validChallengeTypes(this._currentWord).length > 0) {
+    const dueForChallenge = alwaysChallenge ||
+        (warmedUp && this._roundNum % this._challengeEvery === 0);
+    if (dueForChallenge && this._stageActivityTypes(this._currentWord).length > 0) {
       this._startChallengeRound(this._currentWord);
       return;
     }
@@ -622,18 +637,105 @@ class BattleEngine {
     return this._distractorCache;
   }
 
+  // The rime (rhyming part) of a word: from its last vowel sound to the end.
+  _rimeOf(wordObj) {
+    if (wordObj?.rime) return wordObj.rime.toLowerCase();
+    const ph = wordObj?.phonemes || [];
+    let vi = -1;
+    for (let i = 0; i < ph.length; i++) { if (/[aeiou]/i.test(ph[i])) vi = i; }
+    if (vi < 0) return ph.join('').toLowerCase();
+    return ph.slice(vi).join('').toLowerCase();
+  }
+
+  // Words in this stage that rhyme / don't rhyme with the target.
+  _rhymePartners(target) {
+    const rime  = this._rimeOf(target);
+    const words = this.stage.words || [];
+    const correct = words.filter(x => x.word !== target.word && this._rimeOf(x) === rime);
+    const others  = words.filter(x => x.word !== target.word && this._rimeOf(x) !== rime);
+    return { rime, correct, others };
+  }
+
+  // Can a given mini-game type be built for this word / stage?
+  _canBuildChallenge(type, w) {
+    const len = w?.phonemes?.length || 0;
+    switch (type) {
+      case 'first': case 'last': case 'missing': return len >= 2;
+      case 'middle':       return len >= 3;
+      case 'letter-sound': return len >= 1;
+      case 'segment-it':   return len >= 2;
+      case 'rhyme':        return this._rhymePartners(w).correct.length > 0;
+      case 'sight-word':   return (this.stage.words || []).length >= 2;
+      default:             return false;
+    }
+  }
+
+  // The mini-game types this stage wants (intersected with what's buildable),
+  // falling back to the default Sound Detective set.
+  _stageActivityTypes(wordObj) {
+    if (this._stageActivities && this._stageActivities.length) {
+      const list = this._stageActivities.filter(t => this._canBuildChallenge(t, wordObj));
+      if (list.length) return list;
+    }
+    return this._validChallengeTypes(wordObj);
+  }
+
+  // ── Mini-game dispatcher ─────────────────────────────────────
   _startChallengeRound(baseWord) {
     this._isChallenge   = true;
     this._wrongAttempts = 0;
     this._showFirstHint = false;
     this.state          = 'idle';
 
+    const types = this._stageActivityTypes(baseWord);
+    const type  = types[Math.floor(Math.random() * types.length)];
+
+    // Teach-before-test: the FIRST time each skill appears in a battle,
+    // model it in plain language before asking (explicit instruction).
+    if (!this._skillCoached) this._skillCoached = new Set();
+    const firstTime = !this._skillCoached.has(type);
+    this._skillCoached.add(type);
+
+    switch (type) {
+      case 'segment-it':   this._startSegmentItRound(baseWord); break;
+      case 'rhyme':        this._startRhymeRound(baseWord); break;
+      case 'sight-word':   this._startSightWordRound(baseWord); break;
+      case 'letter-sound': this._startLetterSoundRound(baseWord); break;
+      default:             this._startSoundIsoRound(type, baseWord); break;
+    }
+    if (firstTime) this._coachSkill(type, baseWord);
+  }
+
+  // ── Skill Coach — plain-language "I do" before the child's "you do" ──
+  _coachSkill(type, baseWord) {
+    const tips = {
+      first:        '🎓 NEW! FIRST SOUND — listen to the sound the word STARTS with.',
+      last:         '🎓 NEW! LAST SOUND — listen to the sound the word ENDS with.',
+      middle:       '🎓 NEW! MIDDLE SOUND — listen for the vowel sound in the middle.',
+      missing:      '🎓 NEW! MISSING SOUND — which sound do you hear that isn’t shown?',
+      'letter-sound':'🎓 NEW! LETTER SOUNDS — tap the letter that MAKES that sound.',
+      rhyme:        '🎓 NEW! RHYMING — rhyming words end the same, like cat & hat.',
+      'sight-word': '🎓 NEW! SIGHT WORDS — some words you just KNOW. Find the one you hear.',
+      'segment-it': '🎓 NEW! SEGMENT IT — break the word into its separate sounds.',
+    };
+    const tip = tips[type];
+    if (!tip) return;
+    // The coaching banner replaces the round prompt until the child acts,
+    // and we model the example aloud a beat after it appears.
+    this._setFeedback(tip, '#FFE082');
+    setTimeout(() => {
+      if (this._destroyed || this.done) return;
+      if (type === 'letter-sound' && this._challenge?.playTarget) {
+        this.audio?.playPhoneme(this._challenge.playTarget);
+      } else if (baseWord) {
+        this.audio?.playWord(baseWord.word);
+      }
+    }, 750);
+  }
+
+  // ── Phonemic awareness: isolate First / Last / Middle / Missing sound ──
+  _startSoundIsoRound(type, baseWord) {
     const phonemes = baseWord.phonemes;
-    const types    = this._validChallengeTypes(baseWord);
-    const type     = types[Math.floor(Math.random() * types.length)];
-
-    if (type === 'segment-it') { this._startSegmentItRound(baseWord); return; }
-
     const blankIdx = this._challengeBlankIndex(type, phonemes.length);
     const answer   = phonemes[blankIdx].toLowerCase();
 
@@ -661,6 +763,7 @@ class BattleEngine {
 
     this._challenge = {
       type, baseWord, phonemes, blankIdx, answer, options,
+      cardKind: 'phoneme',
       instr: labels[type].instr, tag: labels[type].tag,
     };
     this._currentWord = baseWord;   // Hear button still speaks the whole word
@@ -674,16 +777,123 @@ class BattleEngine {
     setTimeout(() => { if (!this.done) this.audio?.playWord(baseWord.word); }, 350);
   }
 
+  // ── Letter Sounds: hear a sound, tap the letter that makes it ──
+  _startLetterSoundRound(baseWord) {
+    const phonemes = baseWord.phonemes;
+    const idx      = Math.floor(Math.random() * phonemes.length);
+    const answer   = phonemes[idx].toLowerCase();
+
+    const answerIsVowel = /^[aeiou]/.test(answer);
+    const pool = this._distractorPool().filter(p =>
+      p !== answer && /^[aeiou]/.test(p) === answerIsVowel);
+    const fallback = this._distractorPool().filter(p => p !== answer);
+    const src = pool.length >= 2 ? pool : fallback;
+    const distractors = [];
+    for (const p of this._shuffleArray([...src])) {
+      if (distractors.length >= 2) break;
+      if (!distractors.includes(p)) distractors.push(p);
+    }
+
+    const options = this._shuffleArray([answer, ...distractors]);
+    this._challenge = {
+      type: 'letter-sound', baseWord, phonemes, blankIdx: idx, answer, options,
+      cardKind: 'phoneme', playTarget: answer,
+      instr: '🔡 Tap the letter for the sound you hear!', tag: 'LETTER SOUND',
+    };
+    this._currentWord = baseWord;
+    this._renderChallengePrompt();
+    this._renderChallengeTiles();
+    this._setFeedback(this._challenge.instr, '#FFD180');
+    if (this._hintBtn) this._hintBtn.disabled = false;
+    // Play the SOUND (not the word) so the child maps sound → letter.
+    setTimeout(() => { if (!this.done) this.audio?.playPhoneme?.(answer); }, 350);
+  }
+
+  // ── Rhyme: pick the word that rhymes with the target ──
+  _startRhymeRound(baseWord) {
+    const { correct, others } = this._rhymePartners(baseWord);
+    if (!correct.length) { this._startSoundIsoRound('last', baseWord); return; }
+    const right    = correct[Math.floor(Math.random() * correct.length)];
+    const distract = this._shuffleArray([...others]).slice(0, 3);
+    const options  = this._shuffleArray([right, ...distract])
+      .map(w => ({ key: w.word, word: w.word, hint: w.hint }));
+
+    this._challenge = {
+      type: 'rhyme', baseWord, answer: right.word, options,
+      cardKind: 'word', showHint: true, playTarget: baseWord.word,
+      instr: `🎵 Which word RHYMES with "${baseWord.word.toUpperCase()}"?`, tag: 'RHYME TIME',
+    };
+    this._currentWord = baseWord;
+    this._renderChallengePrompt();
+    this._renderChallengeTiles();
+    this._setFeedback(this._challenge.instr, '#80D8FF');
+    if (this._hintBtn) this._hintBtn.disabled = false;
+    setTimeout(() => { if (!this.done) this.audio?.playWord(baseWord.word); }, 350);
+  }
+
+  // ── Sight Words: hear the word, find it among look-alikes ──
+  _startSightWordRound(baseWord) {
+    const others   = (this.stage.words || []).filter(w => w.word !== baseWord.word);
+    const distract = this._shuffleArray([...others]).slice(0, 3);
+    const options  = this._shuffleArray([baseWord, ...distract])
+      .map(w => ({ key: w.word, word: w.word, hint: w.hint }));
+
+    this._challenge = {
+      type: 'sight-word', baseWord, answer: baseWord.word, options,
+      cardKind: 'word', showHint: false, playTarget: baseWord.word,
+      instr: '👁️ Find the word you hear!', tag: 'SIGHT WORD',
+    };
+    this._currentWord = baseWord;
+    this._renderChallengePrompt();
+    this._renderChallengeTiles();
+    this._setFeedback(this._challenge.instr, '#A5D6A7');
+    if (this._hintBtn) this._hintBtn.disabled = false;
+    setTimeout(() => { if (!this.done) this.audio?.playWord(baseWord.word); }, 350);
+  }
+
   // Prompt: emoji + the word shown as slots, the queried slot a glowing "?".
   _renderChallengePrompt() {
     const c = this._challenge;
-    this._targetEmojiEl.textContent = c.baseWord.hint || '🔊';
+    // Sight Word hides the emoji (it would give the answer away); others show it.
+    this._targetEmojiEl.textContent =
+      c.type === 'sight-word' ? '🔊' :
+      c.type === 'letter-sound' ? '🔡' :
+      (c.baseWord.hint || '🔊');
 
     if (c.type === 'segment-it') {
       this._blanksEl.innerHTML = `<span class="be-blank be-blank-ghost be-word-full">${c.baseWord.word.toUpperCase()}</span>`;
       if (this._wordPreviewEl) {
         this._wordPreviewEl.textContent = '🕵️ SOUND DETECTIVE — SEGMENT IT';
         this._wordPreviewEl.style.color = '#CE93D8';
+      }
+      return;
+    }
+
+    if (c.type === 'sight-word') {
+      this._blanksEl.innerHTML = `<span class="be-blank be-blank-query">🔊 ?</span>`;
+      if (this._wordPreviewEl) {
+        this._wordPreviewEl.textContent = '👁️ SIGHT WORD — LISTEN & FIND';
+        this._wordPreviewEl.style.color = '#A5D6A7';
+      }
+      return;
+    }
+
+    if (c.type === 'rhyme') {
+      this._blanksEl.innerHTML =
+        `<span class="be-blank be-blank-ghost be-word-full">${c.baseWord.word.toUpperCase()}</span>` +
+        `<span class="be-blank be-blank-query">🎵</span>`;
+      if (this._wordPreviewEl) {
+        this._wordPreviewEl.textContent = '🎵 RHYME TIME — FIND THE MATCH';
+        this._wordPreviewEl.style.color = '#80D8FF';
+      }
+      return;
+    }
+
+    if (c.type === 'letter-sound') {
+      this._blanksEl.innerHTML = `<span class="be-blank be-blank-query">🔊 ?</span>`;
+      if (this._wordPreviewEl) {
+        this._wordPreviewEl.textContent = '🔡 LETTER SOUND — TAP THE LETTER';
+        this._wordPreviewEl.style.color = '#FFD180';
       }
       return;
     }
@@ -708,6 +918,7 @@ class BattleEngine {
     this._tileEls = [];
     const c = this._challenge;
     if (c.type === 'segment-it') { this._renderSegmentItTiles(); return; }
+    if (c.cardKind === 'word')   { this._renderWordCards(); return; }
     c.options.forEach((ph, idx) => {
       const colorClass = this._getPhonemeColorClass(ph);
       const isHint = this._showFirstHint && ph === c.answer;
@@ -744,12 +955,51 @@ class BattleEngine {
     }
   }
 
+  // ── Word-choice cards (Rhyme / Sight Word) ───────────────────
+  _renderWordCards() {
+    this._poolEl.classList.add('be-pool-segment'); // reuse the card-grid layout
+    this._tileEls = [];
+    const c = this._challenge;
+    c.options.forEach((opt) => {
+      const isHint = this._showFirstHint && opt.key === c.answer;
+      const card = document.createElement('button');
+      card.className = 'be-segment-card be-word-card' + (isHint ? ' be-tile-hint' : '');
+      const emoji = (c.showHint && opt.hint) ? `<span class="be-seg-dot">${opt.hint}</span>` : '';
+      card.innerHTML = `${emoji}<span class="be-seg-ph">${opt.word}</span>`;
+      card.dataset.wordKey = opt.key;
+      card.setAttribute('role', 'button');
+      card.setAttribute('aria-label', opt.word);
+      card.addEventListener('click', () => this._onWordCardClick(opt.key, card));
+      card.addEventListener('touchend', (e) => { e.preventDefault(); this._onWordCardClick(opt.key, card); });
+      this._tileEls.push(card);
+      this._poolEl.appendChild(card);
+    });
+  }
+
+  _onWordCardClick(key, cardEl) {
+    if (this.done || !this._isChallenge) return;
+    if (this.state !== 'idle') return;
+    const now = Date.now();
+    if (now - (this._lastTileClickMs || 0) < 80) return;
+    this._lastTileClickMs = now;
+    if (key === this._challenge.answer) {
+      this._flashTileFeedback(cardEl, 'ok');
+      this._challengeSuccess(cardEl);
+    } else {
+      this._flashTileFeedback(cardEl, 'bad');
+      this._onWrongChallenge(cardEl);
+    }
+  }
+
   _onWrongChallenge(tileEl) {
     this.audio?.sfxWrongBlend?.();
     this._wrongAttempts++;
     this._setFeedback(`❌ Listen again… find the ${this._challenge.tag.toLowerCase()}.`, '#FF8A80');
     if (this._challenge.type === 'segment-it') {
       setTimeout(() => { if (!this.done) this.audio?.playBlendSequence?.(this._challenge.phonemes, this._challenge.baseWord.word); }, 500);
+    } else if (this._challenge.cardKind === 'word') {
+      // Rhyme / Sight Word — replay the target word, not a single phoneme.
+      setTimeout(() => { if (!this.done) this.audio?.playWord?.(this._challenge.playTarget || this._challenge.baseWord.word); }, 500);
     } else {
       setTimeout(() => { if (!this.done) this.audio?.playPhoneme?.(this._challenge.answer); }, 500);
     }

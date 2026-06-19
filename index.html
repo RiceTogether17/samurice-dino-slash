@@ -290,6 +290,13 @@
 <script>
 // ── Button event listeners (replaces inline onclick attributes) ──
 document.addEventListener('DOMContentLoaded', function() {
+  // First-run default: start new/young readers in Relaxed Mode (no timer
+  // pressure). They can switch the timer on anytime via the stage-select
+  // toggle. Only sets the default once — never overrides a chosen value.
+  if (localStorage.getItem('samurice_relaxed') === null) {
+    localStorage.setItem('samurice_relaxed', '1');
+  }
+
   // Init parent dashboard + engagement engine (both defer until _progressTracker is ready)
   initParentDashboard();
   initEngagementEngine();
@@ -315,18 +322,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const t    = window._progressTracker;
     if (!hint) return;
     if (!t) { setTimeout(_updateStageHint, 300); return; }
+    const total = (typeof PHONICS_DATA !== 'undefined' && PHONICS_DATA.stageCount) || 30;
     let nextStage = 1;
-    for (let i = 1; i <= 6; i++) {
-      if (t.getStage(i)?.completedAt) nextStage = Math.min(i + 1, 6);
+    let cleared = 0;
+    for (let i = 1; i <= total; i++) {
+      if (t.getStage(i)?.completedAt) { nextStage = Math.min(i + 1, total); cleared++; }
     }
-    const allDone = [1,2,3,4,5,6].every(i => t.getStage(i)?.completedAt);
-    if (allDone) {
-      hint.textContent = '🏆 All 6 stages complete! Play for mastery!';
+    if (cleared >= total) {
+      hint.textContent = `🏆 All ${total} stages complete! Play for mastery!`;
     } else if (nextStage > 1) {
-      const name = (typeof PHONICS_DATA !== 'undefined' && PHONICS_DATA[`stage${nextStage}`]?.name) || `Stage ${nextStage}`;
-      hint.textContent = `Continue  Stage ${nextStage}: ${name}`;
+      const stage = (typeof PHONICS_DATA !== 'undefined' && PHONICS_DATA[`stage${nextStage}`]) || null;
+      const name = stage?.name || `Stage ${nextStage}`;
+      const w = stage?.world ? `World ${stage.world} · ` : '';
+      hint.textContent = `Continue → ${w}${name}`;
     } else {
-      hint.textContent = 'Begin your adventure in Stage 1!';
+      hint.textContent = 'Begin your adventure in World 1!';
     }
   }
   _updateStageHint();

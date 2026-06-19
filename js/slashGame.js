@@ -153,7 +153,8 @@ class SlashGame {
     this.runner = null;
     this.battle = null;
     // Input for menus
-    this._menuSel = 0;
+    this._menuSel = 0;   // selected stage within the open world (stage-select)
+    this._worldSel = 0;  // selected world (world-map)
     this._bindMenuInput();
     // Load sprites then kick off background audio preload.
     // Audio readiness is NOT a gate — the game uses tone-synthesis + TTS fallbacks
@@ -443,18 +444,20 @@ class SlashGame {
       }
       // Step 6 debug overlay toggle (` or ~)
       if (e.key === '`' || e.key === '~') { this._debugOverlay = !this._debugOverlay; return; }
-      if (this.state === 'stage-select' || this.state === 'world-map') {
-        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-          this._menuSel = Math.min(5, this._menuSel + 1);
+      if (this.state === 'world-map') {
+        const wc = PHONICS_DATA.worldCount;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') this._worldSel = Math.min(wc - 1, this._worldSel + 1);
+        if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   this._worldSel = Math.max(0, this._worldSel - 1);
+        if (e.key === 'Enter' || e.key === ' ') this._openWorld(this._worldSel);
+      } else if (this.state === 'stage-select') {
+        const ids = PHONICS_DATA.stagesInWorld(this._worldSel + 1);
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') this._menuSel = Math.min(ids.length - 1, this._menuSel + 1);
+        if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   this._menuSel = Math.max(0, this._menuSel - 1);
+        if (e.key === 'Enter' || e.key === ' ') {
+          const gid = ids[this._menuSel];
+          if (gid && this.progress.isUnlocked(gid)) this._launchStage(gid);
         }
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-          this._menuSel = Math.max(0, this._menuSel - 1);
-        }
-        if (e.key === 'Enter' || e.key === ' ') this._launchStage(this._menuSel + 1);
-        if (e.key === 'm' || e.key === 'M') {
-          // Toggle between map and list view
-          this.state = this.state === 'world-map' ? 'stage-select' : 'world-map';
-        }
+        if (e.key === 'Escape' || e.key === 'm' || e.key === 'M') this.state = 'world-map';
       }
       if (this.state === 'title' && (e.key === 'Enter' || e.key === ' ')) {
         this.state = 'mode-select';
@@ -580,6 +583,12 @@ class SlashGame {
       return;
     }
     if (this.state === 'stage-select') {
+      // Back to world map
+      const bb = this._stageBackRect;
+      if (bb && mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) {
+        this.state = 'world-map';
+        return;
+      }
       // Relaxed mode toggle (top-right button)
       const rt = this._relaxedToggleRect;
       if (rt && mx >= rt.x && mx <= rt.x + rt.w && my >= rt.y && my <= rt.y + rt.h) {
@@ -587,33 +596,36 @@ class SlashGame {
         localStorage.setItem('samurice_relaxed', next);
         return;
       }
+      const ids = PHONICS_DATA.stagesInWorld(this._worldSel + 1);
       const cards = this._stageCardRects || [];
       cards.forEach((r, i) => {
         if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-          if (this.progress.isUnlocked(i + 1)) {
+          const gid = ids[i];
+          if (gid && this.progress.isUnlocked(gid)) {
             this._menuSel = i;
-            this._launchStage(i + 1);
+            this._launchStage(gid);
           }
         }
       });
       return;
     }
     if (this.state === 'world-map') {
-      // PLAY button in info panel
+      // ENTER WORLD button in info panel
       const pb = this._mapPlayBtnRect;
       if (pb && mx >= pb.x && mx <= pb.x + pb.w && my >= pb.y && my <= pb.y + pb.h) {
-        this._launchStage(this._menuSel + 1);
+        this._openWorld(this._worldSel);
         return;
       }
-      // Stage nodes on map
+      // World nodes on map
       const nodes = this._mapNodeRects || [];
       nodes.forEach((n, i) => {
         const dx = mx - n.cx;
         const dy = my - n.cy;
         if (dx * dx + dy * dy <= n.r * n.r) {
-          if (this.progress.isUnlocked(i + 1)) {
-            this._menuSel = i;
-            this._launchStage(i + 1);
+          this._worldSel = i;
+          const world = PHONICS_DATA.WORLDS[i];
+          if (world && this.progress.isUnlocked(world.startId)) {
+            this._openWorld(i);
           }
         }
       });
@@ -628,6 +640,34 @@ class SlashGame {
       });
     }
   }
+  // Index of the furthest world the player has unlocked (for default selection).
+  _furthestUnlockedWorldIdx() {
+    let idx = 0;
+    PHONICS_DATA.WORLDS.forEach((w, i) => {
+      if (this.progress.isUnlocked(w.startId)) idx = i;
+    });
+    return idx;
+  }
+
+  // ── Open a world → its stage-select screen ───────────────────
+  _openWorld(worldIdx) {
+    const world = PHONICS_DATA.WORLDS[worldIdx];
+    if (!world) return;
+    if (!this.progress.isUnlocked(world.startId)) return;   // world still locked
+    this._worldSel = worldIdx;
+    // Default-select the first not-yet-cleared (but unlocked) stage in the world.
+    const ids = world.stageIds;
+    let sel = 0;
+    for (let i = 0; i < ids.length; i++) {
+      if (this.progress.isUnlocked(ids[i]) && !this.progress.getStage(ids[i])?.completedAt) { sel = i; break; }
+      if (this.progress.isUnlocked(ids[i])) sel = i;
+    }
+    this._menuSel = sel;
+    this._stateEntryFade = 1.0;
+    this.state = 'stage-select';
+    this.audio?.sfxSlash?.();
+  }
+
   // ── Stage launch ─────────────────────────────────────────────
   _launchStage(id) {
     if (!this.progress.isUnlocked(id)) return;
@@ -1215,7 +1255,7 @@ class SlashGame {
     const completed = PHONICS_DATA.stageList.filter((_, i) => this.progress.getStars(i + 1) > 0).length;
     ctx.font = `${Math.round(Math.min(12, W * 0.028))}px system-ui`;
     ctx.fillStyle = 'rgba(180,255,180,0.7)';
-    ctx.fillText(`${completed}/6 stages cleared · ${this.progress.getRicePoints()} 🍚 rice points`, W / 2, tagY + 28);
+    ctx.fillText(`${completed}/${PHONICS_DATA.stageCount} stages cleared · ${this.progress.getRicePoints()} 🍚 rice points`, W / 2, tagY + 28);
     // ── TAP TO PLAY button ───────────────────────────────────────
     const btnW = Math.min(cardW - 40, 260);
     const btnH = Math.round(H * 0.075);
@@ -1271,30 +1311,37 @@ class SlashGame {
     grad.addColorStop(1, '#1a3a12');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
-    // Header
-    ctx.font = `bold ${Math.min(22, W * 0.055)}px "Nunito", "Comic Sans MS", system-ui`;
+    const world = PHONICS_DATA.WORLDS[this._worldSel] || PHONICS_DATA.WORLDS[0];
+    const ids   = world.stageIds;
+    if (this._menuSel >= ids.length) this._menuSel = ids.length - 1;
+    // Header — world name + the skill it teaches
+    ctx.font = `bold ${Math.min(21, W * 0.052)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText('⚔️ Choose Your Stage', W / 2, 18);
-    ctx.font = 'bold 13px system-ui';
-    ctx.fillStyle = '#FFD700';
-    ctx.fillText(`🍚 ${this.progress.getRicePoints()} rice points`, W / 2, 50);
-    // Stage cards (2 columns × 3 rows or 1 column on narrow)
+    ctx.fillText(`${world.icon} World ${world.id}: ${world.name}`, W / 2, 14);
+    ctx.font = `bold ${Math.min(12, W * 0.030)}px "Nunito", system-ui`;
+    ctx.fillStyle = world.accentColor;
+    ctx.fillText(`📚 ${world.skill}`, W / 2, 40);
+    ctx.font = '11px system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText(`🍚 ${this.progress.getRicePoints()} rice points · tap a stage to play`, W / 2, 58);
+    // Stage cards (2 columns)
     const cols = W > 480 ? 2 : 1;
-    const rows = Math.ceil(6 / cols);
+    const rows = Math.ceil(ids.length / cols);
     const margin = 14;
+    const topPad = 78;
     const cw = (W - margin * (cols + 1)) / cols;
-    const ch = (H - 90 - margin * (rows + 1)) / rows;
+    const ch = (H - topPad - 16 - margin * (rows + 1)) / rows;
     this._stageCardRects = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < ids.length; i++) {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const x = margin + col * (cw + margin);
-      const y = 82 + margin + row * (ch + margin);
+      const y = topPad + margin + row * (ch + margin);
       this._stageCardRects.push({ x, y, w: cw, h: ch });
-      const stageId = i + 1;
-      const stage = PHONICS_DATA.stageList[i];
+      const stageId = ids[i];
+      const stage = PHONICS_DATA.stageList[stageId - 1];
       const summary = this.progress.getStageSummary(stageId);
       const unlocked = summary.unlocked;
       const sel = this._menuSel === i;
@@ -1307,51 +1354,44 @@ class SlashGame {
       ctx.lineWidth = sel ? 2.5 : 1;
       ctx.stroke();
       if (!unlocked) {
-        // Lock icon
-        ctx.font = `${Math.min(28, cw * 0.3)}px serif`;
+        ctx.font = `${Math.min(26, cw * 0.28)}px serif`;
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillText('🔒', x + cw / 2, y + ch / 2 + 8);
+        ctx.fillText('🔒', x + cw / 2, y + ch / 2 - 4);
         ctx.font = 'bold 11px system-ui';
         ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillText(`Stage ${stageId} — Locked`, x + cw / 2, y + ch / 2 + 34);
+        ctx.fillText(`Stage ${world.id}-${i + 1} — Locked`, x + cw / 2, y + ch / 2 + 26);
         continue;
       }
-      // Stage color accent strip
+      // Accent strip
       ctx.fillStyle = stage.accentColor + '55';
       ctx.beginPath(); ctx.roundRect(x, y, cw, 6, [14, 14, 0, 0]); ctx.fill();
-      // Stage number + name
-      ctx.font = `bold ${Math.min(15, cw * 0.12)}px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle = '#FFD700';
+      // Stage label (e.g. "Stage 1-3" or "BOSS")
+      ctx.font = `bold ${Math.min(14, cw * 0.11)}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillStyle = stage.isBoss ? '#FF5252' : '#FFD700';
       ctx.textAlign = 'center';
-      ctx.fillText(`Stage ${stageId}`, x + cw / 2, y + 22);
-      ctx.font = `bold ${Math.min(13, cw * 0.1)}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillText(stage.isBoss ? `👑 BOSS ${world.id}-${i + 1}` : `Stage ${world.id}-${i + 1}`, x + cw / 2, y + 20);
+      ctx.font = `bold ${Math.min(13, cw * 0.095)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#fff';
-      ctx.fillText(stage.name, x + cw / 2, y + 40);
-      // Pattern label
-      ctx.font = `${Math.min(10, cw * 0.08)}px system-ui`;
+      ctx.fillText(stage.name, x + cw / 2, y + 38);
+      // Skill / focus label
+      ctx.font = `${Math.min(10, cw * 0.075)}px system-ui`;
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(stage.pattern, x + cw / 2, y + 56);
+      ctx.fillText(stage.pattern, x + cw / 2, y + 54);
       // Stars
-      const starY = y + ch - 28;
-      const starX = x + cw / 2 - 30;
-      ctx.font = '18px serif';
+      const starY = y + ch - 26;
+      const starX = x + cw / 2 - 22;
+      ctx.font = '16px serif';
       for (let s = 0; s < 3; s++) {
         ctx.globalAlpha = s < summary.stars ? 1 : 0.2;
         ctx.fillText('⭐', starX + s * 22, starY);
       }
       ctx.globalAlpha = 1;
-      // Mastered words count
-      if (summary.mastered > 0) {
-        ctx.font = '10px system-ui';
-        ctx.fillStyle = '#8BC34A';
-        ctx.fillText(`${summary.mastered} words mastered`, x + cw / 2, y + ch - 8);
-      }
-      // Phoneme word examples
+      // Example words
       const eg = stage.words.slice(0, 3).map(w => `${w.hint} ${w.word}`).join(' ');
-      ctx.font = `${Math.min(10, cw * 0.08)}px system-ui`;
+      ctx.font = `${Math.min(10, cw * 0.075)}px system-ui`;
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.fillText(eg, x + cw / 2, y + 70);
+      ctx.fillText(eg, x + cw / 2, y + 68);
     }
     // ── Relaxed Mode toggle (top-right corner of header) ───────
     // Lets parents/teachers turn off the timer penalty for early learners.
@@ -1386,11 +1426,20 @@ class SlashGame {
     ctx.fillStyle = relaxed ? '#fff' : '#80DEEA';
     ctx.fillText('😊 Relaxed', btnX + 8, btnY + btnH / 2);
 
-    // Back hint
-    ctx.font = '12px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.textAlign = 'center';
-    ctx.fillText('← Back (press Escape)', W / 2, H - 10);
+    // Back-to-world-map button (top-left)
+    const backW = Math.min(96, W * 0.26);
+    const backH = 26;
+    const backX = 10;
+    const backY = 10;
+    this._stageBackRect = { x: backX, y: backY, w: backW, h: backH };
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.beginPath(); ctx.roundRect(backX, backY, backW, backH, 13); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(backX, backY, backW, backH, 13); ctx.stroke();
+    ctx.font = `bold ${Math.min(11, backW * 0.13)}px "Nunito", system-ui`;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🗺️ Worlds', backX + backW / 2, backY + backH / 2);
     ctx.textBaseline = 'alphabetic';
   }
   // ── WORLD MAP ────────────────────────────────────────────────
@@ -1586,18 +1635,17 @@ class SlashGame {
     }
     ctx.restore();
 
-    // ── Stage nodes ───────────────────────────────────────────
-    const stageIcons   = ['🌾','🎋','🌸','🏚️','⛰️','🌋'];
-    const stageAccents = ['#8BC34A','#4CAF50','#E91E63','#FF9800','#42A5F5','#FF5722'];
-    PHONICS_DATA.stageList.forEach((stage, i) => {
+    // ── World nodes (6 worlds along the path) ─────────────────
+    const worldAccents = ['#8BC34A','#4CAF50','#E91E63','#FF9800','#42A5F5','#FF5722'];
+    PHONICS_DATA.WORLDS.forEach((world, i) => {
       const n       = nodes[i];
       if (!n) return;
-      const stageId  = i + 1;
-      const summary  = this.progress.getStageSummary(stageId);
-      const unlocked = summary.unlocked;
-      const sel      = this._menuSel === i;
-      const stars    = summary.stars || 0;
-      const accent   = stageAccents[i] || '#FFD700';
+      const unlocked = this.progress.isUnlocked(world.startId);
+      const sel      = this._worldSel === i;
+      const cleared  = world.stageIds.filter(id => this.progress.getStage(id)?.completedAt).length;
+      const total    = world.stageCount;
+      const allClear = cleared >= total;
+      const accent   = worldAccents[i] || world.accentColor || '#FFD700';
       const bounce   = sel ? Math.sin(t * 0.12) * 5 : 0;
       const cy       = n.cy + bounce;
 
@@ -1635,43 +1683,31 @@ class SlashGame {
         ctx.fillStyle = 'rgba(255,255,255,0.28)';
         ctx.fillText('🔒', n.cx, cy);
       } else {
-        ctx.font = `900 ${Math.round(nodeR * 0.52)}px "Nunito", "Comic Sans MS", system-ui`;
+        ctx.font = `900 ${Math.round(nodeR * 0.50)}px "Nunito", "Comic Sans MS", system-ui`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
         ctx.fillStyle = sel ? '#FFD700' : '#fff';
-        ctx.fillText(`${stageId}`, n.cx, cy - nodeR * 0.22);
-        ctx.font = `${Math.round(nodeR * 0.42)}px serif`;
-        ctx.fillText(stageIcons[i] || '🗺️', n.cx, cy + nodeR * 0.30);
+        ctx.fillText(`${world.icon}`, n.cx, cy - nodeR * 0.18);
+        ctx.font = `900 ${Math.round(nodeR * 0.30)}px "Nunito", "Comic Sans MS", system-ui`;
+        ctx.fillText(`WORLD ${world.id}`, n.cx, cy + nodeR * 0.36);
         ctx.shadowBlur = 0;
-        const starSz = Math.max(9, Math.round(nodeR * 0.33));
-        ctx.font = `${starSz}px serif`;
-        for (let s = 0; s < 3; s++) {
-          ctx.globalAlpha = s < stars ? 1 : 0.18;
-          ctx.fillText('⭐', n.cx - starSz * 1.05 + s * starSz * 1.1, cy + nodeR + 12);
-        }
-        ctx.globalAlpha = 1;
-        // Mastery badges
-        const mastery = this.progress.getStageMastery?.(stageId);
-        if (mastery?.noHit) {
-          ctx.font = '10px serif'; ctx.textAlign = 'right';
-          ctx.fillText('🛡️', n.cx + nodeR - 1, cy - nodeR + 10);
-        }
-        if (mastery?.speedClear) {
-          ctx.font = '10px serif'; ctx.textAlign = 'left';
-          ctx.fillText('⚡', n.cx - nodeR + 1, cy - nodeR + 10);
-        }
+        // Cleared progress pill (x/total)
+        ctx.font = `bold ${Math.max(9, Math.round(nodeR * 0.30))}px "Nunito", system-ui`;
+        ctx.fillStyle = allClear ? '#FFD700' : 'rgba(255,255,255,0.85)';
+        ctx.fillText(allClear ? `👑 ${cleared}/${total}` : `${cleared}/${total}`, n.cx, cy + nodeR + 12);
       }
-      ctx.font = `bold ${Math.max(8, Math.round(W * 0.022))}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.max(8, Math.round(W * 0.021))}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.28)';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
-      ctx.fillText(stage.name, n.cx, cy + nodeR + (stars > 0 ? 26 : 16));
+      ctx.fillText(world.name, n.cx, cy + nodeR + (unlocked ? 26 : 16));
       ctx.shadowBlur = 0;
     });
 
-    // ── Animated Riku walking on the map ─────────────────────
-    if (this.stageId >= 1 && this.stageId <= 6) {
-      const curNode = nodes[this.stageId - 1];
+    // ── Animated Riku walking on the current world ────────────
+    if (this.stageId >= 1 && this.stageId <= PHONICS_DATA.stageCount) {
+      const curWorldIdx = (PHONICS_DATA.worldOf(this.stageId) || 1) - 1;
+      const curNode = nodes[curWorldIdx];
       if (curNode) {
         const bob       = Math.sin(t * 0.10) * 4;
         const walkFrame = Math.floor(t / 8) % 4;
@@ -1711,15 +1747,16 @@ class SlashGame {
     ctx.shadowBlur = 0;
     ctx.font = `bold 12px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFF176';
-    ctx.fillText(`🍚 ${this.progress.getRicePoints()} Rice  ·  Tap a stage to play`, W / 2, 7 + titleSz + 3);
+    ctx.fillText(`🍚 ${this.progress.getRicePoints()} Rice  ·  Tap a world to enter`, W / 2, 7 + titleSz + 3);
 
     // ── Selected stage info + PLAY button ─────────────────────
-    const selStage = PHONICS_DATA.stageList[this._menuSel];
+    const selWorld = PHONICS_DATA.WORLDS[this._worldSel];
     this._mapPlayBtnRect = null;
-    if (selStage && this.progress.isUnlocked(this._menuSel + 1)) {
-      const playBtnW = Math.min(130, W * 0.30);
+    if (selWorld) {
+      const wUnlocked = this.progress.isUnlocked(selWorld.startId);
+      const playBtnW = Math.min(150, W * 0.34);
       const playBtnH = Math.round(H * 0.066);
-      const panW = Math.min(W - 20, 400);
+      const panW = Math.min(W - 20, 420);
       const panH = 56 + playBtnH + 12;
       const panX = (W - panW) / 2;
       const panY = H - panH - 10;
@@ -1728,7 +1765,7 @@ class SlashGame {
       panGrad.addColorStop(1, 'rgba(5,15,30,0.94)');
       ctx.fillStyle = panGrad;
       ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 16); ctx.fill();
-      const selAccent = stageAccents[this._menuSel] || '#FFD700';
+      const selAccent = selWorld.accentColor || '#FFD700';
       ctx.strokeStyle = selAccent; ctx.lineWidth = 2;
       ctx.shadowColor = selAccent; ctx.shadowBlur = 10;
       ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 16); ctx.stroke();
@@ -1736,27 +1773,32 @@ class SlashGame {
       ctx.font = `bold ${Math.min(14, W * 0.034)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = selAccent;
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillText(`${stageIcons[this._menuSel]}  ${selStage.name}  —  ${selStage.pattern}`, W / 2, panY + 8);
+      ctx.fillText(`${selWorld.icon}  World ${selWorld.id}: ${selWorld.name}`, W / 2, panY + 8);
       ctx.font = `${Math.min(11, W * 0.025)}px system-ui`;
       ctx.fillStyle = 'rgba(200,220,255,0.75)';
-      ctx.fillText(`Boss: ${selStage.bossName}  ·  ${selStage.words?.length || 8} words`, W / 2, panY + 30);
+      ctx.fillText(`📚 ${selWorld.skill}  ·  ${selWorld.stageCount} stages`, W / 2, panY + 30);
       const btnX  = W / 2 - playBtnW / 2;
       const btnY  = panY + 46;
       const tapP  = 0.75 + 0.25 * Math.sin(t * 0.10);
       const btnGd = ctx.createLinearGradient(btnX, btnY, btnX, btnY + playBtnH);
-      btnGd.addColorStop(0, `rgba(0,220,110,${0.88 + 0.12 * tapP})`);
-      btnGd.addColorStop(1, `rgba(0,150,60,${0.92 + 0.08 * tapP})`);
-      ctx.shadowColor = '#00FF88'; ctx.shadowBlur = 14 * tapP;
+      if (wUnlocked) {
+        btnGd.addColorStop(0, `rgba(0,220,110,${0.88 + 0.12 * tapP})`);
+        btnGd.addColorStop(1, `rgba(0,150,60,${0.92 + 0.08 * tapP})`);
+        ctx.shadowColor = '#00FF88'; ctx.shadowBlur = 14 * tapP;
+      } else {
+        btnGd.addColorStop(0, 'rgba(90,110,120,0.85)');
+        btnGd.addColorStop(1, 'rgba(50,60,70,0.9)');
+      }
       ctx.fillStyle = btnGd;
       ctx.beginPath(); ctx.roundRect(btnX, btnY, playBtnW, playBtnH, playBtnH / 2); ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.40)'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.roundRect(btnX, btnY, playBtnW, playBtnH, playBtnH / 2); ctx.stroke();
       ctx.shadowBlur = 0;
-      ctx.font = `bold ${Math.min(16, W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(15, W * 0.036)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('▶  PLAY', W / 2, btnY + playBtnH / 2);
-      this._mapPlayBtnRect = { x: btnX, y: btnY, w: playBtnW, h: playBtnH };
+      ctx.fillText(wUnlocked ? '▶  ENTER WORLD' : '🔒 LOCKED', W / 2, btnY + playBtnH / 2);
+      if (wUnlocked) this._mapPlayBtnRect = { x: btnX, y: btnY, w: playBtnW, h: playBtnH };
     }
     ctx.textBaseline = 'alphabetic';
   }
@@ -1878,7 +1920,7 @@ class SlashGame {
 
     // ── Boss cinematic: slide boss sprite in from right ────────
     const bossStageId = this._transBossStageId;
-    const isBossTrans = bossStageId > 0 && bossStageId <= 6;
+    const isBossTrans = bossStageId > 0 && bossStageId <= PHONICS_DATA.stageCount;
     if (isBossTrans) {
       const stage     = PHONICS_DATA.stageList[bossStageId - 1];
       const bossKey   = stage?.bossFile;
@@ -2269,10 +2311,13 @@ class SlashGame {
     this._resultBtnRects = [
       { label: '▶ Next Stage', primary: true, x: W/2 - 100, y: py + 276, w: 200, h: 40,
         action: () => {
-          if (this.stageId < 6 && this.progress.isUnlocked(this.stageId + 1)) {
+          if (this.stageId < PHONICS_DATA.stageCount && this.progress.isUnlocked(this.stageId + 1)) {
             this.stageId++;
+            // Keep the world selection in sync so returning to the map lands right.
+            this._worldSel = (PHONICS_DATA.worldOf(this.stageId) || 1) - 1;
             this._launchStage(this.stageId);
           } else {
+            this._worldSel = (PHONICS_DATA.worldOf(this.stageId) || 1) - 1;
             this.state = 'world-map'; this._stateEntryFade = 1.0;
           }
         }
@@ -2637,7 +2682,7 @@ class SlashGame {
     for (const r of rects) {
       if (mx >= r.x && mx <= r.x+r.w && my >= r.y && my <= r.y+r.h) {
         if (r.action === 'endless') { this._startEndlessRunner(); this._stateEntryFade = 1.0; }
-        if (r.action === 'campaign') { this.state = 'world-map'; this._stateEntryFade = 1.0; }
+        if (r.action === 'campaign') { this._worldSel = this._furthestUnlockedWorldIdx(); this.state = 'world-map'; this._stateEntryFade = 1.0; }
         if (r.action === 'daily') { this._startDaily(); this._stateEntryFade = 1.0; }
         if (r.action === 'shop') { this._startShop(); this._stateEntryFade = 1.0; }
         if (r.action === 'leaderboard') { this.state = 'leaderboard'; this._stateEntryFade = 1.0; }
@@ -3471,7 +3516,9 @@ document.addEventListener('keydown', (e) => {
   if (!slashActive || !_slashGameInstance) return;
   const s = _slashGameInstance.state;
   if (e.key === 'Escape') {
-    if (s === 'menu' || s === 'stage-select' || s === 'world-map') {
+    if (s === 'stage-select') {
+      _slashGameInstance.state = 'world-map';
+    } else if (s === 'menu' || s === 'world-map') {
       exitSlash();
     } else if (s === 'runner' && _slashGameInstance.runner) {
       _slashGameInstance.runner._togglePause();
