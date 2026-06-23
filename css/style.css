@@ -1101,6 +1101,18 @@ body {
     pointer-events: none;
 }
 
+/* Word structure label — letter-based C/V pattern (e.g. "CCVCC") */
+.be-struct-label {
+    font-family: monospace;
+    font-size: clamp(0.7rem, 2.8vw, 0.9rem);
+    letter-spacing: 0.25em;
+    color: rgba(255,255,255,0.38);
+    text-align: center;
+    min-height: 1.2em;
+    margin: 1px 0 0;
+    user-select: none;
+}
+
 /* Phase 8: live word preview — phoneme sequence built so far */
 .be-word-preview {
     font-family: 'Nunito', 'Comic Sans MS', system-ui, sans-serif;

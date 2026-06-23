@@ -437,11 +437,15 @@ class BattleEngine {
     this._blanksEl = document.createElement('div');
     this._blanksEl.className = 'be-blanks';
 
+    // Word structure label (e.g. "CCVCC") — letter-based, not phoneme-count-based
+    this._structLabelEl = document.createElement('div');
+    this._structLabelEl.className = 'be-struct-label';
+
     // Phase 8: live word preview — "SH · I · P = SHIP" shown as tiles are placed
     this._wordPreviewEl = document.createElement('div');
     this._wordPreviewEl.className = 'be-word-preview';
 
-    this._targetEl.append(this._targetEmojiEl, this._blanksEl, this._wordPreviewEl);
+    this._targetEl.append(this._targetEmojiEl, this._blanksEl, this._structLabelEl, this._wordPreviewEl);
     this.overlay.appendChild(this._targetEl);
 
     // ── 3. Tile pool ─────────────────────────────────────────
@@ -854,6 +858,8 @@ class BattleEngine {
   // Prompt: emoji + the word shown as slots, the queried slot a glowing "?".
   _renderChallengePrompt() {
     const c = this._challenge;
+    // Hide structure label during challenge rounds — focus is on the challenge, not the structure.
+    if (this._structLabelEl) this._structLabelEl.style.display = 'none';
     // Sight Word hides the emoji (it would give the answer away); others show it.
     this._targetEmojiEl.textContent =
       c.type === 'sight-word' ? '🔊' :
@@ -1102,10 +1108,22 @@ class BattleEngine {
     }, 1400);
   }
 
+  // Returns C/V structure from the word's spelling — "crash" → "CCVCC".
+  // Uses letters, not phoneme-slot count, so multi-letter phonemes like "cr"
+  // and "sh" correctly contribute two C's each rather than one.
+  _getWordStructure(word) {
+    const v = new Set(['a','e','i','o','u']);
+    return (word || '').toLowerCase().split('').map(ch => v.has(ch) ? 'V' : 'C').join('');
+  }
+
   // ── Render target hint (emoji + blank slots) ─────────────────
   _renderTargetHint() {
     if (!this._currentWord) return;
     this._targetEmojiEl.textContent = this._currentWord.hint;
+    if (this._structLabelEl) {
+      this._structLabelEl.textContent = this._getWordStructure(this._currentWord.word);
+      this._structLabelEl.style.display = '';
+    }
     this._renderBlanks();
   }
 
