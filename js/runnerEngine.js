@@ -474,10 +474,13 @@ class RunnerPlatform {
   draw(ctx, tileSprites) {
     const sp = tileSprites && tileSprites[this.style];
     if (sp && sp.complete && sp.naturalWidth > 0) {
-      // Tile the sprite across the platform width
-      const tileW = sp.naturalWidth || 40;
+      // Tile the sprite across the platform width at its native aspect
+      // (previously the whole texture was squashed into the 20px strip)
+      const tileW = Math.max(12, Math.round(this.h * sp.naturalWidth / sp.naturalHeight));
       for (let tx = 0; tx < this.w; tx += tileW) {
-        ctx.drawImage(sp, this.sx + tx, this.sy, Math.min(tileW, this.w - tx), this.h);
+        const w = Math.min(tileW, this.w - tx);
+        ctx.drawImage(sp, 0, 0, sp.naturalWidth * (w / tileW), sp.naturalHeight,
+                      this.sx + tx, this.sy, w, this.h);
       }
     } else {
       this._drawFallback(ctx);
@@ -1520,7 +1523,11 @@ class FlyingEnemy {
         ctx.translate(x + this.w / 2, y + this.h / 2);
         ctx.scale(this.vx < 0 ? 1 : -1, 1);
       }
-      ctx.drawImage(this._sprite, -this.w / 2, -this.h / 2, this.w, this.h);
+      // Aspect-fit inside the hitbox with a gentle wing-flap tilt
+      const nw = this._sprite.naturalWidth, nh = this._sprite.naturalHeight;
+      const s  = Math.min(this.w / nw, this.h / nh) * 1.25;
+      if (!this.defeated) ctx.rotate(wingFlap * 0.25);
+      ctx.drawImage(this._sprite, -nw * s / 2, -nh * s / 2, nw * s, nh * s);
       ctx.restore();
       return;
     }
@@ -1622,9 +1629,10 @@ class SpringPad {
     const baseY    = this.groundY;
 
     if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
-      const drawH = this.h + 10;
-      const drawY = baseY - drawH + Math.round(compress * 8);
-      ctx.drawImage(this._sprite, x - 3, drawY, this.w + 6, drawH);
+      // Aspect-fit at pad width, anchored to the ground, squashing on bounce
+      const drawW = this.w + 6;
+      const drawH = Math.round(drawW * this._sprite.naturalHeight / this._sprite.naturalWidth * (1 - compress * 0.35));
+      ctx.drawImage(this._sprite, x - 3, baseY - drawH, drawW, drawH);
       return;
     }
 
@@ -1685,9 +1693,10 @@ class CheckpointFlag {
     const color    = this.activated ? '#00E676' : '#FFD600';
 
     if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
-      const drawW = 54;
+      // Aspect-fit at 84px tall, anchored to the ground
       const drawH = 84;
-      ctx.drawImage(this._sprite, x - 6, groundY - drawH, drawW, drawH);
+      const drawW = Math.round(drawH * this._sprite.naturalWidth / this._sprite.naturalHeight);
+      ctx.drawImage(this._sprite, x - drawW * 0.3, groundY - drawH, drawW, drawH);
       if (this.activated) {
         ctx.save();
         const pulse = 0.22 + 0.14 * Math.sin(this._age * 0.25);
@@ -1854,7 +1863,9 @@ class DustParticle {
 function generateRunnerLevel(stageData, canvasH, sprites) {
   const groundY    = canvasH - R_GROUND_H;
   const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
-  const difficulty = stageData.id - 1;             // 0-5
+  // Difficulty 0-5 by WORLD (stage ids now run 1-30; using them raw
+  // flooded early worlds with late-game enemies, speeds and bombs)
+  const difficulty = Math.min(5, (stageData.world || stageData.id) - 1);
   // Per-world mini-dino art when available; generic minion otherwise
   const minionSp   = sprites && (sprites[`mini-w${stageData.world}`] ||
                                  sprites['dino-minion'] || sprites['minion-dino']);
@@ -2792,7 +2803,7 @@ class RunnerEngine {
 
     // World-specific accent strip below grass
     const stageDecorColors = ['#5a9e3c','#2d6b20','#C2185B','#6D4C41','#388E3C','#880E4F'];
-    ctx.fillStyle = stageDecorColors[(this.stage?.id || 1) - 1] || '#5a9e3c';
+    ctx.fillStyle = stageDecorColors[(this.stage?.world || 1) - 1] || '#5a9e3c';
     ctx.fillRect(0, gy + 16, W, 5);
 
     // Scrolling grass tufts
@@ -2927,7 +2938,10 @@ class RunnerEngine {
     ctx.font      = 'bold 16px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.textAlign = 'left';
-    ctx.fillText(`Stage ${this.stage.id}: ${this.stage.name}`, 12, this.H - R_GROUND_H - 12);
+    const stageLabel = this.stage.world
+      ? `${this.stage.worldIcon || ''} ${this.stage.world}-${this.stage.local}: ${this.stage.name}`
+      : `Stage ${this.stage.id}: ${this.stage.name}`;
+    ctx.fillText(stageLabel.trim(), 12, this.H - R_GROUND_H - 12);
 
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign    = 'left';
@@ -4516,6 +4530,20 @@ class EndlessRunnerEngine {
   _drawPtero(ctx, pt) {
     const { screenX, y, w, h } = pt;
     const flapAng = Math.sin(this._age * 0.3 + pt.phase) * 0.5;
+
+    // Sprite path — reuse the purple flying-enemy art, aspect-fit
+    const sp = this.sprites && this.sprites['flying-enemy'];
+    if (sp && sp.complete && sp.naturalWidth > 0) {
+      ctx.save();
+      ctx.translate(screenX + w / 2, y + h / 2);
+      ctx.rotate(flapAng * 0.25);
+      const s = Math.min(w / sp.naturalWidth, h / sp.naturalHeight) * 1.35;
+      ctx.drawImage(sp, -sp.naturalWidth * s / 2, -sp.naturalHeight * s / 2,
+                    sp.naturalWidth * s, sp.naturalHeight * s);
+      ctx.restore();
+      return;
+    }
+
     ctx.save();
     ctx.translate(screenX + w/2, y + h/2);
     // Body
