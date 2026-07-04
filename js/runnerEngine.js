@@ -2566,6 +2566,20 @@ class RunnerEngine {
 
     ctx.restore(); // end screen-shake transform
 
+    // Soft vignette focuses attention on the action
+    if (!this._vignette || this._vignetteW !== this.W || this._vignetteH !== this.H) {
+      const v = ctx.createRadialGradient(
+        this.W / 2, this.H / 2, Math.min(this.W, this.H) * 0.55,
+        this.W / 2, this.H / 2, Math.max(this.W, this.H) * 0.75);
+      v.addColorStop(0, 'rgba(0,0,0,0)');
+      v.addColorStop(1, 'rgba(0,0,0,0.22)');
+      this._vignette  = v;
+      this._vignetteW = this.W;
+      this._vignetteH = this.H;
+    }
+    ctx.fillStyle = this._vignette;
+    ctx.fillRect(0, 0, this.W, this.H);
+
     // HUD always drawn without shake
     this._drawHUD(ctx);
   }
@@ -2590,10 +2604,10 @@ class RunnerEngine {
       ctx.globalAlpha = 0.0;  // bg image is clear; add procedural mid layer below
       ctx.restore();
 
-      // Procedural mid layer: semi-transparent hills scrolling at mid speed
-      this._drawParallaxLayer(ctx, this._bgOffset2, 0.45, 5, 90, 'rgba(0,0,0,0.07)', 0.35);
-      // Procedural near layer: darker, faster
-      this._drawParallaxLayer(ctx, this._bgOffset3, 0.80, 7, 55, 'rgba(0,0,0,0.13)', 0.50);
+      // Procedural depth layers hug the ground line so they read as
+      // hazy shrubs/hills, not floating blobs over the painted sky
+      this._drawParallaxLayer(ctx, this._bgOffset2, 0.45, 5, 60, 'rgba(0,30,0,0.05)', 0.80);
+      this._drawParallaxLayer(ctx, this._bgOffset3, 0.80, 7, 38, 'rgba(0,25,0,0.09)', 0.90);
       return;
     }
 
@@ -2605,6 +2619,18 @@ class RunnerEngine {
     sky.addColorStop(1,   this.stage.groundColor || '#5a8a3c');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.W, this.H);
+
+    // Sun with a warm glow — anchors the sky and adds depth
+    const sunX = this.W * 0.82, sunY = this.H * 0.16;
+    const sunR = Math.min(this.W, this.H) * 0.07;
+    const glow = ctx.createRadialGradient(sunX, sunY, sunR * 0.3, sunX, sunY, sunR * 3.2);
+    glow.addColorStop(0,   'rgba(255,245,190,0.85)');
+    glow.addColorStop(0.35,'rgba(255,225,130,0.30)');
+    glow.addColorStop(1,   'rgba(255,225,130,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(sunX, sunY, sunR * 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,250,210,0.95)';
+    ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
 
     // Layer 1: far clouds / snow peaks
     this._drawMountainLayer(ctx, this._bgOffset1, 0.28, 7, 110, 'rgba(255,255,255,0.10)');
@@ -2655,13 +2681,30 @@ class RunnerEngine {
     const W  = this.W;
     const gc = this.stage.groundColor || '#5a8a3c';
 
-    // Dirt
-    ctx.fillStyle = '#8B6040';
+    // Dirt — vertical gradient reads as depth instead of a flat slab
+    const dirt = ctx.createLinearGradient(0, gy, 0, gy + R_GROUND_H);
+    dirt.addColorStop(0, '#8B6040');
+    dirt.addColorStop(1, '#5e3f28');
+    ctx.fillStyle = dirt;
     ctx.fillRect(0, gy, W, R_GROUND_H);
+
+    // Scrolling soil speckles (pebbles) for texture
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
+    const spkW = 64;
+    const spkOff = this.camOffset % spkW;
+    for (let x = -spkW + spkOff; x < W + spkW; x += spkW) {
+      ctx.fillRect(x + 9,  gy + 30, 5, 3);
+      ctx.fillRect(x + 34, gy + 46, 4, 3);
+      ctx.fillRect(x + 50, gy + 26, 3, 2);
+    }
 
     // Grass strip
     ctx.fillStyle = gc;
     ctx.fillRect(0, gy, W, 16);
+
+    // Sunlit highlight along the grass edge
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(0, gy, W, 2.5);
 
     // World-specific accent strip below grass
     const stageDecorColors = ['#5a9e3c','#2d6b20','#C2185B','#6D4C41','#388E3C','#880E4F'];
