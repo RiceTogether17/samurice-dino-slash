@@ -38,6 +38,11 @@ const SLASH_SPRITES = {
   // ── Minion dino ───────────────────────────────────────────
   'minion-dino': 'assets/sprites/dino-minion.png',
   'dino-minion': 'assets/sprites/dino-minion.png',
+  // ── Runner enemy variants ─────────────────────────────────
+  'shell-dino': 'assets/sprites/shell-dino.png',
+  'shell-dino-shell': 'assets/sprites/shell-dino-shell.png',
+  'spiny-dino': 'assets/sprites/spiny-dino.png',
+  'bomb-minion': 'assets/sprites/bomb-minion.png',
   // ── Stage bosses ──────────────────────────────────────────
   'stage-1-rex': 'assets/dinosaurs/trex.png',
   'stage-1-tri': 'assets/dinosaurs/triceratops.png',
