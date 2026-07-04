@@ -677,7 +677,7 @@ class MinionDino {
       // Sprite path on defeat
       if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
         ctx.scale(this.vx < 0 ? 1 : -1, 1);
-        ctx.drawImage(this._sprite, -this.w / 2, -this.h / 2, this.w, this.h);
+        this._drawSpriteFit(ctx);
         this._drawDeathStars(ctx);
         ctx.restore();
         return;
@@ -691,7 +691,7 @@ class MinionDino {
       const wobble = Math.sin(this._age * 0.25) * 0.08;
       ctx.rotate(wobble);
       ctx.scale(this.vx < 0 ? 1 : -1, 1);
-      ctx.drawImage(this._sprite, -this.w / 2, -this.h / 2, this.w, this.h);
+      this._drawSpriteFit(ctx);
       if (this.defeated) this._drawDeathStars(ctx);
       ctx.restore();
       return;
@@ -750,6 +750,15 @@ class MinionDino {
     ctx.restore();
   }
 
+  // Draw the sprite inside the w×h box preserving its aspect ratio,
+  // anchored at the feet (portrait art must not be squashed square).
+  _drawSpriteFit(ctx) {
+    const nw = this._sprite.naturalWidth, nh = this._sprite.naturalHeight;
+    const s  = Math.min(this.w / nw, this.h / nh);
+    const dw = nw * s, dh = nh * s;
+    ctx.drawImage(this._sprite, -dw / 2, this.h / 2 - dh, dw, dh);
+  }
+
   _drawDeathStars(ctx) {
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2 + this.deathFrames * 0.2;
@@ -768,7 +777,7 @@ class MinionDino {
 // Stationary shell: kick sideways. Moving shell: defeats other enemies.
 // ─────────────────────────────────────────────────────────────
 class ShellDino {
-  constructor(worldX, groundY, sprite = null, size = 72) {
+  constructor(worldX, groundY, sprite = null, size = 72, shellSprite = null) {
     this.worldX          = worldX;
     this.w               = size;
     this.h               = size;
@@ -781,6 +790,7 @@ class ShellDino {
     this._patrolMin      = worldX - 140;
     this._patrolMax      = worldX + 140;
     this._sprite         = sprite;
+    this._shellSprite    = shellSprite;
     this.inShell         = false;
     this.shellVx         = 0;
     this._shellKickTimer = 0;
@@ -856,7 +866,22 @@ class ShellDino {
     } else {
       ctx.translate(x + this.w / 2, y + this.h / 2);
     }
-    if (this.inShell) {
+    // Sprite paths — walking body or retracted shell
+    const walkOk  = this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0;
+    const shellOk = this._shellSprite && this._shellSprite.complete && this._shellSprite.naturalWidth > 0;
+    if (this.inShell && shellOk) {
+      // Moving shell spins; kicked shell flashes gold
+      if (Math.abs(this.shellVx) > 0.5) ctx.rotate(-this.shellVx * this._age * 0.02);
+      if (this._shellKickTimer > 0) { ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 22; }
+      else if (Math.abs(this.shellVx) > 2) { ctx.shadowColor = '#4FC3F7'; ctx.shadowBlur = 14; }
+      ctx.drawImage(this._shellSprite, -this.w / 2, -this.h / 2, this.w, this.h);
+      ctx.shadowBlur = 0;
+    } else if (!this.inShell && walkOk) {
+      const walk = Math.sin(this._age * 0.18) * 0.08;
+      ctx.rotate(walk);
+      ctx.scale(this.vx > 0 ? -1 : 1, 1);
+      ctx.drawImage(this._sprite, -this.w / 2, -this.h / 2, this.w, this.h);
+    } else if (this.inShell) {
       const pulse = Math.abs(this.shellVx) > 2 ? 0.2 : 0;
       ctx.fillStyle = this._shellKickTimer > 0 ? '#FFD700' : '#0288D1';
       ctx.shadowColor = '#0288D1'; ctx.shadowBlur = pulse * 20;
@@ -955,6 +980,29 @@ class SpinyDino {
     }
     ctx.scale(this.vx > 0 ? -1 : 1, 1);
     const bob = Math.sin(this._age * 0.14) * 1.5;
+
+    // Sprite path — draw square art anchored at feet (spikes rise above
+    // the hitbox), keep the pulsing red danger glow so kids read "don't stomp"
+    if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
+      const dw = this.w * 1.1;
+      ctx.drawImage(this._sprite, -dw / 2, this.h / 2 - dw + bob, dw, dw);
+      const wp2 = 0.3 + 0.15 * Math.sin(this._age * 0.20);
+      ctx.strokeStyle = `rgba(255,50,0,${wp2})`; ctx.lineWidth = 3;
+      ctx.shadowColor = '#FF0000'; ctx.shadowBlur = 10 * wp2;
+      ctx.beginPath(); ctx.ellipse(0, 3 + bob, this.w * 0.5, this.h * 0.46, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur = 0;
+      if (this.defeated) {
+        for (let i = 0; i < 3; i++) {
+          const a = (i / 3) * Math.PI * 2 + this.deathFrames * 0.2;
+          const r = 22 + this.deathFrames * 0.5;
+          ctx.font = '12px serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFD700';
+          ctx.fillText('💥', Math.cos(a) * r, Math.sin(a) * r - 10);
+        }
+      }
+      ctx.restore();
+      return;
+    }
+
     ctx.fillStyle = '#B71C1C';
     ctx.beginPath(); ctx.ellipse(0, 3 + bob, this.w * 0.4, this.h * 0.38, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#FF8F00';
@@ -998,7 +1046,8 @@ class SpinyDino {
 // Can be stomped mid-air for a big score reward.
 // ─────────────────────────────────────────────────────────────
 class BombMinion {
-  constructor(worldX, worldY, speed = 4.5) {
+  constructor(worldX, worldY, speed = 4.5, sprite = null) {
+    this._sprite     = sprite;
     this.worldX      = worldX;
     this.worldY      = worldY;
     this.w           = 56;
@@ -1056,6 +1105,23 @@ class BombMinion {
     }
     const cx  = this.defeated ? x + this.w / 2 : x + this.w / 2;
     const cy2 = this.defeated ? y + this.h / 2 : y + this.h / 2 + bob;
+
+    // Sprite path — subtle flight tilt; smoke trail already drawn above
+    if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
+      const dw = this.w * 1.15, dh = this.h * 1.15;
+      if (this.defeated) {
+        ctx.drawImage(this._sprite, -this.w / 2 - (dw - this.w) / 2, -this.h / 2 - (dh - this.h) / 2, dw, dh);
+      } else {
+        ctx.save();
+        ctx.translate(cx, cy2);
+        ctx.rotate(Math.sin(this._age * 0.08) * 0.08);
+        ctx.drawImage(this._sprite, -dw / 2, -dh / 2, dw, dh);
+        ctx.restore();
+      }
+      ctx.restore();
+      return;
+    }
+
     const grad = ctx.createRadialGradient(cx - this.w * 0.12, cy2 - this.h * 0.14, 2, cx, cy2, this.w * 0.46);
     grad.addColorStop(0, '#424242');
     grad.addColorStop(1, '#1a1a1a');
@@ -1789,10 +1855,16 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   const groundY    = canvasH - R_GROUND_H;
   const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
   const difficulty = stageData.id - 1;             // 0-5
-  const minionSp   = sprites && (sprites['dino-minion'] || sprites['minion-dino']);
+  // Per-world mini-dino art when available; generic minion otherwise
+  const minionSp   = sprites && (sprites[`mini-w${stageData.world}`] ||
+                                 sprites['dino-minion'] || sprites['minion-dino']);
   const flyingSp   = sprites && sprites['flying-enemy'];
   const springSp   = sprites && sprites['spring-pad'];
   const checkpointSp = sprites && sprites['checkpoint-flag'];
+  const shellSp      = sprites && sprites['shell-dino'];
+  const shellShellSp = sprites && sprites['shell-dino-shell'];
+  const spinySp      = sprites && sprites['spiny-dino'];
+  const bombSp       = sprites && sprites['bomb-minion'];
   const minionSize = Math.max(110, Math.round(canvasH * 0.28));
   const items      = {
     platforms: [], coins: [], minions: [], flag: null,
@@ -1850,7 +1922,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
       if (wIdx % 2 === 0) {
         // Stage 3+: mix in shell dinos on some sections
         if (difficulty >= 2 && wIdx % 4 === 2) {
-          items.shellDinos.push(new ShellDino(mx, groundY, null, Math.round(minionSize * 0.65)));
+          items.shellDinos.push(new ShellDino(mx, groundY, shellSp, Math.round(minionSize * 0.65), shellShellSp));
         } else {
           const minion = new MinionDino(
             mx, groundY,
@@ -1864,7 +1936,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
       }
       // Stage 4+: spiny dino on odd sections
       if (difficulty >= 3 && wIdx % 3 === 1 && wIdx > 1) {
-        items.spinyDinos.push(new SpinyDino(mx + 120, groundY));
+        items.spinyDinos.push(new SpinyDino(mx + 120, groundY, spinySp));
       }
     }
 
@@ -1872,7 +1944,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
     if (difficulty >= 4 && wIdx % 3 === 0 && wIdx > 0) {
       const bombX = wx + platW + 350;
       const bombY = groundY - Math.round(canvasH * 0.40);
-      items.bombMinions.push(new BombMinion(bombX, bombY, 4.5 + difficulty * 0.3));
+      items.bombMinions.push(new BombMinion(bombX, bombY, 4.5 + difficulty * 0.3, bombSp));
     }
 
     // Flying enemies in stage 2+, every 3 word sections
@@ -2566,6 +2638,20 @@ class RunnerEngine {
 
     ctx.restore(); // end screen-shake transform
 
+    // Soft vignette focuses attention on the action
+    if (!this._vignette || this._vignetteW !== this.W || this._vignetteH !== this.H) {
+      const v = ctx.createRadialGradient(
+        this.W / 2, this.H / 2, Math.min(this.W, this.H) * 0.55,
+        this.W / 2, this.H / 2, Math.max(this.W, this.H) * 0.75);
+      v.addColorStop(0, 'rgba(0,0,0,0)');
+      v.addColorStop(1, 'rgba(0,0,0,0.22)');
+      this._vignette  = v;
+      this._vignetteW = this.W;
+      this._vignetteH = this.H;
+    }
+    ctx.fillStyle = this._vignette;
+    ctx.fillRect(0, 0, this.W, this.H);
+
     // HUD always drawn without shake
     this._drawHUD(ctx);
   }
@@ -2579,10 +2665,22 @@ class RunnerEngine {
       const imgH  = bgSp.naturalHeight;
       const drawH = this.H;
       const drawW = drawH * (imgW / imgH);
-      // Layer 1: far background scrolls very slowly
-      const off1 = (this._bgOffset1 * 0.2) % drawW;
-      for (let x = -off1; x < this.W + drawW; x += drawW) {
-        ctx.drawImage(bgSp, x, 0, drawW, drawH);
+      // Layer 1: far background scrolls very slowly.
+      // Alternate tiles are mirrored so the left/right edges always
+      // meet their own reflection — no visible repeat seam.
+      const scroll1 = this._bgOffset1 * 0.2;
+      const firstIdx = Math.floor(scroll1 / drawW);
+      for (let i = firstIdx; (i * drawW - scroll1) < this.W; i++) {
+        const x = i * drawW - scroll1;
+        if (((i % 2) + 2) % 2 === 1) {
+          ctx.save();
+          ctx.translate(x + drawW, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(bgSp, 0, 0, drawW, drawH);
+          ctx.restore();
+        } else {
+          ctx.drawImage(bgSp, x, 0, drawW, drawH);
+        }
       }
 
       // Layer 2: mid-ground tinted overlay for depth
@@ -2590,10 +2688,10 @@ class RunnerEngine {
       ctx.globalAlpha = 0.0;  // bg image is clear; add procedural mid layer below
       ctx.restore();
 
-      // Procedural mid layer: semi-transparent hills scrolling at mid speed
-      this._drawParallaxLayer(ctx, this._bgOffset2, 0.45, 5, 90, 'rgba(0,0,0,0.07)', 0.35);
-      // Procedural near layer: darker, faster
-      this._drawParallaxLayer(ctx, this._bgOffset3, 0.80, 7, 55, 'rgba(0,0,0,0.13)', 0.50);
+      // Procedural depth layers hug the ground line so they read as
+      // hazy shrubs/hills, not floating blobs over the painted sky
+      this._drawParallaxLayer(ctx, this._bgOffset2, 0.45, 5, 60, 'rgba(0,30,0,0.05)', 0.80);
+      this._drawParallaxLayer(ctx, this._bgOffset3, 0.80, 7, 38, 'rgba(0,25,0,0.09)', 0.90);
       return;
     }
 
@@ -2605,6 +2703,18 @@ class RunnerEngine {
     sky.addColorStop(1,   this.stage.groundColor || '#5a8a3c');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.W, this.H);
+
+    // Sun with a warm glow — anchors the sky and adds depth
+    const sunX = this.W * 0.82, sunY = this.H * 0.16;
+    const sunR = Math.min(this.W, this.H) * 0.07;
+    const glow = ctx.createRadialGradient(sunX, sunY, sunR * 0.3, sunX, sunY, sunR * 3.2);
+    glow.addColorStop(0,   'rgba(255,245,190,0.85)');
+    glow.addColorStop(0.35,'rgba(255,225,130,0.30)');
+    glow.addColorStop(1,   'rgba(255,225,130,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(sunX, sunY, sunR * 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,250,210,0.95)';
+    ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
 
     // Layer 1: far clouds / snow peaks
     this._drawMountainLayer(ctx, this._bgOffset1, 0.28, 7, 110, 'rgba(255,255,255,0.10)');
@@ -2655,13 +2765,30 @@ class RunnerEngine {
     const W  = this.W;
     const gc = this.stage.groundColor || '#5a8a3c';
 
-    // Dirt
-    ctx.fillStyle = '#8B6040';
+    // Dirt — vertical gradient reads as depth instead of a flat slab
+    const dirt = ctx.createLinearGradient(0, gy, 0, gy + R_GROUND_H);
+    dirt.addColorStop(0, '#8B6040');
+    dirt.addColorStop(1, '#5e3f28');
+    ctx.fillStyle = dirt;
     ctx.fillRect(0, gy, W, R_GROUND_H);
+
+    // Scrolling soil speckles (pebbles) for texture
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
+    const spkW = 64;
+    const spkOff = this.camOffset % spkW;
+    for (let x = -spkW + spkOff; x < W + spkW; x += spkW) {
+      ctx.fillRect(x + 9,  gy + 30, 5, 3);
+      ctx.fillRect(x + 34, gy + 46, 4, 3);
+      ctx.fillRect(x + 50, gy + 26, 3, 2);
+    }
 
     // Grass strip
     ctx.fillStyle = gc;
     ctx.fillRect(0, gy, W, 16);
+
+    // Sunlit highlight along the grass edge
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(0, gy, W, 2.5);
 
     // World-specific accent strip below grass
     const stageDecorColors = ['#5a9e3c','#2d6b20','#C2185B','#6D4C41','#388E3C','#880E4F'];

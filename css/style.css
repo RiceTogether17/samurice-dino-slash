@@ -2654,3 +2654,74 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
     min-width: auto !important;
     min-height: auto !important;
 }
+
+/* ============================================================
+   VISUAL POLISH PASS — depth, readability & micro-interactions
+   Appended last so same-specificity overrides win the cascade.
+============================================================ */
+
+/* ── Slim themed scrollbars on in-game panels ──────────────── */
+.battle-overlay, .pd-body, .mc-rewards-panel, .be-pool {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,215,0,0.45) rgba(0,0,0,0.25);
+}
+.battle-overlay::-webkit-scrollbar,
+.pd-body::-webkit-scrollbar,
+.mc-rewards-panel::-webkit-scrollbar,
+.be-pool::-webkit-scrollbar { width: 6px; }
+.battle-overlay::-webkit-scrollbar-thumb,
+.pd-body::-webkit-scrollbar-thumb,
+.mc-rewards-panel::-webkit-scrollbar-thumb,
+.be-pool::-webkit-scrollbar-thumb {
+    background: rgba(255,215,0,0.45);
+    border-radius: 999px;
+}
+
+/* ── Battle feedback pops instead of just appearing ────────── */
+@keyframes feedbackPop {
+    0%   { transform: scale(0.7); opacity: 0; }
+    60%  { transform: scale(1.08); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.be-feedback:not(:empty) { animation: feedbackPop 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+/* ── Home screen: brighter secondary labels for readability ── */
+.mc-sec-label { color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+
+/* ── PLAY button: periodic shine sweep draws the eye ───────── */
+.mc-play-btn::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: -75%;
+    width: 45%;
+    background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.42) 50%, transparent 100%);
+    transform: skewX(-18deg);
+    animation: playShine 3.4s ease-in-out infinite;
+    pointer-events: none;
+}
+@keyframes playShine {
+    0%, 55% { left: -75%; }
+    75%, 100% { left: 130%; }
+}
+
+/* ── Dashboard stat cards lift on hover ────────────────────── */
+.pd-stat-card { transition: transform 0.15s, box-shadow 0.15s; }
+.pd-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+}
+
+/* ── D-pad fades slightly when idle so it hides less scenery ── */
+.runner-controls .dpad-btn { opacity: 0.82; }
+.runner-controls .dpad-btn:active,
+.runner-controls .dpad-btn.held { opacity: 1; }
+
+/* ── Rewards panel: smoother close affordance ──────────────── */
+.mc-rewards-close:active { transform: scale(0.9); }
+
+/* ── Exit / pause / fullscreen buttons get a subtle ring so
+     they read as UI against busy game art ───────────────────── */
+.slash-exit-btn, .slash-fs-btn, .slash-pause-btn, .fd-btn {
+    border: 1.5px solid rgba(255,255,255,0.22);
+}
