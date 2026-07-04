@@ -2092,7 +2092,9 @@ class BattleEngine {
 
     if (sp && sp.complete && sp.naturalWidth > 0) {
       ctx.save();
-      ctx.scale(-1, 1);
+      // All battle art is normalised to face LEFT (toward the player),
+      // so no mirroring is needed — right-facing sources were flipped
+      // on disk (spinosaurus, pteranodon, dilophosaurus-hurt, mini-w2-hurt).
       // Phase 3: red glow filter
       if (this._bossPhase === 3) {
         ctx.shadowColor = '#FF1744';
