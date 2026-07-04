@@ -677,7 +677,7 @@ class MinionDino {
       // Sprite path on defeat
       if (this._sprite && this._sprite.complete && this._sprite.naturalWidth > 0) {
         ctx.scale(this.vx < 0 ? 1 : -1, 1);
-        ctx.drawImage(this._sprite, -this.w / 2, -this.h / 2, this.w, this.h);
+        this._drawSpriteFit(ctx);
         this._drawDeathStars(ctx);
         ctx.restore();
         return;
@@ -691,7 +691,7 @@ class MinionDino {
       const wobble = Math.sin(this._age * 0.25) * 0.08;
       ctx.rotate(wobble);
       ctx.scale(this.vx < 0 ? 1 : -1, 1);
-      ctx.drawImage(this._sprite, -this.w / 2, -this.h / 2, this.w, this.h);
+      this._drawSpriteFit(ctx);
       if (this.defeated) this._drawDeathStars(ctx);
       ctx.restore();
       return;
@@ -748,6 +748,15 @@ class MinionDino {
     if (this.defeated) { this._drawDeathStars(ctx); }
 
     ctx.restore();
+  }
+
+  // Draw the sprite inside the w×h box preserving its aspect ratio,
+  // anchored at the feet (portrait art must not be squashed square).
+  _drawSpriteFit(ctx) {
+    const nw = this._sprite.naturalWidth, nh = this._sprite.naturalHeight;
+    const s  = Math.min(this.w / nw, this.h / nh);
+    const dw = nw * s, dh = nh * s;
+    ctx.drawImage(this._sprite, -dw / 2, this.h / 2 - dh, dw, dh);
   }
 
   _drawDeathStars(ctx) {
@@ -1846,7 +1855,9 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   const groundY    = canvasH - R_GROUND_H;
   const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
   const difficulty = stageData.id - 1;             // 0-5
-  const minionSp   = sprites && (sprites['dino-minion'] || sprites['minion-dino']);
+  // Per-world mini-dino art when available; generic minion otherwise
+  const minionSp   = sprites && (sprites[`mini-w${stageData.world}`] ||
+                                 sprites['dino-minion'] || sprites['minion-dino']);
   const flyingSp   = sprites && sprites['flying-enemy'];
   const springSp   = sprites && sprites['spring-pad'];
   const checkpointSp = sprites && sprites['checkpoint-flag'];

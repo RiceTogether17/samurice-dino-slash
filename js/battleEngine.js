@@ -2000,8 +2000,10 @@ class BattleEngine {
   }
 
   _drawBackground(ctx) {
-    const bgKey = this.stage.bg;
-    const bgSp  = bgKey && this.sprites[bgKey];
+    // Prefer the world's dedicated battle arena; fall back to the stage bg
+    const arenaSp = this.stage.arenaBg && this.sprites[this.stage.arenaBg];
+    const stageSp = this.stage.bg && this.sprites[this.stage.bg];
+    const bgSp  = (arenaSp && arenaSp.complete && arenaSp.naturalWidth > 0) ? arenaSp : stageSp;
     if (bgSp && bgSp.complete && bgSp.naturalWidth > 0) {
       const imgW = bgSp.naturalWidth;
       const imgH = bgSp.naturalHeight;
@@ -2027,7 +2029,8 @@ class BattleEngine {
     ctx.font      = `bold 14px system-ui`;
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.textAlign = 'center';
-    ctx.fillText(`${this.stage.name}  ⚔️  Boss Battle`, this.W / 2, 26);
+    const foe = this.stage.bossName || 'Boss';
+    ctx.fillText(`${this.stage.name}  ⚔️  ${foe}`, this.W / 2, 26);
   }
 
   _floorY() { return Math.round(this.H * 0.58); }
