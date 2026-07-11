@@ -508,7 +508,17 @@ class BattleEngine {
     }
     this._isChallenge = false;
     this._challenge   = null;
-    this._shuffledPh    = this._shuffleArray([...this._currentWord.phonemes]); // randomise tile order
+    // Tile pool = the word's phonemes + a world-scaled number of
+    // distractors. With zero distractors the puzzle is order-only and
+    // can be solved by tapping left-to-right; wrong-but-plausible
+    // options make the child actually listen to each sound.
+    //   World 1 stages 1-2: 0 (gentle first steps)
+    //   World 1 stage 3+:   1   ·   World 2: 1   ·   World 3+: 2
+    const _w = this.stage.world || 1;
+    const _local = this.stage.local || 1;
+    const distractorCount = _w === 1 ? (_local <= 2 ? 0 : 1) : Math.min(2, _w - 1);
+    const distractors = this._pickBlendDistractors(this._currentWord, distractorCount);
+    this._shuffledPh    = this._shuffleArray([...this._currentWord.phonemes, ...distractors]);
     this._wrongAttempts  = 0;
     this._currentBuilt   = [];
     this._builtTileIdxes = [];
@@ -627,6 +637,39 @@ class BattleEngine {
       case 'missing':
       default:       return Math.floor(Math.random() * len);
     }
+  }
+
+  // Pick distractor phonemes for a standard blending round. Prefers
+  // phonetically confusable sounds (b/d, m/n, short vowels…) so a wrong
+  // tap is a teachable near-miss, then falls back to the stage pool.
+  // Never returns a phoneme that appears in the word itself.
+  _pickBlendDistractors(wordObj, count) {
+    if (count <= 0) return [];
+    const CONFUSABLE = {
+      b:['d','p'], d:['b','t'], p:['b','q'], t:['d'], m:['n'], n:['m'],
+      a:['e','u'], e:['a','i'], i:['e'], o:['u'], u:['o','a'],
+      s:['z','c'], f:['v'], v:['f'], g:['k'], k:['g','c'], c:['k','s'],
+      sh:['ch','th'], ch:['sh','j'], th:['sh','f'], w:['v'], l:['r'], r:['l'],
+    };
+    const inWord = new Set((wordObj.phonemes || []).map(p => p.toLowerCase()));
+    const picks = [];
+    const tryAdd = (p) => {
+      const lp = (p || '').toLowerCase();
+      if (lp && !inWord.has(lp) && !picks.includes(lp)) picks.push(lp);
+    };
+    // 1. confusables of the word's own sounds (shuffled for variety)
+    for (const ph of this._shuffleArray([...wordObj.phonemes])) {
+      (CONFUSABLE[ph.toLowerCase()] || []).forEach(tryAdd);
+      if (picks.length >= count) break;
+    }
+    // 2. top up from the stage-wide phoneme pool
+    if (picks.length < count) {
+      for (const p of this._shuffleArray([...this._distractorPool()])) {
+        tryAdd(p);
+        if (picks.length >= count) break;
+      }
+    }
+    return picks.slice(0, count);
   }
 
   // Build a pool of distractor phonemes drawn from this stage's words.
@@ -2122,6 +2165,39 @@ class BattleEngine {
       this._drawFallbackBoss(ctx, hpPct, bW, bH);
     }
     ctx.restore();
+
+    // Foe taunt — speech bubble for the first few seconds of battle
+    if (this._age < 300 && !this.done) {
+      const TAUNTS = [
+        "You'll never read MY words!",
+        'My words are TOO tricky!',
+        'Grrr… no blending allowed!',
+        'These sounds are MINE!',
+        'You can’t spell past me!',
+      ];
+      const taunt = TAUNTS[(this.stage.id || 1) % TAUNTS.length];
+      const fade  = this._age < 30 ? this._age / 30 : this._age > 260 ? (300 - this._age) / 40 : 1;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, fade));
+      ctx.font = `bold ${Math.max(12, Math.floor(this.W * 0.02))}px "Nunito", "Comic Sans MS", system-ui`;
+      const tw = ctx.measureText(taunt).width;
+      // Sit above the boss's head, clamped on-screen (tall foes reach the
+      // canvas top); shift left so it never collides with the HP bar.
+      const bx = Math.min(bCX - tw / 2 - 14, this.W - tw - 40) - 60;
+      const by = Math.max(46, bFeetY - bH - 66 + bob);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.roundRect(bx, by, tw + 28, 34, 16); ctx.fill(); ctx.stroke();
+      // Bubble tail points toward the boss
+      const bubbleCX = bx + (tw + 28) / 2;
+      ctx.beginPath();
+      ctx.moveTo(bubbleCX + 14, by + 33); ctx.lineTo(bubbleCX + 34, by + 47); ctx.lineTo(bubbleCX + 34, by + 33);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#7B1E1E';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(taunt, bubbleCX, by + 18);
+      ctx.restore();
+    }
 
     const nameY = bFeetY - bH + bob - 12;
     ctx.font        = `bold ${Math.max(13, Math.floor(this.W * 0.027))}px "Nunito", "Comic Sans MS", system-ui`;

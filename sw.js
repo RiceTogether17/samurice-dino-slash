@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────
 'use strict';
 
-const CACHE_VERSION = 'samurice-v6';
+const CACHE_VERSION = 'samurice-v7';
 const CACHE_NAME    = `${CACHE_VERSION}-static`;
 
 // Assets that should be pre-cached at install time (critical path).

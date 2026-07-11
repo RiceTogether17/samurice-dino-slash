@@ -2260,7 +2260,7 @@ class SlashGame {
     const panelSlide = Math.min(1, t / 28);
     const panelEase  = 1 - Math.pow(1 - panelSlide, 3);
     const pw = Math.min(360, W - 40);
-    const ph = 396;
+    const ph = 366;
     const px = (W - pw) / 2;
     const pyTarget = (H - ph) / 2;
     const py = pyTarget - (1 - panelEase) * (pyTarget + ph * 0.5);
@@ -2315,41 +2315,29 @@ class SlashGame {
       ctx.restore();
     }
     ctx.globalAlpha = 1;
-    ctx.font = '13px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.fillText(`${this.progress.getMasteredWords(this.stageId).length} words mastered!`, W / 2, py + 152);
-    ctx.fillText(`🍚 +${stars * 50 + 20} rice points`, W / 2, py + 174);
 
-    // End-of-run phonics stats summary
-    const stageStats = this.progress.getStage(this.stageId);
-    const stageAcc = stageStats.totalBlends > 0
-      ? Math.round((stageStats.correctBlends / stageStats.totalBlends) * 100)
-      : (this._lastBattleAccuracy ?? 0);
-    const recentAcc = this._lastBattleAccuracy ?? stageAcc;
-    ctx.font = '12px system-ui';
-    ctx.fillStyle = '#B3E5FC';
-    ctx.fillText(`📘 Run Accuracy: ${recentAcc}% · Lifetime Stage Accuracy: ${stageAcc}%`, W / 2, py + 190);
+    // ── Kid-friendly summary — celebration, not statistics ──────
+    // (accuracy / mastery jargon lives in the parent dashboard)
+    ctx.font = `bold ${Math.min(17, W * 0.04)}px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#FFE082';
+    ctx.fillText(`You defeated ${stage.bossName}! 🎊`, W / 2, py + 152);
 
     const masteredWords = this.progress.getMasteredWords(this.stageId);
-    const masteredPreview = masteredWords.slice(0, 5).map(w => w.toUpperCase()).join(', ');
-    ctx.fillStyle = 'rgba(255,255,255,0.78)';
-    ctx.fillText(`🏅 Mastered Words: ${masteredWords.length ? masteredPreview : 'Keep blending to master words!'}`, W / 2, py + 206);
-
-    const mastery = this._stageWinMastery || this.progress.getStageMastery(this.stageId);
-    const bestSec = mastery.bestClearSec ? Math.round(mastery.bestClearSec) : null;
-    ctx.font = '12px system-ui';
-    ctx.fillStyle = mastery.noHit ? '#9CFF9C' : 'rgba(255,255,255,0.65)';
-    ctx.fillText(`${mastery.noHit ? '✅' : '⬜'} No-Hit Clear`, W / 2, py + 224);
-    ctx.fillStyle = mastery.speedClear ? '#9CFF9C' : 'rgba(255,255,255,0.65)';
-    ctx.fillText(`${mastery.speedClear ? '✅' : '⬜'} Speed Clear (≤95s)${bestSec ? ` · Best ${bestSec}s` : ''}`, W / 2, py + 242);
-    if (this._stageWinMastery?.bonus > 0) {
-      ctx.fillStyle = '#FFD166';
-      ctx.font = 'bold 12px system-ui';
-      ctx.fillText(`🏅 Mastery Bonus +${this._stageWinMastery.bonus} rice`, W / 2, py + 260);
+    ctx.font = `bold 15px "Nunito", "Comic Sans MS", system-ui`;
+    ctx.fillStyle = '#fff';
+    if (masteredWords.length > 0) {
+      const preview = masteredWords.slice(0, 4).map(w => w.toUpperCase()).join(' · ');
+      ctx.fillText(`📖 New words you can read: ${preview}`, W / 2, py + 180);
+    } else {
+      ctx.fillText(`📖 Great blending — keep it up!`, W / 2, py + 180);
     }
-    // Buttons
+    ctx.fillStyle = '#FFD700';
+    const bonus = this._stageWinMastery?.bonus > 0 ? this._stageWinMastery.bonus : 0;
+    ctx.fillText(`🍚 +${stars * 50 + 20 + bonus} rice earned!`, W / 2, py + 206);
+
+    // Buttons — big and thumb-friendly
     this._resultBtnRects = [
-      { label: '▶ Next Stage', primary: true, x: W/2 - 100, y: py + 276, w: 200, h: 40,
+      { label: '▶ Next Stage', primary: true, x: W/2 - 110, y: py + 240, w: 220, h: 54,
         action: () => {
           if (this.stageId < PHONICS_DATA.stageCount && this.progress.isUnlocked(this.stageId + 1)) {
             this.stageId++;
@@ -2362,7 +2350,7 @@ class SlashGame {
           }
         }
       },
-      { label: '🗺 World Map', primary: false, x: W/2 - 80, y: py + 328, w: 160, h: 36,
+      { label: '🗺 World Map', primary: false, x: W/2 - 80, y: py + 306, w: 160, h: 40,
         action: () => { this.state = 'world-map'; this._stateEntryFade = 1.0; }
       },
     ];
@@ -2471,7 +2459,7 @@ class SlashGame {
       }
       // Label
       ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.min(14, btn.w * 0.08)}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.font = `bold ${Math.min(18, btn.w * 0.09)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + btn.h / 2);
@@ -2661,7 +2649,7 @@ class SlashGame {
     // Mode buttons
     const modes = [
       { label:'🏃 ENDLESS RUN', sub:'How far can you go?', col:'#FF6B35', action:'endless', hot:true },
-      { label:'🗺️ CAMPAIGN', sub:'6 stages to conquer', col:'#4ECDC4', action:'campaign' },
+      { label:'🗺️ CAMPAIGN', sub:`${PHONICS_DATA.worldCount || 6} worlds · ${PHONICS_DATA.stageCount || 30} stages`, col:'#4ECDC4', action:'campaign' },
       { label:'📅 DAILY', sub:this.progress.getDailyCompleted() ? '✅ Done today!' : 'Fresh challenge!', col:'#FFD700', action:'daily' },
       { label:'🏪 SHOP', sub:'Spend your rice grains', col:'#FF80FF', action:'shop' },
       { label:'🏆 LEADERBOARD', sub:'Challenge the world', col:'#FF8C00', action:'leaderboard' },
