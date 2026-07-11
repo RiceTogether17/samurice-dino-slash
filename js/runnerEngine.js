@@ -2048,6 +2048,13 @@ class RunnerEngine {
     // Relaxed Mode promises "no time pressure" — that must include the
     // runner, not just the battle. Timer neither ticks nor displays.
     this._relaxedMode      = localStorage.getItem('samurice_relaxed') === '1';
+
+    // Equipped shop items render in-game so purchases feel real:
+    // hat on Riku's head, companion trailing behind, sword icon in HUD.
+    const _eq = this.progress?.getEquipped?.() || {};
+    this._hatSprite   = (_eq.hat   && _eq.hat   !== 'hat-none')     ? this.sprites[`item-${_eq.hat}`]   : null;
+    this._compSprite  = (_eq.comp  && _eq.comp  !== 'comp-none')    ? this.sprites[`item-${_eq.comp}`]  : null;
+    this._swordSprite = (_eq.sword && _eq.sword !== 'sword-basic')  ? this.sprites[`item-${_eq.sword}`] : null;
     this._timeTick         = 0;
 
     // Score, lives, combo stomp
@@ -2645,8 +2652,31 @@ class RunnerEngine {
     // Dust particles (at player feet, behind player)
     this.dustParticles.forEach(p => p.draw(ctx));
 
+    // Companion pal — bobs along behind Riku
+    if (this._compSprite && this._compSprite.complete && this._compSprite.naturalWidth > 0) {
+      const p2 = this.player;
+      const compSz = Math.max(34, Math.round(p2.h * 0.34));
+      const bobY = Math.sin(this._age * 0.09) * 7;
+      ctx.drawImage(this._compSprite,
+        p2.screenX - compSz - 14,
+        p2.y + p2.h * 0.18 + bobY,
+        compSz, compSz);
+    }
+
     // Player (on top of everything)
     this.player.draw(ctx, this.sprites);
+
+    // Equipped hat — rides on Riku's head (tilts slightly while running)
+    if (this._hatSprite && this._hatSprite.complete && this._hatSprite.naturalWidth > 0) {
+      const p2 = this.player;
+      const hatW = Math.round(p2.w * 0.52);
+      const hatH = Math.round(hatW * this._hatSprite.naturalHeight / this._hatSprite.naturalWidth);
+      ctx.save();
+      ctx.translate(p2.screenX + p2.w / 2, p2.y + p2.h * 0.20);
+      ctx.rotate(this.player.onGround ? Math.sin(this._age * 0.18) * 0.05 : -0.12);
+      ctx.drawImage(this._hatSprite, -hatW / 2, -hatH + 10, hatW, hatH);
+      ctx.restore();
+    }
 
     // Particles
     this.particles.forEach(p => p.draw(ctx));
@@ -2864,6 +2894,11 @@ class RunnerEngine {
       ctx.globalAlpha = 0.7 + 0.3 * Math.sin(this._age * 0.2);
       ctx.fillText('🛡️', 12 + Math.max(3, maxHp) * 28 + 4, 16);
       ctx.globalAlpha = 1;
+    }
+
+    // Equipped sword badge next to the hearts
+    if (this._swordSprite && this._swordSprite.complete && this._swordSprite.naturalWidth > 0) {
+      ctx.drawImage(this._swordSprite, 12 + Math.max(3, maxHp) * 28 + 30, 8, 28, 28);
     }
 
     // ── Timer (top-center) — hidden entirely in Relaxed Mode

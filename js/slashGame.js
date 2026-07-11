@@ -71,6 +71,28 @@ const SLASH_SPRITES = {
   'mini-w6': 'assets/dinosaurs/mini-w6.png',
   'mini-w6-attack': 'assets/dinosaurs/mini-w6-attack.png',
   'mini-w6-hurt': 'assets/dinosaurs/mini-w6-hurt.png',
+  // ── Shop equipment & reward icons ─────────────────────────
+  'item-sword-basic': 'assets/items/sword-basic.png',
+  'item-sword-golden': 'assets/items/sword-golden.png',
+  'item-sword-fire': 'assets/items/sword-fire.png',
+  'item-sword-ice': 'assets/items/sword-ice.png',
+  'item-sword-thunder': 'assets/items/sword-thunder.png',
+  'item-sword-rainbow': 'assets/items/sword-rainbow.png',
+  'item-hat-ninja': 'assets/items/hat-ninja.png',
+  'item-hat-crown': 'assets/items/hat-crown.png',
+  'item-hat-mushroom': 'assets/items/hat-mushroom.png',
+  'item-hat-star': 'assets/items/hat-star.png',
+  'item-comp-baby-rex': 'assets/items/comp-baby-rex.png',
+  'item-comp-duck': 'assets/items/comp-duck.png',
+  'item-comp-koi': 'assets/items/comp-koi.png',
+  'item-comp-panda': 'assets/items/comp-panda.png',
+  'item-pu-magnet': 'assets/items/pu-magnet.png',
+  'item-pu-timeslow': 'assets/items/pu-timeslow.png',
+  'item-pu-autoblend': 'assets/items/pu-autoblend.png',
+  'item-pu-dbljump': 'assets/items/pu-dbljump.png',
+  'item-pu-shield': 'assets/items/pu-shield.png',
+  'medal-unlocked': 'assets/items/medal-unlocked.png',
+  'medal-locked': 'assets/items/medal-locked.png',
   // ── Battle arena backgrounds (per world) ──────────────────
   'arena-1': 'assets/backgrounds/arena-1.jpg',
   'arena-2': 'assets/backgrounds/arena-2.jpg',
@@ -3011,10 +3033,17 @@ class SlashGame {
       ctx.strokeStyle = isEquip ? '#FFD700' : owned ? '#888' : '#444';
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.roundRect(ix, iy, itemW, itemH, 10); ctx.fill(); ctx.stroke();
-      // Emoji
-      ctx.font = `${Math.min(32, itemH*0.35)}px serif`;
+      // Icon image (painted item art), emoji fallback
+      const iconSp = this.sprites[`item-${item.id}`];
+      const iconSz = Math.min(44, itemH * 0.52);
+      if (iconSp && iconSp.complete && iconSp.naturalWidth > 0) {
+        ctx.drawImage(iconSp, ix + 8, iy + itemH*0.35 - iconSz/2, iconSz, iconSz);
+      } else {
+        ctx.font = `${Math.min(32, itemH*0.35)}px serif`;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(item.emoji, ix + 10, iy + itemH*0.35);
+      }
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(item.emoji, ix + 10, iy + itemH*0.35);
       if (pcount > 0) {
         ctx.font = `bold 12px Arial, sans-serif`; ctx.fillStyle = '#FFD700';
         ctx.fillText(`×${pcount}`, ix + 44, iy + 10);
@@ -3258,16 +3287,31 @@ class SlashGame {
       ctx.strokeStyle = isNew ? '#FFD700' : isUnlocked ? '#888' : '#333';
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.roundRect(ax, ay, cellW - 4, cellH, 8); ctx.fill(); ctx.stroke();
-      ctx.globalAlpha = isUnlocked ? 1 : 0.3;
-      ctx.font = `${Math.min(22, cellH*0.38)}px serif`;
+      ctx.globalAlpha = isUnlocked ? 1 : 0.45;
+      // Medal frame (gold w/ ribbon when unlocked, grey padlock when locked)
+      const medalSp = this.sprites[isUnlocked ? 'medal-unlocked' : 'medal-locked'];
+      const medalSz = Math.min(40, cellH * 0.78);
+      if (medalSp && medalSp.complete && medalSp.naturalWidth > 0) {
+        ctx.drawImage(medalSp, ax + 6, ay + cellH/2 - medalSz/2, medalSz, medalSz);
+        if (isUnlocked) {
+          // achievement emoji sits on the medal disc
+          ctx.font = `${Math.round(medalSz * 0.36)}px serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(ach.emoji, ax + 6 + medalSz/2, ay + cellH/2 + medalSz * 0.13);
+          ctx.textAlign = 'left';
+        }
+      } else {
+        ctx.font = `${Math.min(22, cellH*0.38)}px serif`;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(ach.emoji, ax + 8, ay + cellH/2);
+      }
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(ach.emoji, ax + 8, ay + cellH/2);
       ctx.font = `bold ${Math.min(12,W*0.030)}px Arial, sans-serif`;
       ctx.fillStyle = isNew ? '#FFD700' : isUnlocked ? '#fff' : '#666';
-      ctx.fillText(ach.name, ax + 36, ay + cellH*0.35);
+      ctx.fillText(ach.name, ax + 52, ay + cellH*0.35);
       ctx.font = `${Math.min(10,W*0.025)}px Arial, sans-serif`;
       ctx.fillStyle = '#aaa';
-      ctx.fillText(ach.desc, ax + 36, ay + cellH*0.65);
+      ctx.fillText(ach.desc, ax + 52, ay + cellH*0.65);
       ctx.globalAlpha = 1;
     });
     ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
