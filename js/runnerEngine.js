@@ -2045,6 +2045,9 @@ class RunnerEngine {
     this.completedWords    = [];
     this.particles         = [];
     this.timeLeft          = 120;
+    // Relaxed Mode promises "no time pressure" — that must include the
+    // runner, not just the battle. Timer neither ticks nor displays.
+    this._relaxedMode      = localStorage.getItem('samurice_relaxed') === '1';
     this._timeTick         = 0;
 
     // Score, lives, combo stomp
@@ -2169,8 +2172,10 @@ class RunnerEngine {
 
     // Timer
     this._timeTick++;
-    if (this._timeTick >= 60) { this._timeTick = 0; this.timeLeft--; }
-    if (this.timeLeft <= 0) { this._end('timeout'); return; }
+    if (!this._relaxedMode) {
+      if (this._timeTick >= 60) { this._timeTick = 0; this.timeLeft--; }
+      if (this.timeLeft <= 0) { this._end('timeout'); return; }
+    }
 
     // Update static + moving platforms
     this.platforms.forEach(p => p.updateScreen(this.camOffset));
@@ -2861,7 +2866,20 @@ class RunnerEngine {
       ctx.globalAlpha = 1;
     }
 
-    // ── Timer (top-center)
+    // ── Timer (top-center) — hidden entirely in Relaxed Mode
+    if (this._relaxedMode) {
+      ctx.font        = `bold 18px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillStyle   = '#80DEEA';
+      ctx.textAlign   = 'center';
+      ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 5;
+      ctx.fillText('😊 Relaxed', this.W / 2, 16);
+      ctx.shadowBlur = 0;
+      ctx.font      = `bold 13px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillStyle = '#FFD700';
+      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 2;
+      ctx.fillText(`⭐ ${this.score.toLocaleString()}`, this.W / 2, 38);
+      ctx.shadowBlur = 0;
+    } else {
     const urgent = this.timeLeft < 15;
     ctx.font        = `bold ${urgent ? '26px' : '22px'} "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle   = urgent ? '#FF5252' : '#FFFFFF';
@@ -2878,6 +2896,7 @@ class RunnerEngine {
     ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 2;
     ctx.fillText(`⭐ ${this.score.toLocaleString()}`, this.W / 2, 38);
     ctx.shadowBlur  = 0;
+    }
 
     // ── Coins collected (top-right)
     const total     = this.coins.length;
