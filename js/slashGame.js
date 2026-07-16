@@ -768,7 +768,7 @@ class SlashGame {
       this.progress.markTutorialComplete();
       this._onboardingTutorial = null;
       if (onComplete) onComplete();
-    });
+    }, this.audio);
     this.state = 'onboarding';
   }
 
@@ -2707,6 +2707,7 @@ class SlashGame {
       { label:'🏆 LEADERBOARD', sub:'Challenge the world', col:'#FF8C00', action:'leaderboard' },
       { label:'🥇 ACHIEVEMENTS', sub:`${this.progress.data.achievements.length}/${ACHIEVEMENTS.length} unlocked`, col:'#00CCFF', action:'achievements' },
       { label:'📊 PROGRESS', sub:'Parent / teacher view', col:'#69F0AE', action:'dashboard' },  // Phase 9
+      { label:'❓ HOW TO PLAY', sub:'Watch the tutorial again', col:'#B39DDB', action:'tutorial' },
     ];
     const btnH = Math.min(62, (H - 120) / (modes.length + 0.5));
     const btnW = Math.min(W - 40, 400);
@@ -2768,6 +2769,7 @@ class SlashGame {
         if (r.action === 'leaderboard') { this.state = 'leaderboard'; this._stateEntryFade = 1.0; }
         if (r.action === 'achievements') { this.state = 'achievements'; this._stateEntryFade = 1.0; }
         if (r.action === 'dashboard')    { this.state = 'dashboard'; this._dashScroll = 0; this._stateEntryFade = 1.0; }  // Phase 9
+        if (r.action === 'tutorial')     { this._startOnboarding(() => { this.state = 'mode-select'; this._stateEntryFade = 1.0; }); }
         if (r.action === 'back') { this.state = 'title'; this._stateEntryFade = 1.0; }
         return;
       }
