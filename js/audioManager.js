@@ -85,6 +85,35 @@ class AudioManager {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     } catch { /* audio not supported */ }
 
+    // ── Master bus: master gain → compressor → destination ──────
+    // The compressor acts as a limiter so stacked SFX + music never clip.
+    // Sub-buses let the settings panel control music and SFX separately.
+    this.masterBus = null; this.musicBus = null; this.sfxBus = null;
+    if (this.ctx) {
+      this.masterBus = this.ctx.createGain();
+      let out = this.masterBus;
+      try {
+        const comp = this.ctx.createDynamicsCompressor();
+        comp.threshold.value = -14;
+        comp.knee.value = 24;
+        comp.ratio.value = 8;
+        comp.attack.value = 0.003;
+        comp.release.value = 0.24;
+        this.masterBus.connect(comp);
+        comp.connect(this.ctx.destination);
+      } catch {
+        this.masterBus.connect(this.ctx.destination);
+      }
+      this.musicBus = this.ctx.createGain();
+      this.sfxBus   = this.ctx.createGain();
+      this.musicBus.connect(this.masterBus);
+      this.sfxBus.connect(this.masterBus);
+      // Persisted volumes (0..1)
+      this.masterBus.gain.value = this._loadVol('samurice_vol_master', 1);
+      this.musicBus.gain.value  = this._loadVol('samurice_vol_music', 0.8);
+      this.sfxBus.gain.value    = this._loadVol('samurice_vol_sfx', 1);
+    }
+
     // iOS / Android require a user gesture before AudioContext can play.
     // Register a one-time capture-phase listener so it fires before any other
     // handler, resuming the context the moment the player first touches the screen.
@@ -115,8 +144,8 @@ class AudioManager {
     this._sfxFileMap = { ...sfxFiles };
     this._sfxKeys.forEach(k => this._preload(`sfx/${k}`, sfxFiles[k]));
 
-    // Music player (created after ctx)
-    this._music = this.ctx ? new MusicPlayer(this.ctx) : null;
+    // Music player (created after ctx, routed through the music bus)
+    this._music = this.ctx ? new MusicPlayer(this.ctx, this.musicBus) : null;
 
     // Cache a preferred TTS voice (female UK) when voices become available.
     this._preferredVoice = null;
@@ -128,6 +157,28 @@ class AudioManager {
 
   // ── Mute toggle ─────────────────────────────────────────────
   get isMuted() { return this.muted; }
+
+  // ── Volume settings (persisted) ─────────────────────────────
+  _loadVol(key, dflt) {
+    const v = parseFloat(localStorage.getItem(key));
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : dflt;
+  }
+  _setBusVol(bus, key, v) {
+    v = Math.max(0, Math.min(1, v));
+    localStorage.setItem(key, String(v));
+    if (bus && this.ctx) bus.gain.linearRampToValueAtTime(v, this.ctx.currentTime + 0.05);
+    return v;
+  }
+  setMasterVolume(v) { return this._setBusVol(this.masterBus, 'samurice_vol_master', v); }
+  setMusicVolume(v)  { return this._setBusVol(this.musicBus, 'samurice_vol_music', v); }
+  setSfxVolume(v)    { return this._setBusVol(this.sfxBus, 'samurice_vol_sfx', v); }
+  getVolumes() {
+    return {
+      master: this._loadVol('samurice_vol_master', 1),
+      music:  this._loadVol('samurice_vol_music', 0.8),
+      sfx:    this._loadVol('samurice_vol_sfx', 1),
+    };
+  }
 
   // ── Resume AudioContext (required after user gesture) ────────
   _resume() {
@@ -182,7 +233,7 @@ class AudioManager {
     gain.gain.value = volume;
     src.buffer = this.buffers[key];
     src.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.sfxBus || this.ctx.destination);
     src.start();
     return true;
   }
@@ -194,7 +245,7 @@ class AudioManager {
     const osc  = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.sfxBus || this.ctx.destination);
     osc.type = type;
     osc.frequency.value = freq;
     const t = this.ctx.currentTime + delay;
@@ -344,7 +395,7 @@ class AudioManager {
     if (!this.ctx) return; this._resume();
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    osc.connect(gain); gain.connect(this.ctx.destination);
+    osc.connect(gain); gain.connect(this.sfxBus || this.ctx.destination);
     osc.type = 'sine';
     const t = this.ctx.currentTime;
     osc.frequency.setValueAtTime(800, t);
@@ -369,6 +420,17 @@ class AudioManager {
   sfxSwipeJump() {
     this._tone(620,'triangle',0.08,0.22); this._tone(860,'sine',0.06,0.18,0.04);
   }
+  // Soft UI tap for menu buttons / tiles
+  sfxClick() {
+    this._tone(700,'sine',0.05,0.14); this._tone(920,'sine',0.04,0.08,0.03);
+  }
+  // Full stage-clear jingle (longer than sfxVictory) — Mario-style fanfare
+  sfxStageClear() {
+    const seq = [392,523,659,784, 415,554,698,831, 466,622,784,932, 1047];
+    seq.forEach((f,i) => this._tone(f,'triangle',0.16,0.30,i*0.09));
+    setTimeout(() => [1047,1319,1568].forEach((f,i) => this._tone(f,'sine',0.4,0.25,i*0.02)), seq.length*90);
+    haptic('victory');
+  }
 
   // ── Music control ─────────────────────────────────────────────
   startMusic(stageId) {
@@ -377,6 +439,14 @@ class AudioManager {
     this._music.play(stageId);
   }
   startEndlessMusic() { this.startMusic(1); }
+  // Gentle looping theme for the menus / title / world map
+  startMenuMusic() {
+    if (this.muted || !this._music) return;
+    this._resume();
+    this._music.play('menu');
+  }
+  get musicPlaying() { return !!(this._music && this._music._playing); }
+  get musicKey()     { return this._music ? this._music._key : null; }
   stopMusic() { if (this._music) this._music.stop(); }
 
   speedUpMusic(factor) {
@@ -444,28 +514,45 @@ class MusicPlayer {
       drums:  [1,0,1,1, 1,1,1,0, 1,0,1,1, 1,1,1,0] },
   ];
 
-  constructor(ctx) {
+  // Calm menu / world-map theme — slower, softer, lullaby-adjacent
+  // (C major pentatonic, 92 BPM, sparse drums)
+  static MENU = {
+    bpm: 92, rootHz: 261.63, scale: [0,2,4,7,9],
+    melody: [4,2,0,2, 4,4,4,2, 2,2,2,4, 7,4,2,0],
+    bass:   [0,0,4,4, 2,2,0,0],
+    drums:  [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0],
+    soft:   true,
+  };
+
+  constructor(ctx, dest) {
     this._ctx     = ctx;
     this._gain    = null;
     this._playing = false;
     this._beatIdx = 0;
     this._nextBeat = 0;
     this._cfg     = null;
+    this._key     = null;   // 'menu' | stage number — avoids restarting same track
     this._timer   = null;
     if (ctx) {
       this._gain = ctx.createGain();
       this._gain.gain.value = 0.20;
-      this._gain.connect(ctx.destination);
+      this._gain.connect(dest || ctx.destination);
     }
   }
 
+  // Accepts a stage number (1-6+) or the string 'menu'.
   play(stageId) {
     if (!this._ctx) return;
+    if (this._playing && this._key === stageId) return; // already on this track
     this.stop();
-    this._cfg      = MusicPlayer.STAGES[Math.min(stageId - 1, 5)];
+    this._cfg      = stageId === 'menu'
+      ? MusicPlayer.MENU
+      : MusicPlayer.STAGES[Math.min(stageId - 1, 5)];
+    this._key      = stageId;
     this._bpmMult  = 1;
     this._playing  = true;
     this._beatIdx  = 0;
+    if (this._gain) this._gain.gain.value = this._cfg.soft ? 0.13 : 0.20;
     this._nextBeat = this._ctx.currentTime + 0.08;
     this._schedule();
   }
@@ -474,6 +561,7 @@ class MusicPlayer {
 
   stop() {
     this._playing = false;
+    this._key     = null;
     if (this._timer) { clearTimeout(this._timer); this._timer = null; }
   }
 

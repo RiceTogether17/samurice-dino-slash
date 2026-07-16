@@ -49,11 +49,27 @@
 ═══════════════════════════════════════════════════════════════ -->
 <div id="modeChooser" class="screen active">
 
-    <!-- ── Top strip: streak chip + level badge ── -->
+    <!-- ── Top strip: streak chip + level badge + settings ── -->
     <div class="mc-top-strip">
         <div id="mc-streak-chip" class="mc-streak-chip" style="display:none"></div>
         <div class="mc-top-spacer"></div>
         <div class="mc-level-badge" id="mc-level-badge">Lv.1</div>
+        <button class="mc-settings-btn" id="mc-settings-btn" aria-label="Sound settings">⚙️</button>
+    </div>
+
+    <!-- ── Sound settings popover ── -->
+    <div class="mc-settings-panel" id="mc-settings-panel" aria-hidden="true">
+        <h4 class="mc-settings-title">🔊 Sound</h4>
+        <label class="mc-vol-row">🎚️ All
+            <input type="range" id="vol-master" min="0" max="100" value="100">
+        </label>
+        <label class="mc-vol-row">🎵 Music
+            <input type="range" id="vol-music" min="0" max="100" value="80">
+        </label>
+        <label class="mc-vol-row">✨ Sounds
+            <input type="range" id="vol-sfx" min="0" max="100" value="100">
+        </label>
+        <button class="mc-mute-toggle" id="mc-mute-toggle">🔊 Sound On</button>
     </div>
 
     <!-- ── Hero area: mascot + title only ── -->
@@ -350,6 +366,52 @@ document.addEventListener('DOMContentLoaded', function() {
     dot.style.display = show ? 'flex' : 'none';
   }
   _updateRewardsDot();
+
+  // ── Sound settings popover ───────────────────────────────────
+  (function initSoundSettings() {
+    const panel = document.getElementById('mc-settings-panel');
+    const btn   = document.getElementById('mc-settings-btn');
+    const muteT = document.getElementById('mc-mute-toggle');
+    if (!panel || !btn) return;
+    const audio = () => {
+      if (!window._sharedAudio && typeof AudioManager !== 'undefined') {
+        window._sharedAudio = new AudioManager();
+      }
+      return window._sharedAudio;
+    };
+    const syncUI = () => {
+      const a = audio(); if (!a) return;
+      const v = a.getVolumes();
+      document.getElementById('vol-master').value = Math.round(v.master * 100);
+      document.getElementById('vol-music').value  = Math.round(v.music * 100);
+      document.getElementById('vol-sfx').value    = Math.round(v.sfx * 100);
+      muteT.textContent = a.isMuted ? '🔇 Sound Off' : '🔊 Sound On';
+      muteT.classList.toggle('muted', a.isMuted);
+    };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = panel.classList.toggle('open');
+      panel.setAttribute('aria-hidden', String(!open));
+      if (open) syncUI();
+    });
+    document.addEventListener('click', (e) => {
+      if (panel.classList.contains('open') && !panel.contains(e.target) && e.target !== btn) {
+        panel.classList.remove('open');
+        panel.setAttribute('aria-hidden', 'true');
+      }
+    });
+    const bind = (id, setter) => {
+      document.getElementById(id)?.addEventListener('input', (e) => {
+        const a = audio(); if (!a) return;
+        a[setter](e.target.value / 100);
+        a.sfxClick?.();
+      });
+    };
+    bind('vol-master', 'setMasterVolume');
+    bind('vol-music', 'setMusicVolume');
+    bind('vol-sfx', 'setSfxVolume');
+    muteT?.addEventListener('click', () => { audio()?.toggleMute(); syncUI(); });
+  })();
 
   // Mode chooser
   document.getElementById('launchSlashBtn')?.addEventListener('click', () => launchSlashGame());

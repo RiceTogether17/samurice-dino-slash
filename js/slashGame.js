@@ -173,7 +173,10 @@ class SlashGame {
     this._dpr = window.devicePixelRatio || 1;
     this._setupCanvas();
     // Global modules
-    this.audio = new AudioManager();
+    // One AudioManager for the whole app (shared with Dino Dash):
+    // a single AudioContext, mute state and volume settings everywhere.
+    if (!window._sharedAudio) window._sharedAudio = new AudioManager();
+    this.audio = window._sharedAudio;
     this.progress = new ProgressTracker();
     this.sprites = {};
     this.spriteSheets = {};
@@ -554,6 +557,10 @@ class SlashGame {
     document.addEventListener('visibilitychange', this._visibilityHandler);
   }
   _handleCanvasClick(mx, my) {
+    // Soft UI tap sound on menu-style screens (gameplay has its own SFX)
+    const MENU_STATES = new Set(['title','mode-select','menu','stage-select','world-map',
+                                 'shop','daily','achievements','leaderboard','stage-win','stage-lose']);
+    if (MENU_STATES.has(this.state)) this.audio?.sfxClick?.();
     // PHASE 6: onboarding tutorial click routing
     if (this.state === 'onboarding' && this._onboardingTutorial) {
       this._onboardingTutorial.handleClick(mx, my);
@@ -990,6 +997,10 @@ class SlashGame {
   _advanceToStageWin() {
     if (this._battleResultsDone) return;
     this._battleResultsDone = true;
+    // Full Mario-style stage-clear fanfare; menu music waits for it
+    this.audio.stopMusic();
+    this.audio.sfxStageClear();
+    this._jingleUntil = performance.now() + 2600;
     this.state = 'stage-win';
     this._stageWinAge = 0;
     this._resultBtnRects = [];
@@ -1056,6 +1067,24 @@ class SlashGame {
     // nothing more to do — user must manually resume via pause button.
   }
 
+  // ── Shell music — the menus should never be silent ───────────
+  // Plays the calm menu theme on every non-gameplay screen; gameplay
+  // screens manage their own stage music (startMusic in _startRunner).
+  _syncShellMusic() {
+    if (!this.audio || this.audio.isMuted) return;
+    const SHELL = new Set(['title','mode-select','menu','stage-select','world-map',
+                           'shop','daily','achievements','leaderboard','dashboard',
+                           'stage-win','endless-gameover']);
+    if (this._jingleUntil && performance.now() < this._jingleUntil) return;
+    if (SHELL.has(this.state)) {
+      if (this.audio.musicKey !== 'menu') this.audio.startMenuMusic();
+    } else if (this.audio.musicKey === 'menu' &&
+               (this.state === 'runner' || this.state === 'battle' ||
+                this.state === 'endless-runner' || this.state === 'endless-battle')) {
+      this.audio.stopMusic();
+    }
+  }
+
   // ── MAIN LOOP ─────────────────────────────────────────────────
   _loop() {
     this._rafId = requestAnimationFrame(this._loop);
@@ -1074,6 +1103,7 @@ class SlashGame {
     if (!this._spritesReady || !this._sheetsReady || !this._audioReady) { this._drawLoading(); return; }
     // Tick achievement popup
     this._tickAchievementPopup();
+    this._syncShellMusic();
     switch (this.state) {
       case 'onboarding': this._updateOnboarding(); break; // PHASE 6
       case 'title': this._updateTitle(); break;

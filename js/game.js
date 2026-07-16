@@ -83,44 +83,33 @@ function getDailySeed() {
 }
 
 // ── AUDIO MANAGER ────────────────────────────────────────────
+// Thin wrapper that delegates to the app-wide shared AudioManager
+// (window._sharedAudio) so the whole app runs one AudioContext with
+// one mute state and one set of volume settings. If Dino Dash is ever
+// hosted standalone (no shared manager), it creates one itself —
+// AudioManager is defined in audioManager.js which loads first.
 class FlappyAudioManager {
-  constructor() {
-    this.ctx   = null;
-    this.muted = localStorage.getItem('dinoDashMuted') === 'true';
-    try {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    } catch (e) { /* no audio */ }
+  get _shared() {
+    if (!window._sharedAudio && typeof AudioManager !== 'undefined') {
+      window._sharedAudio = new AudioManager();
+    }
+    return window._sharedAudio || null;
   }
-
-  _resume() {
-    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
-  }
+  get muted() { return this._shared ? this._shared.isMuted : false; }
 
   _tone(freq, type, dur, vol = 0.35, delay = 0) {
-    if (this.muted || !this.ctx) return;
-    this._resume();
-    const osc  = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.type = type;
-    osc.frequency.value = freq;
-    const t = this.ctx.currentTime + delay;
-    gain.gain.setValueAtTime(vol, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    osc.start(t);
-    osc.stop(t + dur + 0.05);
+    this._shared?._tone(freq, type, dur, vol, delay);
   }
 
   jump()      { this._tone(520, 'sine', 0.12, 0.35); this._tone(660, 'sine', 0.08, 0.2, 0.07); }
   score()     { [880, 1100, 1320].forEach((f, i) => this._tone(f, 'sine', 0.1, 0.3, i * 0.08)); }
   hit()       { this._tone(180, 'sawtooth', 0.3, 0.5); this._tone(110, 'square', 0.2, 0.4, 0.12); }
   highScore() { [523, 659, 784, 1047].forEach((f, i) => this._tone(f, 'sine', 0.15, 0.4, i * 0.12)); }
+  milestone() { [660, 880, 1100, 1320].forEach((f, i) => this._tone(f, 'triangle', 0.12, 0.3, i * 0.06)); }
+  nearMiss()  { this._tone(1200, 'sine', 0.06, 0.18); }
 
   toggleMute() {
-    this.muted = !this.muted;
-    localStorage.setItem('dinoDashMuted', this.muted);
-    return this.muted;
+    return this._shared ? this._shared.toggleMute() : false;
   }
 }
 
