@@ -41,7 +41,6 @@ class EngagementEngine {
     this._load();
     this._checkWelcomeBack();
     this._startCountdown();
-    this._countdownInterval = null;
   }
 
   // ── Persistence ──────────────────────────────────────────
@@ -248,11 +247,17 @@ class EngagementEngine {
     const streak = this._t.getLoginStreak();
     container.innerHTML = '';
 
+    // Real weekday initials: slot (streakPos) is today, earlier slots
+    // are the actual previous days — no more "day 1 is always Monday".
+    const DOW = ['S','M','T','W','T','F','S'];
+    const streakPos = Math.max(0, ((streak - 1) % 7));
+    const todayDow = new Date().getDay();
     days.forEach((day, i) => {
       const tile = document.createElement('div');
       tile.className = 'cal-tile cal-' + day.status;
+      const dowLabel = DOW[(todayDow - streakPos + i + 70) % 7];
       tile.innerHTML = `
-        <span class="cal-day">${['M','T','W','T','F','S','S'][i]}</span>
+        <span class="cal-day">${dowLabel}</span>
         <span class="cal-reward">${day.status === 'done' ? '✅' : day.status === 'claimed' ? '🌟' : day.status === 'available' ? `🌾${day.reward}` : `🔒`}</span>
       `;
       if (day.status === 'available') {

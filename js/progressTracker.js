@@ -196,12 +196,38 @@ class ProgressTracker {
     const today = this._dateStr();
     if (this.data.lastLoginDate !== today) {
       const yesterday = this._dateStr(-1);
-      this.data.loginStreak = (this.data.lastLoginDate === yesterday)
-        ? this.data.loginStreak + 1 : 1;
+      if (this.data.lastLoginDate === yesterday) {
+        this.data.loginStreak = this.data.loginStreak + 1;
+      } else if (this._consumeStreakShield()) {
+        // A Streak Shield was armed — the missed day is forgiven.
+        this.data.loginStreak = this.data.loginStreak + 1;
+      } else {
+        this.data.loginStreak = 1;
+      }
       this.data.lastLoginDate = today;
       this.data.loginRewardClaimed = false;
       this._save();
     }
+  }
+
+  // The engagement engine sells a "Streak Shield" (rice cost) that is
+  // supposed to protect the streak across one missed day. Honor it here:
+  // if a shield is armed and at most ~2 days were missed, consume it and
+  // report the streak as protected.
+  _consumeStreakShield() {
+    try {
+      const raw = localStorage.getItem('samurice_engage_v2');
+      if (!raw) return false;
+      const eng = JSON.parse(raw);
+      if (!eng.shieldActive) return false;
+      const last = this.data.lastLoginDate;
+      if (!last) return false;
+      const missedDays = Math.floor((Date.now() - new Date(last).getTime()) / 86400000);
+      if (missedDays > 3) return false; // shield covers a short lapse only
+      eng.shieldActive = false;         // one-time use
+      localStorage.setItem('samurice_engage_v2', JSON.stringify(eng));
+      return true;
+    } catch { return false; }
   }
 
   _dateStr(offsetDays = 0) {

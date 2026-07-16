@@ -313,7 +313,13 @@ document.addEventListener('DOMContentLoaded', function() {
     localStorage.setItem('samurice_relaxed', '1');
   }
 
-  // Init parent dashboard + engagement engine (both defer until _progressTracker is ready)
+  // Create the shared progress tracker eagerly — the streak chip,
+  // rewards panel and dashboard all depend on it existing at startup.
+  // (Previously nothing set window._progressTracker, so the whole
+  // engagement UI silently never initialised.)
+  if (!window._progressTracker && typeof ProgressTracker !== 'undefined') {
+    window._progressTracker = new ProgressTracker();
+  }
   initParentDashboard();
   initEngagementEngine();
 
