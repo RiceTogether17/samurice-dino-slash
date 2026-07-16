@@ -235,7 +235,10 @@ class BattleEngine {
     this._correctBlends   = 0; // local battle accuracy tracking
     this.score       = 0;
     this._bossPhase  = 1;   // 1, 2, or 3
-    this._phaseFlash = 0;   // frames of phase-change visual effect
+    this._phaseFlash = 0;
+    this._coinBonus  = 1;     // >1 when the runner's coins were all collected
+    this._tileStolen = false; // phase-2 gimmick: boss locked a distractor tile
+    this._defeatFrames = 0;   // boss defeat animation countdown   // frames of phase-change visual effect
     this._specialReady = false;  // Riku special attack charged
     this._companionMercy = this._equippedEffects.battleMercy || 0;
     this._starterShield = !!this._equippedEffects.starterShield;
@@ -1096,7 +1099,7 @@ class BattleEngine {
     const phaseMult  = this._bossPhase === 3 ? 1.2 : this._bossPhase === 2 ? 1.1 : 1.0;
     // Detective rounds are a single decisive strike — solid but not huge.
     const base   = Math.max(12, Math.floor(this.stage.bossAttack * 1.1));
-    const damage = Math.floor(base * streakMult * (0.78 + timeBonus * 0.22) * phaseMult);
+    const damage = Math.floor(base * streakMult * (0.78 + timeBonus * 0.22) * phaseMult * this._coinBonus);
 
     this._combo++; this._streak++; this._attemptedBlends++; this._correctBlends++;
     this._challengesSolved++;
@@ -1509,6 +1512,24 @@ class BattleEngine {
       title, phase === 3 ? '#FF1744' : '#FF8F00',
     ));
     if (this.audio) this.audio.sfxBossHit();
+
+    // Phase-2 gimmick: the boss "steals" a tile — always a distractor,
+    // never a sound the word needs, so the round stays solvable.
+    if (phase === 2 && Array.isArray(this._tileEls) && this._tileEls.length) {
+      const wordPh = new Set((this._currentWord?.phonemes || []).map(p => p.toLowerCase()));
+      const idx = (this._shuffledPh || []).findIndex((ph, i) =>
+        !wordPh.has(String(ph).toLowerCase()) && !this._usedTileIdx.has(i));
+      if (idx >= 0 && this._tileEls[idx]) {
+        const el = this._tileEls[idx];
+        el.classList.add('be-tile-used', 'be-tile-stolen');
+        el.textContent = '🔒';
+        this._usedTileIdx.add(idx);
+        this._tileStolen = true;
+        setTimeout(() => {
+          if (!this._destroyed) this._setFeedback(`😈 ${this.stage.bossName} locked one of your tiles! Beat the word to break the lock!`, '#FF9800');
+        }, 1400);
+      }
+    }
   }
 
   // ── Riku special attack (combo ≥ 5) ─────────────────────────
@@ -1554,12 +1575,19 @@ class BattleEngine {
     if (timeBonus > 0.72 && accuracyPct >= 0.85) { slashType = '⚡ Speed Slash'; slashMult = 1.28; }
     if (timeBonus > 0.82 && accuracyPct >= 0.93) { slashType = '🌈 Precision Slash'; slashMult = 1.45; }
 
-    const damage = Math.floor(wordObj.damage * streakMult * (0.72 + timeBonus * 0.28) * phaseMult * slashMult);
+    const damage = Math.floor(wordObj.damage * streakMult * (0.72 + timeBonus * 0.28) * phaseMult * slashMult * this._coinBonus);
 
     this._combo++;
     this._streak++;
     this._attemptedBlends++;
     this._correctBlends++;
+    // Phase-2 gimmick payoff: beating the word breaks the boss's lock
+    if (this._tileStolen) {
+      this._tileStolen = false;
+      setTimeout(() => {
+        if (!this._destroyed) this._setFeedback('🎉 Lock broken — you won your sound back!', '#76FF03');
+      }, 1200);
+    }
     this.bossHp  = Math.max(0, this.bossHp - damage);
     this.score  += Math.floor(damage * (1.8 + accuracyPct * 0.4));
     this._bossShake = 22;
@@ -1807,12 +1835,28 @@ class BattleEngine {
   }
 
   // ── Win / Lose ───────────────────────────────────────────────
+  // Runner reward: collecting every coin grants bonus battle damage.
+  applyCoinBonus() {
+    this._coinBonus = 1.1;
+    setTimeout(() => {
+      if (!this._destroyed) {
+        this._setFeedback(`🌟 You found ALL the sounds — BONUS DAMAGE!`, '#76FF03');
+      }
+    }, 900);
+  }
+
   _win() {
     this._stopBlendTimer();
-    this.done        = true;
-    this.outcome     = 'victory';
     this.learnedWords = [...this._learnedWords];   // expose for stage-win summary
-    if (this.audio) this.audio.sfxVictory();
+    // Boss defeat theatre: slow-mo whoosh, boss tips over with dizzy
+    // stars and falls off-screen, THEN the results card appears.
+    this.state         = 'boss-defeated';
+    this._defeatFrames = 130;
+    this.overlay?.classList?.add('hidden');
+    if (this.audio) {
+      this.audio.sfxSlowMo?.();
+      setTimeout(() => { if (!this._destroyed) this.audio.sfxVictory(); }, 550);
+    }
   }
 
   _lose() {
@@ -1830,6 +1874,10 @@ class BattleEngine {
     if (this._bossShake  > 0) this._bossShake--;
     if (this._rikuShake  > 0) this._rikuShake--;
     if (this._phaseFlash > 0) this._phaseFlash--;
+    if (this.state === 'boss-defeated' && this._defeatFrames > 0) {
+      this._defeatFrames--;
+      if (this._defeatFrames <= 0) { this.done = true; this.outcome = 'victory'; }
+    }
     // Boss bob speed increases with phase
     const bobSpeed = this._bossPhase === 3 ? 0.09 : this._bossPhase === 2 ? 0.06 : 0.04;
     this._bossBobOffset = Math.sin(this._age * bobSpeed) * (this._bossPhase >= 2 ? 9 : 5);
@@ -2101,6 +2149,7 @@ class BattleEngine {
     const rawBase = match ? match[1] : '';
     const species = rawBase.replace(/-(attack|hurt)$/, '');
 
+    if (this.state === 'boss-defeated' && species && this.sprites[`${species}-hurt`]) return `${species}-hurt`;
     if (this.state === 'boss-attack' && species && this.sprites[`${species}-attack`]) return `${species}-attack`;
     if ((this.state === 'riku-attack' || this._bossShake > 0) && species && this.sprites[`${species}-hurt`]) return `${species}-hurt`;
     if (species && this.sprites[species]) return species;
@@ -2130,8 +2179,32 @@ class BattleEngine {
     ctx.ellipse(bCX, bFeetY + 6, bW * 0.38, 11, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.translate(bCX + shakeX, bCY + shakeY + bob);
+    // ── Defeat theatre: white flash → tip over → drop off-screen ──
+    let defeatRot = 0, defeatDy = 0, defeatAlpha = 1;
+    if (this.state === 'boss-defeated') {
+      const p = 1 - this._defeatFrames / 130;             // 0 → 1
+      defeatRot   = Math.min(1.35, p * 2.2);              // tips over first
+      defeatDy    = p > 0.45 ? Math.pow((p - 0.45) / 0.55, 2) * this.H * 0.9 : 0;
+      defeatAlpha = p > 0.8 ? Math.max(0, 1 - (p - 0.8) / 0.2) : 1;
+      if (p < 0.12) {                                     // initial impact flash
+        ctx.fillStyle = `rgba(255,255,255,${0.7 * (1 - p / 0.12)})`;
+        ctx.fillRect(0, 0, this.W, this.H);
+      }
+      // Dizzy stars orbit the falling boss
+      for (let i = 0; i < 3; i++) {
+        const a = p * 9 + (i / 3) * Math.PI * 2;
+        ctx.save();
+        ctx.globalAlpha = defeatAlpha;
+        ctx.font = '22px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('💫', bCX + Math.cos(a) * 60, bCY - bH * 0.35 + defeatDy + Math.sin(a) * 22);
+        ctx.restore();
+      }
+    }
+
+    ctx.translate(bCX + shakeX, bCY + shakeY + bob + defeatDy);
+    ctx.rotate(defeatRot);
     ctx.scale(scale, scale);
+    ctx.globalAlpha = defeatAlpha;
 
     if (sp && sp.complete && sp.naturalWidth > 0) {
       ctx.save();

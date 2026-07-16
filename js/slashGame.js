@@ -945,6 +945,7 @@ class SlashGame {
       this.canvas, this.overlay, stage, collectedPhonemes,
       this.sprites, this.audio, this.progress, this.W, this.H,
     );
+    if (this._runnerAllCoins) { this.battle.applyCoinBonus(); this._runnerAllCoins = false; }
     this.state = 'battle';
   }
   // ── STAGE WIN ────────────────────────────────────────────────
@@ -1923,6 +1924,9 @@ class SlashGame {
     if (!this.runner.done) return;
     if (this.runner.outcome === 'flag') {
       const coins = this.runner.getCollectedPhonemes();
+      // Collecting EVERY coin in the run earns bonus battle damage
+      this._runnerAllCoins = (this.runner.coins?.length || 0) > 0 &&
+                             this.runner.coins.every(c => c.collected);
       this._lastRunnerScore = this.runner.score || 0;
       this._lastRunnerHp = this.runner?.player?.hp ?? 0;
       this.progress.recordRunnerComplete(this.stageId, this.runner.getCollectedCount());

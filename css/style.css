@@ -2779,3 +2779,16 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 }
 .mc-mute-toggle:hover { background: rgba(255,215,0,0.3); }
 .mc-mute-toggle.muted { color: #EF9A9A; border-color: rgba(239,83,80,0.5); background: rgba(239,83,80,0.12); }
+
+/* Phase-2 boss gimmick: a locked/stolen tile */
+.be-tile-stolen {
+    background: linear-gradient(160deg, #4A148C, #7B1FA2) !important;
+    border-color: #4A148C !important;
+    color: #E1BEE7 !important;
+    opacity: 0.8 !important;
+    animation: stolenPulse 1.2s ease-in-out infinite !important;
+}
+@keyframes stolenPulse {
+    0%, 100% { box-shadow: 0 3px 0 #311B92, 0 0 6px rgba(156,39,176,0.5); }
+    50%      { box-shadow: 0 3px 0 #311B92, 0 0 16px rgba(156,39,176,0.9); }
+}
