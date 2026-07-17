@@ -174,7 +174,7 @@ class RunnerPlayer {
 
   // Move horizontally based on input keys; called before physics
   applyInput(keys, levelW) {
-    const chiliBoost = this.powerUp === 'chili' ? 1.35 : 1;
+    const chiliBoost = (this.powerUp === 'chili' || this.powerUp === 'rice-rocket') ? 1.35 : 1;
     const boost = (this.boostFrames > 0 ? 1.5 : 1) * chiliBoost;
     if (keys.right) {
       this.vx = Math.min(this.vx + R_ACCEL * boost, R_MAX_SPD * boost);
@@ -196,8 +196,8 @@ class RunnerPlayer {
     if (this.invincible > 0)  this.invincible--;
     if (this._landSquash > 0) this._landSquash--;
     if (this._powerUpTimer > 0) this._powerUpTimer--;
-    if (this._powerUpTimer === 0 && this.powerUp === 'chili') { this.powerUp = null; }
-    if (this._starTimer > 0)   { this._starTimer--;   if (this._starTimer === 0 && this.powerUp === 'star') this.powerUp = null; }
+    if (this._powerUpTimer === 0 && ['chili','rice-rocket','rhyme-cape','glyph-boots'].includes(this.powerUp)) { this.powerUp = null; }
+    if (this._starTimer > 0)   { this._starTimer--;   if (this._starTimer === 0 && (this.powerUp === 'star' || this.powerUp === 'boss-star')) this.powerUp = null; }
     if (this._jumpBuffer > 0)  this._jumpBuffer--;
 
     // Variable jump: track hold duration
@@ -1413,12 +1413,14 @@ class QuestionBlock {
 // Types: 'rice-bowl' (+1 HP), 'chili' (speed boost 8s), 'shield-item' (one-hit shield)
 // ─────────────────────────────────────────────────────────────
 class PowerUpItem {
-  constructor(worldX, worldY, type) {
+  constructor(worldX, worldY, type, spriteKey = null, label = '') {
     this.worldX    = worldX;
     this.worldY    = worldY;
     this.w         = 36;
     this.h         = 36;
     this.type      = type;
+    this.spriteKey = spriteKey;
+    this.label     = label;
     this.vx        = 1.8;
     this.vy        = -5;
     this.sx        = 0;
@@ -1426,6 +1428,7 @@ class PowerUpItem {
     this._age      = 0;
     this._gravity  = 0.45;
     this._groundY  = worldY;   // set by engine after creation
+    this.sprites   = null;     // set by engine so quest badges can render
   }
 
   updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
@@ -1481,23 +1484,35 @@ class PowerUpItem {
 
     ctx.save();
     // Glow (star power gets rainbow pulse)
-    if (this.type === 'star') {
+    if (this.type === 'star' || this.type === 'boss-star') {
       const hue = (this._age * 8) % 360;
       ctx.shadowColor = `hsl(${hue},100%,65%)`;
     } else {
-      ctx.shadowColor = this.type === 'rice-bowl' ? '#FF4081' :
-                        this.type === 'chili'      ? '#FF6D00' : '#00B0FF';
+      ctx.shadowColor = this.type === 'rice-bowl'   ? '#FF4081' :
+                        this.type === 'chili'       ? '#FF6D00' :
+                        this.type === 'rice-rocket' ? '#4FC3F7' :
+                        this.type === 'rhyme-cape'  ? '#EC407A' :
+                        this.type === 'glyph-boots' ? '#8BC34A' : '#00B0FF';
     }
     ctx.shadowBlur  = 14;
 
-    // Icon based on type
-    ctx.font         = `${Math.round(h * 0.85)}px serif`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    const icon = this.type === 'rice-bowl' ? '🍚' :
-                 this.type === 'chili'      ? '🌶️' :
-                 this.type === 'star'       ? '⭐' : '🛡️';
-    ctx.fillText(icon, x + w / 2, y + h / 2 + bob);
+    // Icon based on type; quest power-ups use the stage reward badge art.
+    const sprite = this.spriteKey && this.sprites?.[this.spriteKey];
+    if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      ctx.drawImage(sprite, x - 4, y - 4 + bob, w + 8, h + 8);
+    } else {
+      ctx.font         = `${Math.round(h * 0.85)}px serif`;
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      const icon = this.type === 'rice-bowl' ? '🍚' :
+                   this.type === 'chili'      ? '🌶️' :
+                   this.type === 'star'       ? '⭐' :
+                   this.type === 'rice-rocket'? '🚀' :
+                   this.type === 'rhyme-cape' ? '🦸' :
+                   this.type === 'glyph-boots'? '🥾' :
+                   this.type === 'boss-star'  ? '⭐' : '🛡️';
+      ctx.fillText(icon, x + w / 2, y + h / 2 + bob);
+    }
 
     // Highlight ring
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
@@ -2335,9 +2350,10 @@ class RunnerEngine {
           this.particles.push(new RunnerParticle(qb.sx + qb.w / 2, qb.sy - 16, '🪙', '#FFD700', -5));
           this.particles.push(new RunnerParticle(qb.sx + qb.w / 2, qb.sy - 10, `+${R_SCORE_BLOCK}`, '#FFF176', -3));
         } else if (reward === 'powerup') {
-          const types = ['rice-bowl', 'chili', 'shield-item', 'star'];
-          const t = types[this.stage.id % types.length];
-          const pu = new PowerUpItem(qb.worldX + qb.w / 2, qb.worldY - 36, t);
+          const quest = this.stage.quest || {};
+          const t = quest.runnerType || ['rice-bowl', 'chili', 'shield-item', 'star'][this.stage.id % 4];
+          const pu = new PowerUpItem(qb.worldX + qb.w / 2, qb.worldY - 36, t, quest.iconKey || null, quest.powerUp || 'Power-up');
+          pu.sprites = this.sprites;
           pu._groundY = this.groundY;
           this.powerUps.push(pu);
         }
@@ -2567,7 +2583,50 @@ class RunnerEngine {
   // ── Power-up collection ───────────────────────────────────────
   _onPowerUpCollect(pu) {
     this.score += R_SCORE_POWERUP;
-    if (pu.type === 'rice-bowl') {
+    const questLabel = pu.label || this.stage.quest?.powerUp || 'Power-up';
+    if (pu.type === 'echo-ears') {
+      this.player.shieldActive = true;
+      this.player.invincible = Math.max(this.player.invincible, 180);
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY, `👂 ${questLabel}!`, '#00E5FF', -5));
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY - 22, 'hear every sound', '#B3E5FC', -4));
+      this.fx.spawn('spark', pu.sx, pu.worldY, 12);
+      if (this.audio) this.audio.sfxBoost();
+    } else if (pu.type === 'rice-rocket') {
+      this.player.powerUp = 'rice-rocket';
+      this.player._powerUpTimer = 480;
+      this.player.activateBoost();
+      this.player.vy = Math.min(this.player.vy, -10);
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY, `🚀 ${questLabel}!`, '#4FC3F7', -5));
+      if (this.audio) this.audio.sfxBoost();
+    } else if (pu.type === 'rhyme-cape') {
+      this.player.powerUp = 'rhyme-cape';
+      this.player._powerUpTimer = 600;
+      this.player.canDoubleJump = true;
+      this.player.boostFrames = Math.max(this.player.boostFrames, 180);
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY, `🦸 ${questLabel}!`, '#EC407A', -5));
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY - 22, 'double jump unlocked', '#F8BBD0', -4));
+      if (this.audio) this.audio.sfxBoost();
+    } else if (pu.type === 'glyph-boots') {
+      this.player.powerUp = 'glyph-boots';
+      this.player._powerUpTimer = 600;
+      this.player.canDoubleJump = true;
+      this.player.shieldActive = true;
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY, `🥾 ${questLabel}!`, '#8BC34A', -5));
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY - 22, 'stomp safely', '#DCEDC8', -4));
+      if (this.audio) this.audio.sfxBoost();
+    } else if (pu.type === 'boss-star') {
+      this.player.powerUp    = 'boss-star';
+      this.player._starTimer = R_STAR_DUR;
+      this.player.invincible = R_STAR_DUR;
+      this.particles.push(new RunnerParticle(pu.sx, pu.worldY, `⭐ ${questLabel}!`, '#FFD700', -6));
+      for (let i = 0; i < 5; i++) {
+        this.particles.push(new RunnerParticle(
+          pu.sx + (Math.random() - 0.5) * 60,
+          pu.worldY + (Math.random() - 0.5) * 30,
+          ['✨','🌟','💫'][i % 3], '#FFD700', -4 - Math.random() * 3));
+      }
+      if (this.audio) this.audio.sfxStarPower();
+    } else if (pu.type === 'rice-bowl') {
       this.player.hp = Math.min(this.player.hp + 1, 5); // +1 HP up to 5
       this.particles.push(new RunnerParticle(pu.sx, pu.worldY, '❤️ +1 HP!', '#FF4081', -5));
       this.fx.spawn('rice', pu.sx, pu.worldY, 8);
@@ -2998,18 +3057,32 @@ class RunnerEngine {
 
     // Active power-up icon next to HP
     if (p.powerUp) {
-      const puIcon = p.powerUp === 'chili'      ? '🌶️' :
-                     p.powerUp === 'shield-item' ? '🛡️' :
-                     p.powerUp === 'star'        ? '⭐' : '';
-      if (puIcon) {
-        if (p.powerUp === 'star') {
-          // Rainbow flash for star
+      const questIcon = this.stage.quest?.runnerType === p.powerUp ? this.sprites[this.stage.quest.iconKey] : null;
+      const iconX = 12 + Math.max(3, maxHp) * 28 + 4;
+      if (questIcon && questIcon.complete && questIcon.naturalWidth > 0) {
+        if (p._starTimer > 0) {
           const hue = (this._age * 10) % 360;
           ctx.shadowColor = `hsl(${hue},100%,65%)`; ctx.shadowBlur = 10;
         }
-        ctx.font = '20px serif';
-        ctx.fillText(puIcon, 12 + Math.max(3, maxHp) * 28 + 4, 16);
+        ctx.drawImage(questIcon, iconX, 8, 24, 24);
         ctx.shadowBlur = 0;
+      } else {
+        const puIcon = p.powerUp === 'chili'       ? '🌶️' :
+                       p.powerUp === 'shield-item' ? '🛡️' :
+                       p.powerUp === 'star' || p.powerUp === 'boss-star' ? '⭐' :
+                       p.powerUp === 'rice-rocket' ? '🚀' :
+                       p.powerUp === 'rhyme-cape'  ? '🦸' :
+                       p.powerUp === 'glyph-boots' ? '🥾' : '';
+        if (puIcon) {
+          if (p._starTimer > 0) {
+            // Rainbow flash for star
+            const hue = (this._age * 10) % 360;
+            ctx.shadowColor = `hsl(${hue},100%,65%)`; ctx.shadowBlur = 10;
+          }
+          ctx.font = '20px serif';
+          ctx.fillText(puIcon, iconX, 16);
+          ctx.shadowBlur = 0;
+        }
       }
     }
     if (p.shieldActive) {
@@ -3085,17 +3158,22 @@ class RunnerEngine {
       ctx.beginPath(); ctx.roundRect(bx - 2, by - 2, bw + 4, 18, 6); ctx.fill();
 
       const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
-      grad.addColorStop(0,   p.powerUp === 'chili' ? '#FF6D00' : '#FFD700');
-      grad.addColorStop(0.5, p.powerUp === 'chili' ? '#FF8F00' : '#FF6F00');
-      grad.addColorStop(1,   p.powerUp === 'chili' ? '#FF6D00' : '#FFD700');
+      const isRocket = p.powerUp === 'rice-rocket';
+      const isCape = p.powerUp === 'rhyme-cape';
+      grad.addColorStop(0,   p.powerUp === 'chili' ? '#FF6D00' : isRocket ? '#4FC3F7' : isCape ? '#EC407A' : '#FFD700');
+      grad.addColorStop(0.5, p.powerUp === 'chili' ? '#FF8F00' : isRocket ? '#81D4FA' : isCape ? '#F48FB1' : '#FF6F00');
+      grad.addColorStop(1,   p.powerUp === 'chili' ? '#FF6D00' : isRocket ? '#0288D1' : isCape ? '#AD1457' : '#FFD700');
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.roundRect(bx, by, bw * pct, 14, 4); ctx.fill();
 
       ctx.fillStyle   = '#fff';
       ctx.font        = 'bold 15px "Nunito", "Comic Sans MS", system-ui';
       ctx.textAlign   = 'center';
-      ctx.fillText(p.powerUp === 'chili' ? '🌶️ CHILI RUSH!' : '⚡ BLEND BOOST!',
-        this.W / 2, by - 7);
+      const boostLabel = p.powerUp === 'chili' ? '🌶️ CHILI RUSH!' :
+                         p.powerUp === 'rice-rocket' ? '🚀 RICE ROCKET!' :
+                         p.powerUp === 'rhyme-cape' ? '🦸 RHYME CAPE!' :
+                         p.powerUp === 'glyph-boots' ? '🥾 GLYPH BOOTS!' : '⚡ BLEND BOOST!';
+      ctx.fillText(boostLabel, this.W / 2, by - 7);
     }
 
     // ── Stomp combo badge (right side)

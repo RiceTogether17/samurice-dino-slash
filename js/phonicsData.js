@@ -91,6 +91,38 @@ function _w(word, phonemes, hint, extra) {
   return Object.assign({ word, phonemes, hint }, extra || {});
 }
 
+const _QUEST_VERBS = [
+  'Listen for', 'Catch', 'Bridge', 'Climb', 'Conquer',
+];
+
+const _POWER_UPS = [
+  { name: 'Echo Ears', iconKey: 'power-echo-ears', runnerType: 'echo-ears' },
+  { name: 'Rice Rocket', iconKey: 'power-rice-rocket', runnerType: 'rice-rocket' },
+  { name: 'Rhyme Cape', iconKey: 'power-rhyme-cape', runnerType: 'rhyme-cape' },
+  { name: 'Glyph Boots', iconKey: 'power-glyph-boots', runnerType: 'glyph-boots' },
+  { name: 'Boss Star', iconKey: 'power-boss-star', runnerType: 'boss-star' },
+];
+
+PHONICS_DATA.buildStageQuest = function(stage) {
+  const localIdx = Math.max(0, (stage.local || 1) - 1);
+  const verb = _QUEST_VERBS[localIdx] || 'Master';
+  const power = _POWER_UPS[localIdx] || { name: 'Mastery Star', iconKey: 'power-boss-star', runnerType: 'boss-star' };
+  const target = stage.isBoss ? 'beat the boss gate' : 'open the next path tile';
+  const samples = (stage.words || [])
+    .slice(0, 3)
+    .map((w) => w.word.toUpperCase())
+    .join(' · ');
+
+  return {
+    title: `${verb} ${stage.pattern}`,
+    objective: `${stage.patternDesc || stage.pattern} to ${target}.`,
+    powerUp: power.name,
+    iconKey: power.iconKey,
+    runnerType: power.runnerType,
+    samples,
+  };
+};
+
 // ── Per-world stage tables ────────────────────────────────────
 // Each entry: { name, pattern, patternDesc, skill, activities,
 //               challengeEvery?, miniName?, words:[...] }
@@ -395,6 +427,7 @@ PHONICS_DATA.stageList = [];
         bossAttack: w.bossAttack + sIdx + (isBoss ? 3 : 0),
         words: st.words.map((x) => Object.assign({ damage: w.dmg + (isBoss ? 4 : 0) }, x)),
       };
+      stage.quest = PHONICS_DATA.buildStageQuest(stage);
       PHONICS_DATA.stageList.push(stage);
       PHONICS_DATA[`stage${gid}`] = stage; // legacy lookup compatibility
       worldStageIds.push(gid);
@@ -418,6 +451,36 @@ PHONICS_DATA.getWorld      = (worldId) => PHONICS_DATA.WORLDS[worldId - 1] || nu
 PHONICS_DATA.worldOf       = (stageId) => PHONICS_DATA.stageList[stageId - 1]?.world || 1;
 PHONICS_DATA.stagesInWorld = (worldId) => PHONICS_DATA.WORLDS[worldId - 1]?.stageIds || [];
 PHONICS_DATA.worldStartId  = (worldId) => PHONICS_DATA.WORLDS[worldId - 1]?.startId || 1;
+
+// ── Sequential learning trail helpers ─────────────────────────
+// These helpers make the campaign feel like a Mario overworld while
+// preserving a strict phonics scope-and-sequence: every stage teaches one
+// new reading power, then the next stage reuses it before adding more.
+PHONICS_DATA.getStagePrereq = function(stageId) {
+  const id = Number(stageId) || 1;
+  return id <= 1 ? null : PHONICS_DATA.getStage(id - 1);
+};
+
+PHONICS_DATA.getNextStage = function(stageId) {
+  const id = Number(stageId) || 1;
+  return id >= PHONICS_DATA.stageCount ? null : PHONICS_DATA.getStage(id + 1);
+};
+
+PHONICS_DATA.getLearningTrail = function(stageId) {
+  const stage = PHONICS_DATA.getStage(stageId);
+  if (!stage) return null;
+  const prereq = PHONICS_DATA.getStagePrereq(stageId);
+  const next = PHONICS_DATA.getNextStage(stageId);
+  return {
+    stage,
+    prereq,
+    next,
+    focus: stage.patternDesc || stage.pattern || stage.skill,
+    quest: stage.quest || null,
+    learnedBefore: prereq ? `${prereq.pattern} from Stage ${prereq.world}-${prereq.local}` : 'Start here: listening for sounds',
+    unlocksNext: next ? `${next.pattern} in Stage ${next.world}-${next.local}` : 'Full phonics mastery review',
+  };
+};
 
 // ── ENDLESS MODE WORD TIERS ──────────────────────────────────
 // Words unlocked progressively as runner distance increases.

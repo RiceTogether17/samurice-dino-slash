@@ -91,6 +91,11 @@ const SLASH_SPRITES = {
   'item-pu-autoblend': 'assets/items/pu-autoblend.png',
   'item-pu-dbljump': 'assets/items/pu-dbljump.png',
   'item-pu-shield': 'assets/items/pu-shield.png',
+  'power-echo-ears': 'assets/items/power-echo-ears.svg',
+  'power-rice-rocket': 'assets/items/power-rice-rocket.svg',
+  'power-rhyme-cape': 'assets/items/power-rhyme-cape.svg',
+  'power-glyph-boots': 'assets/items/power-glyph-boots.svg',
+  'power-boss-star': 'assets/items/power-boss-star.svg',
   'medal-unlocked': 'assets/items/medal-unlocked.png',
   'medal-locked': 'assets/items/medal-locked.png',
   // ── Battle arena backgrounds (per world) ──────────────────
@@ -1453,13 +1458,19 @@ class SlashGame {
       ctx.lineWidth = sel ? 2.5 : 1;
       ctx.stroke();
       if (!unlocked) {
+        const prereqId = Math.max(1, stageId - 1);
+        const prereq = PHONICS_DATA.getStagePrereq?.(stageId);
         ctx.font = `${Math.min(26, cw * 0.28)}px serif`;
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillText('🔒', x + cw / 2, y + ch / 2 - 4);
+        ctx.fillText('🔒', x + cw / 2, y + ch / 2 - 18);
         ctx.font = 'bold 11px system-ui';
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillText(`Stage ${world.id}-${i + 1} — Locked`, x + cw / 2, y + ch / 2 + 26);
+        ctx.fillStyle = 'rgba(255,255,255,0.34)';
+        ctx.fillText(`Stage ${world.id}-${i + 1} — Locked`, x + cw / 2, y + ch / 2 + 10);
+        ctx.font = '10px system-ui';
+        ctx.fillStyle = 'rgba(255,255,255,0.26)';
+        const gate = prereq ? `Clear ${prereq.world}-${prereq.local}: ${prereq.pattern}` : `Clear Stage ${prereqId}`;
+        ctx.fillText(gate, x + cw / 2, y + ch / 2 + 28);
         continue;
       }
       // Accent strip
@@ -1477,6 +1488,27 @@ class SlashGame {
       ctx.font = `${Math.min(10, cw * 0.075)}px system-ui`;
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.fillText(stage.pattern, x + cw / 2, y + 54);
+
+      // Sequential quest ribbon: shows the phonics power this level teaches
+      // and makes it clear that the next level unlocks only after this one.
+      const trail = PHONICS_DATA.getLearningTrail?.(stageId);
+      if (trail) {
+        const ribbonY = y + 66;
+        ctx.fillStyle = 'rgba(0,0,0,0.20)';
+        ctx.beginPath(); ctx.roundRect(x + 10, ribbonY, cw - 20, 36, 12); ctx.fill();
+        const iconKey = trail.quest?.iconKey || 'power-boss-star';
+        const iconSp = this.sprites[iconKey];
+        if (iconSp && iconSp.complete && iconSp.naturalWidth > 0) {
+          ctx.drawImage(iconSp, x + 14, ribbonY + 4, 28, 28);
+        }
+        ctx.font = `bold ${Math.min(9, cw * 0.066)}px "Nunito", system-ui`;
+        ctx.fillStyle = '#B2FF59';
+        ctx.textAlign = 'left';
+        ctx.fillText(`🎯 ${trail.quest?.title || trail.focus}`, x + 48, ribbonY + 13);
+        ctx.fillStyle = '#FFD54F';
+        ctx.fillText(`Power-up: ${trail.quest?.powerUp || 'Reading Star'}`, x + 48, ribbonY + 28);
+        ctx.textAlign = 'center';
+      }
       // Stars
       const starY = y + ch - 26;
       const starX = x + cw / 2 - 22;
@@ -1488,9 +1520,9 @@ class SlashGame {
       ctx.globalAlpha = 1;
       // Example words
       const eg = stage.words.slice(0, 3).map(w => `${w.hint} ${w.word}`).join(' ');
-      ctx.font = `${Math.min(10, cw * 0.075)}px system-ui`;
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.fillText(eg, x + cw / 2, y + 68);
+      ctx.font = `${Math.min(9, cw * 0.068)}px system-ui`;
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.fillText(eg, x + cw / 2, y + ch - 8);
     }
     // ── Relaxed Mode toggle (top-right corner of header) ───────
     // Lets parents/teachers turn off the timer penalty for early learners.
@@ -1711,7 +1743,8 @@ class SlashGame {
     // Per-segment coloured path
     for (let i = 0; i < nodes.length - 1; i++) {
       const a = nodes[i]; const b = nodes[i + 1];
-      const unlocked = this.progress.isUnlocked(i + 2);
+      const nextWorld = PHONICS_DATA.WORLDS[i + 1];
+      const unlocked = nextWorld ? this.progress.isUnlocked(nextWorld.startId) : false;
       ctx.strokeStyle = unlocked ? '#E65100' : '#546E7A';
       ctx.lineWidth = 18;
       ctx.beginPath(); ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
@@ -1867,7 +1900,7 @@ class SlashGame {
       const playBtnW = Math.min(150, W * 0.34);
       const playBtnH = Math.round(H * 0.066);
       const panW = Math.min(W - 20, 420);
-      const panH = 56 + playBtnH + 12;
+      const panH = 80 + playBtnH + 12;
       const panX = (W - panW) / 2;
       const panY = H - panH - 10;
       const panGrad = ctx.createLinearGradient(panX, panY, panX, panY + panH);
@@ -1886,9 +1919,22 @@ class SlashGame {
       ctx.fillText(`${selWorld.icon}  World ${selWorld.id}: ${selWorld.name}`, W / 2, panY + 8);
       ctx.font = `${Math.min(11, W * 0.025)}px system-ui`;
       ctx.fillStyle = 'rgba(200,220,255,0.75)';
-      ctx.fillText(`📚 ${selWorld.skill}  ·  ${selWorld.stageCount} stages`, W / 2, panY + 30);
+      const nextStageId = selWorld.stageIds.find(id => !this.progress.getStage(id)?.completedAt) || selWorld.stageIds[selWorld.stageIds.length - 1];
+      const trail = PHONICS_DATA.getLearningTrail?.(nextStageId);
+      const questText = trail ? `${trail.stage.world}-${trail.stage.local} ${trail.quest?.title || trail.focus}` : `${selWorld.stageCount} stages`;
+      const rewardText = trail?.quest?.powerUp ? `Reward: ${trail.quest.powerUp}` : 'Reward: Reading Star';
+      ctx.fillText(`📚 ${selWorld.skill}`, W / 2, panY + 30);
+      const panelIconKey = trail?.quest?.iconKey || 'power-boss-star';
+      const panelIcon = this.sprites[panelIconKey];
+      if (panelIcon && panelIcon.complete && panelIcon.naturalWidth > 0) {
+        ctx.drawImage(panelIcon, panX + 14, panY + 30, 34, 34);
+      }
+      ctx.fillStyle = wUnlocked ? '#B2FF59' : 'rgba(255,255,255,0.38)';
+      ctx.fillText(`🧭 Next quest: ${questText}`, W / 2 + 16, panY + 43);
+      ctx.fillStyle = wUnlocked ? '#FFD54F' : 'rgba(255,255,255,0.30)';
+      ctx.fillText(`⭐ ${rewardText}`, W / 2 + 16, panY + 56);
       const btnX  = W / 2 - playBtnW / 2;
-      const btnY  = panY + 46;
+      const btnY  = panY + 70;
       const tapP  = 0.75 + 0.25 * Math.sin(t * 0.10);
       const btnGd = ctx.createLinearGradient(btnX, btnY, btnX, btnY + playBtnH);
       if (wUnlocked) {
