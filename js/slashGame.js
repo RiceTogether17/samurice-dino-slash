@@ -697,6 +697,10 @@ class SlashGame {
           const world = PHONICS_DATA.WORLDS[i];
           if (world && this.progress.isUnlocked(world.startId)) {
             this._openWorld(i);
+          } else {
+            // Locked-node feedback: wobble + "locked" toot
+            this._lockedShake = { i, frames: 22 };
+            this.audio?.sfxWrongBlend?.();
           }
         }
       });
@@ -1743,6 +1747,13 @@ class SlashGame {
       const accent   = worldAccents[i] || world.accentColor || '#FFD700';
       const bounce   = sel ? Math.sin(t * 0.12) * 5 : 0;
       const cy       = n.cy + bounce;
+      // Locked-node wobble when tapped
+      let lockedJx = 0;
+      if (this._lockedShake && this._lockedShake.i === i && this._lockedShake.frames > 0) {
+        this._lockedShake.frames--;
+        lockedJx = Math.sin(this._lockedShake.frames * 0.9) * 5;
+      }
+      if (lockedJx) { ctx.save(); ctx.translate(lockedJx, 0); }
 
       // Drop shadow
       ctx.fillStyle = 'rgba(0,0,0,0.32)';
@@ -1786,10 +1797,13 @@ class SlashGame {
         ctx.font = `900 ${Math.round(nodeR * 0.30)}px "Nunito", "Comic Sans MS", system-ui`;
         ctx.fillText(`WORLD ${world.id}`, n.cx, cy + nodeR * 0.36);
         ctx.shadowBlur = 0;
-        // Cleared progress pill (x/total)
+        // Cleared progress pill (x/total) + star total for the world
+        const starSum = world.stageIds.reduce((s, id) => s + (this.progress.getStars(id) || 0), 0);
         ctx.font = `bold ${Math.max(9, Math.round(nodeR * 0.30))}px "Nunito", system-ui`;
         ctx.fillStyle = allClear ? '#FFD700' : 'rgba(255,255,255,0.85)';
-        ctx.fillText(allClear ? `👑 ${cleared}/${total}` : `${cleared}/${total}`, n.cx, cy + nodeR + 12);
+        const pill = (allClear ? `👑 ${cleared}/${total}` : `${cleared}/${total}`) +
+                     (starSum > 0 ? `  ⭐${starSum}` : '');
+        ctx.fillText(pill, n.cx, cy + nodeR + 12);
       }
       ctx.font = `bold ${Math.max(8, Math.round(W * 0.021))}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.28)';
@@ -1797,6 +1811,7 @@ class SlashGame {
       ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
       ctx.fillText(world.name, n.cx, cy + nodeR + (unlocked ? 26 : 16));
       ctx.shadowBlur = 0;
+      if (lockedJx) ctx.restore();
     });
 
     // ── Animated Riku walking on the current world ────────────

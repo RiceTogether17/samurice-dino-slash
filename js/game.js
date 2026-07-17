@@ -666,6 +666,11 @@ class FlappyGame {
     this.shakeFrames = SHAKE_DURATION;
     this.audio.hit();
 
+    // Record the run in the shared progress tracker so Dino Dash scores
+    // show up in the family Best Scores screen too.
+    try {
+      window._progressTracker?.recordEndlessRun?.(this.score, this.score * 10, 0);
+    } catch { /* tracker optional when Dino Dash runs standalone */ }
     if (this.score > this.bestScore) {
       this.bestScore = this.score;
       this.isNewBest = true;
@@ -697,7 +702,9 @@ class FlappyGame {
       if (!obs.passedBy(this.player)) continue;
       obs.scored = true;
       this.score++;
-      this.audio.score();
+      // Milestone fanfare every 10 pipes; ordinary ding otherwise
+      if (this.score % 10 === 0) this.audio.milestone?.();
+      else this.audio.score();
 
       // Speed ramp every 10 points
       this.speed = Math.min(PIPE_SPEED_MAX, PIPE_SPEED_INIT + Math.floor(this.score / 10) * SPEED_INCREMENT);
