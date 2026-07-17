@@ -183,8 +183,8 @@ class RunnerPlayer {
       this.vx = Math.max(this.vx - R_ACCEL * boost, -R_MAX_SPD * boost);
       this._facing = -1;
     } else {
-      // Friction
-      this.vx *= R_FRICTION;
+      // Friction — icy platforms (World 5) barely slow you down
+      this.vx *= this._onIcyPlatform ? 0.965 : R_FRICTION;
       if (Math.abs(this.vx) < 0.2) this.vx = 0;
     }
     this.worldX = Math.max(0, Math.min(this.worldX + this.vx, levelW - this.w));
@@ -222,10 +222,15 @@ class RunnerPlayer {
     }
 
     // Platform landing
+    this._onIcyPlatform = false;
     if (this.vy >= 0) {
       for (const p of platforms) {
+        if (p.broken) continue; // fallen bamboo no longer supports
         if (this._overlapsPlatform(p)) {
-          this.y = p.sy - this.h; this.vy = 0; this.onGround = true; break;
+          this.y = p.sy - this.h; this.vy = 0; this.onGround = true;
+          if (p.fragile && p.breakTimer < 0) p.breakTimer = 45; // crack!
+          if (p.icy) this._onIcyPlatform = true;
+          break;
         }
       }
     }
@@ -465,6 +470,25 @@ class RunnerPlatform {
     this.style  = style; // 'rice' | 'dojo'
     this.sx     = 0;     // screen X (set by camera)
     this.sy     = worldY; // for non-scrolling Y
+    // World-mechanic flags (set by the level generator):
+    this.fragile    = false; // W2 bamboo — cracks when stood on, then falls
+    this.icy        = false; // W5 terraces — slippery surface
+    this.breakTimer = -1;    // frames until a cracked platform gives way
+    this.broken     = false;
+    this._fallVy    = 0;
+  }
+
+  // Fragile platform lifecycle (no-op for normal platforms)
+  updateFragile() {
+    if (!this.fragile) return;
+    if (this.broken) {
+      this._fallVy += 0.6;
+      this.worldY  += this._fallVy;
+      this.sy       = this.worldY;
+      return;
+    }
+    if (this.breakTimer > 0) this.breakTimer--;
+    else if (this.breakTimer === 0) { this.broken = true; }
   }
 
   updateScreen(camOffsetX) { this.sx = this.worldX - camOffsetX; }
@@ -472,6 +496,31 @@ class RunnerPlatform {
   isVisible(canvasW) { return this.sx + this.w > -10 && this.sx < canvasW + 10; }
 
   draw(ctx, tileSprites) {
+    ctx.save();
+    // Cracking bamboo: jitter + fade; broken: falls with spin-less drop
+    if (this.fragile && this.breakTimer >= 0 && !this.broken) {
+      ctx.translate((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 2);
+    }
+    if (this.broken) ctx.globalAlpha = Math.max(0, 1 - this._fallVy / 14);
+    this._drawBody(ctx, tileSprites);
+    // Crack lines while the timer runs
+    if (this.fragile && this.breakTimer >= 0 && !this.broken) {
+      ctx.strokeStyle = 'rgba(60,30,0,0.7)'; ctx.lineWidth = 2;
+      for (let cx2 = this.sx + 14; cx2 < this.sx + this.w - 8; cx2 += 34) {
+        ctx.beginPath();
+        ctx.moveTo(cx2, this.sy + 2); ctx.lineTo(cx2 + 5, this.sy + 10); ctx.lineTo(cx2 - 2, this.sy + 18);
+        ctx.stroke();
+      }
+    }
+    // Icy sheen (World 5)
+    if (this.icy && !this.broken) {
+      ctx.fillStyle = 'rgba(170,225,255,0.35)';
+      ctx.fillRect(this.sx, this.sy, this.w, 5);
+    }
+    ctx.restore();
+  }
+
+  _drawBody(ctx, tileSprites) {
     const sp = tileSprites && tileSprites[this.style];
     if (sp && sp.complete && sp.naturalWidth > 0) {
       // Tile the sprite across the platform width at its native aspect
@@ -1900,7 +1949,14 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
         const moveType = wIdx % 2 === 0 ? 'h' : 'v';
         items.movingPlatforms.push(new MovingPlatform(wx - 30, platformH - 20, platW, style, moveType, 55));
       } else {
-        items.platforms.push(new RunnerPlatform(wx - 30, platformH - 20, platW, style));
+        const plat = new RunnerPlatform(wx - 30, platformH - 20, platW, style);
+        // World mechanics: W2 bamboo cracks underfoot (every other one,
+        // so young players are never forced onto a crumbling path);
+        // W5 mountain terraces are icy and slippery.
+        const world = stageData.world || 1;
+        if (world === 2 && wIdx % 4 === 1) plat.fragile = true;
+        if (world === 5) plat.icy = true;
+        items.platforms.push(plat);
       }
     }
 
@@ -2185,7 +2241,7 @@ class RunnerEngine {
     }
 
     // Update static + moving platforms
-    this.platforms.forEach(p => p.updateScreen(this.camOffset));
+    this.platforms.forEach(p => { p.updateFragile(); p.updateScreen(this.camOffset); });
     this.movingPlatforms.forEach(mp => { mp.update(); mp.updateScreen(this.camOffset); });
 
     // All platforms for physics
@@ -2684,6 +2740,10 @@ class RunnerEngine {
 
     ctx.restore(); // end screen-shake transform
 
+    // Per-world ambient particles (petals, snow, embers…)
+    this._updateAmbient();
+    this._drawAmbient(ctx);
+
     // Soft vignette focuses attention on the action
     if (!this._vignette || this._vignetteW !== this.W || this._vignetteH !== this.H) {
       const v = ctx.createRadialGradient(
@@ -2700,6 +2760,69 @@ class RunnerEngine {
 
     // HUD always drawn without shake
     this._drawHUD(ctx);
+  }
+
+  // ── Per-world ambient particles ───────────────────────────────
+  // Each world gets a signature drifting effect so every world FEELS
+  // different: W1 fireflies, W2 bamboo leaves, W3 cherry petals,
+  // W4 torch motes, W5 snowflakes, W6 rising embers.
+  _updateAmbient() {
+    if (window.REDUCED_MOTION) { this._ambient = []; return; }
+    if (!this._ambient) this._ambient = [];
+    const world = this.stage?.world || 1;
+    const CFG = {
+      1: { every: 26, char: '✨', size: 9,  vy: -0.35, sway: 0.4, from: 'bottom', alpha: 0.5 },
+      2: { every: 18, char: '🍃', size: 13, vy: 0.7,  sway: 1.1, from: 'top',    alpha: 0.65 },
+      3: { every: 10, char: '🌸', size: 12, vy: 0.8,  sway: 1.4, from: 'top',    alpha: 0.8 },
+      4: { every: 24, char: '✦',  size: 8,  vy: -0.25, sway: 0.5, from: 'bottom', alpha: 0.45, color: '#FFB74D' },
+      5: { every: 8,  char: '❄',  size: 10, vy: 1.1,  sway: 0.9, from: 'top',    alpha: 0.75, color: '#E3F2FD' },
+      6: { every: 12, char: '●',  size: 5,  vy: -1.2, sway: 0.7, from: 'bottom', alpha: 0.6,  color: '#FF7043' },
+    };
+    const cfg = CFG[world] || CFG[1];
+    if (this._age % cfg.every === 0 && this._ambient.length < 42) {
+      this._ambient.push({
+        x: Math.random() * this.W,
+        y: cfg.from === 'top' ? -14 : this.H + 14,
+        vy: cfg.vy * (0.7 + Math.random() * 0.6),
+        phase: Math.random() * Math.PI * 2,
+        sway: cfg.sway,
+        size: cfg.size * (0.7 + Math.random() * 0.6),
+        char: cfg.char,
+        alpha: cfg.alpha,
+        color: cfg.color || null,
+        rot: Math.random() * Math.PI * 2,
+        rotV: (Math.random() - 0.5) * 0.06,
+      });
+    }
+    this._ambient.forEach(p => {
+      p.y += p.vy;
+      p.x += Math.sin(this._age * 0.03 + p.phase) * p.sway - 0.4; // slight leftward drift with camera
+      p.rot += p.rotV;
+    });
+    this._ambient = this._ambient.filter(p => p.y > -30 && p.y < this.H + 30);
+  }
+
+  _drawAmbient(ctx) {
+    if (!this._ambient || !this._ambient.length) return;
+    ctx.save();
+    for (const p of this._ambient) {
+      ctx.globalAlpha = p.alpha;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      if (p.color) {
+        ctx.fillStyle = p.color;
+        ctx.font = `${p.size}px serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(p.char, 0, 0);
+      } else {
+        ctx.font = `${p.size}px serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(p.char, 0, 0);
+      }
+      ctx.rotate(-p.rot);
+      ctx.translate(-p.x, -p.y);
+    }
+    ctx.restore();
   }
 
   // ── Background ── 3-layer parallax ───────────────────────────

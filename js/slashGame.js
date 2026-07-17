@@ -173,8 +173,13 @@ class SlashGame {
     this._dpr = window.devicePixelRatio || 1;
     this._setupCanvas();
     // Global modules
-    this.audio = new AudioManager();
-    this.progress = new ProgressTracker();
+    // One AudioManager for the whole app (shared with Dino Dash):
+    // a single AudioContext, mute state and volume settings everywhere.
+    if (!window._sharedAudio) window._sharedAudio = new AudioManager();
+    this.audio = window._sharedAudio;
+    // Share one tracker with the home-screen engagement UI / dashboard
+    if (!window._progressTracker) window._progressTracker = new ProgressTracker();
+    this.progress = window._progressTracker;
     this.sprites = {};
     this.spriteSheets = {};
     this._spritesReady = false;
@@ -554,6 +559,10 @@ class SlashGame {
     document.addEventListener('visibilitychange', this._visibilityHandler);
   }
   _handleCanvasClick(mx, my) {
+    // Soft UI tap sound on menu-style screens (gameplay has its own SFX)
+    const MENU_STATES = new Set(['title','mode-select','menu','stage-select','world-map',
+                                 'shop','daily','achievements','leaderboard','stage-win','stage-lose']);
+    if (MENU_STATES.has(this.state)) this.audio?.sfxClick?.();
     // PHASE 6: onboarding tutorial click routing
     if (this.state === 'onboarding' && this._onboardingTutorial) {
       this._onboardingTutorial.handleClick(mx, my);
@@ -688,6 +697,10 @@ class SlashGame {
           const world = PHONICS_DATA.WORLDS[i];
           if (world && this.progress.isUnlocked(world.startId)) {
             this._openWorld(i);
+          } else {
+            // Locked-node feedback: wobble + "locked" toot
+            this._lockedShake = { i, frames: 22 };
+            this.audio?.sfxWrongBlend?.();
           }
         }
       });
@@ -761,7 +774,7 @@ class SlashGame {
       this.progress.markTutorialComplete();
       this._onboardingTutorial = null;
       if (onComplete) onComplete();
-    });
+    }, this.audio);
     this.state = 'onboarding';
   }
 
@@ -936,6 +949,7 @@ class SlashGame {
       this.canvas, this.overlay, stage, collectedPhonemes,
       this.sprites, this.audio, this.progress, this.W, this.H,
     );
+    if (this._runnerAllCoins) { this.battle.applyCoinBonus(); this._runnerAllCoins = false; }
     this.state = 'battle';
   }
   // ── STAGE WIN ────────────────────────────────────────────────
@@ -990,6 +1004,10 @@ class SlashGame {
   _advanceToStageWin() {
     if (this._battleResultsDone) return;
     this._battleResultsDone = true;
+    // Full Mario-style stage-clear fanfare; menu music waits for it
+    this.audio.stopMusic();
+    this.audio.sfxStageClear();
+    this._jingleUntil = performance.now() + 2600;
     this.state = 'stage-win';
     this._stageWinAge = 0;
     this._resultBtnRects = [];
@@ -1056,6 +1074,24 @@ class SlashGame {
     // nothing more to do — user must manually resume via pause button.
   }
 
+  // ── Shell music — the menus should never be silent ───────────
+  // Plays the calm menu theme on every non-gameplay screen; gameplay
+  // screens manage their own stage music (startMusic in _startRunner).
+  _syncShellMusic() {
+    if (!this.audio || this.audio.isMuted) return;
+    const SHELL = new Set(['title','mode-select','menu','stage-select','world-map',
+                           'shop','daily','achievements','leaderboard','dashboard',
+                           'stage-win','endless-gameover']);
+    if (this._jingleUntil && performance.now() < this._jingleUntil) return;
+    if (SHELL.has(this.state)) {
+      if (this.audio.musicKey !== 'menu') this.audio.startMenuMusic();
+    } else if (this.audio.musicKey === 'menu' &&
+               (this.state === 'runner' || this.state === 'battle' ||
+                this.state === 'endless-runner' || this.state === 'endless-battle')) {
+      this.audio.stopMusic();
+    }
+  }
+
   // ── MAIN LOOP ─────────────────────────────────────────────────
   _loop() {
     this._rafId = requestAnimationFrame(this._loop);
@@ -1074,6 +1110,7 @@ class SlashGame {
     if (!this._spritesReady || !this._sheetsReady || !this._audioReady) { this._drawLoading(); return; }
     // Tick achievement popup
     this._tickAchievementPopup();
+    this._syncShellMusic();
     switch (this.state) {
       case 'onboarding': this._updateOnboarding(); break; // PHASE 6
       case 'title': this._updateTitle(); break;
@@ -1710,6 +1747,13 @@ class SlashGame {
       const accent   = worldAccents[i] || world.accentColor || '#FFD700';
       const bounce   = sel ? Math.sin(t * 0.12) * 5 : 0;
       const cy       = n.cy + bounce;
+      // Locked-node wobble when tapped
+      let lockedJx = 0;
+      if (this._lockedShake && this._lockedShake.i === i && this._lockedShake.frames > 0) {
+        this._lockedShake.frames--;
+        lockedJx = Math.sin(this._lockedShake.frames * 0.9) * 5;
+      }
+      if (lockedJx) { ctx.save(); ctx.translate(lockedJx, 0); }
 
       // Drop shadow
       ctx.fillStyle = 'rgba(0,0,0,0.32)';
@@ -1753,10 +1797,13 @@ class SlashGame {
         ctx.font = `900 ${Math.round(nodeR * 0.30)}px "Nunito", "Comic Sans MS", system-ui`;
         ctx.fillText(`WORLD ${world.id}`, n.cx, cy + nodeR * 0.36);
         ctx.shadowBlur = 0;
-        // Cleared progress pill (x/total)
+        // Cleared progress pill (x/total) + star total for the world
+        const starSum = world.stageIds.reduce((s, id) => s + (this.progress.getStars(id) || 0), 0);
         ctx.font = `bold ${Math.max(9, Math.round(nodeR * 0.30))}px "Nunito", system-ui`;
         ctx.fillStyle = allClear ? '#FFD700' : 'rgba(255,255,255,0.85)';
-        ctx.fillText(allClear ? `👑 ${cleared}/${total}` : `${cleared}/${total}`, n.cx, cy + nodeR + 12);
+        const pill = (allClear ? `👑 ${cleared}/${total}` : `${cleared}/${total}`) +
+                     (starSum > 0 ? `  ⭐${starSum}` : '');
+        ctx.fillText(pill, n.cx, cy + nodeR + 12);
       }
       ctx.font = `bold ${Math.max(8, Math.round(W * 0.021))}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.28)';
@@ -1764,6 +1811,7 @@ class SlashGame {
       ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
       ctx.fillText(world.name, n.cx, cy + nodeR + (unlocked ? 26 : 16));
       ctx.shadowBlur = 0;
+      if (lockedJx) ctx.restore();
     });
 
     // ── Animated Riku walking on the current world ────────────
@@ -1891,6 +1939,9 @@ class SlashGame {
     if (!this.runner.done) return;
     if (this.runner.outcome === 'flag') {
       const coins = this.runner.getCollectedPhonemes();
+      // Collecting EVERY coin in the run earns bonus battle damage
+      this._runnerAllCoins = (this.runner.coins?.length || 0) > 0 &&
+                             this.runner.coins.every(c => c.collected);
       this._lastRunnerScore = this.runner.score || 0;
       this._lastRunnerHp = this.runner?.player?.hp ?? 0;
       this.progress.recordRunnerComplete(this.stageId, this.runner.getCollectedCount());
@@ -2674,9 +2725,10 @@ class SlashGame {
       { label:'🗺️ CAMPAIGN', sub:`${PHONICS_DATA.worldCount || 6} worlds · ${PHONICS_DATA.stageCount || 30} stages`, col:'#4ECDC4', action:'campaign' },
       { label:'📅 DAILY', sub:this.progress.getDailyCompleted() ? '✅ Done today!' : 'Fresh challenge!', col:'#FFD700', action:'daily' },
       { label:'🏪 SHOP', sub:'Spend your rice grains', col:'#FF80FF', action:'shop' },
-      { label:'🏆 LEADERBOARD', sub:'Challenge the world', col:'#FF8C00', action:'leaderboard' },
+      { label:'🏆 BEST SCORES', sub:'Your family record book', col:'#FF8C00', action:'leaderboard' },
       { label:'🥇 ACHIEVEMENTS', sub:`${this.progress.data.achievements.length}/${ACHIEVEMENTS.length} unlocked`, col:'#00CCFF', action:'achievements' },
       { label:'📊 PROGRESS', sub:'Parent / teacher view', col:'#69F0AE', action:'dashboard' },  // Phase 9
+      { label:'❓ HOW TO PLAY', sub:'Watch the tutorial again', col:'#B39DDB', action:'tutorial' },
     ];
     const btnH = Math.min(62, (H - 120) / (modes.length + 0.5));
     const btnW = Math.min(W - 40, 400);
@@ -2738,6 +2790,7 @@ class SlashGame {
         if (r.action === 'leaderboard') { this.state = 'leaderboard'; this._stateEntryFade = 1.0; }
         if (r.action === 'achievements') { this.state = 'achievements'; this._stateEntryFade = 1.0; }
         if (r.action === 'dashboard')    { this.state = 'dashboard'; this._dashScroll = 0; this._stateEntryFade = 1.0; }  // Phase 9
+        if (r.action === 'tutorial')     { this._startOnboarding(() => { this.state = 'mode-select'; this._stateEntryFade = 1.0; }); }
         if (r.action === 'back') { this.state = 'title'; this._stateEntryFade = 1.0; }
         return;
       }
@@ -3126,6 +3179,10 @@ class SlashGame {
     this._dailyIdx = 0;
     this._dailyBlended= 0;
     this._dailyBattle = null;
+    // Daily modifier: every other day is a Golden Day with double rice.
+    // (Honest label — the doubling really happens on completion.)
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    this._dailyGolden = dayOfYear % 2 === 1;
     this.state = 'daily';
   }
   _updateDaily() {
@@ -3164,11 +3221,17 @@ class SlashGame {
     ctx.font = `bold ${Math.min(18,W*0.044)}px Arial, sans-serif`;
     ctx.fillStyle = '#4ECDC4';
     ctx.fillText(`${set.emoji || '📖'} Today: ${set.theme}`, W/2, 46);
+    if (this._dailyGolden) {
+      const gp = 0.7 + 0.3 * Math.sin(t * 0.1);
+      ctx.font = `bold ${Math.min(14,W*0.034)}px Arial, sans-serif`;
+      ctx.fillStyle = `rgba(255,215,0,${gp})`;
+      ctx.fillText('✨ GOLDEN DAY — double rice! ✨', W/2, 66);
+    }
     // Progress bar
     const prog = this.progress.getDailyCompleted() ? this._dailyWords.length
                  : Math.min(this._dailyBlended, this._dailyWords.length);
     const pct = this._dailyWords.length > 0 ? prog / this._dailyWords.length : 0;
-    const barW = W * 0.75, barH = 18, barX = (W - barW)/2, barY = 75;
+    const barW = W * 0.75, barH = 18, barX = (W - barW)/2, barY = this._dailyGolden ? 88 : 75;
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, barH/2); ctx.fill();
     const fillGrad = ctx.createLinearGradient(barX, 0, barX + barW * pct, 0);
@@ -3222,8 +3285,8 @@ class SlashGame {
     ctx.fillText(`🔥 ${this.progress.getDailyStreak()} day streak · 🌾 Reward: ${150 + this.progress.getDailyStreak()*25}`, W/2, btnY - 8);
     // Back
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillText('← BACK', W/2, H - 6);
-    this._dailyBackRect = { x:W/2-50, y:H-28, w:100, h:22 };
+    this._drawBigBack(ctx, W, H);
+    this._dailyBackRect = { x:W/2-80, y:H-52, w:160, h:46 };
   }
   _clickDaily(mx, my) {
     if (this._dailyBackRect) {
@@ -3236,8 +3299,9 @@ class SlashGame {
     const r = this._dailyActionRect;
     if (mx < r.x || mx > r.x+r.w || my < r.y || my > r.y+r.h) return;
     if (r.completed) {
-      const earned = this.progress.completeDaily();
-      if (earned > 0) this._queueAchievementPopup({ emoji:'🏆', name:'Daily Complete!', desc:`+${earned} Rice Grains!` });
+      let earned = this.progress.completeDaily();
+      if (earned > 0 && this._dailyGolden) { this.progress.addRiceGrains(earned); earned *= 2; }
+      if (earned > 0) this._queueAchievementPopup({ emoji: this._dailyGolden ? '✨' : '🏆', name: this._dailyGolden ? 'GOLDEN Daily!' : 'Daily Complete!', desc:`+${earned} Rice Grains!` });
       this.state = 'mode-select';
     } else if (this._dailyIdx < (this._dailyWords || []).length) {
       const word = this._dailyWords[this._dailyIdx];
@@ -3248,11 +3312,21 @@ class SlashGame {
         (result) => {
           const success = result === 'perfect' || result === 'good';
           this.progress.recordBlend(null, word.word, success, result === 'perfect');
-          if (success) { this._dailyBlended++; this.progress.recordDailyWord(); }
-          this._dailyIdx++;
+          if (success) {
+            this._dailyBlended++;
+            this.progress.recordDailyWord();
+            this._dailyIdx++;
+          } else {
+            // Failed word goes to the back of the queue instead of being
+            // skipped forever — the day always stays completable.
+            const missed = this._dailyWords.splice(this._dailyIdx, 1)[0];
+            if (missed) this._dailyWords.push(missed);
+          }
           this._dailyBattle = null;
           if (this._dailyBlended >= this._dailyWords.length) {
-            this.progress.completeDaily();
+            let earned = this.progress.completeDaily();
+            if (earned > 0 && this._dailyGolden) { this.progress.addRiceGrains(earned); earned *= 2; }
+            if (earned > 0) this._queueAchievementPopup({ emoji: this._dailyGolden ? '✨' : '🏆', name: this._dailyGolden ? 'GOLDEN Daily!' : 'Daily Complete!', desc:`+${earned} Rice Grains!` });
           }
         }
       );
@@ -3314,11 +3388,23 @@ class SlashGame {
       ctx.fillText(ach.desc, ax + 52, ay + cellH*0.65);
       ctx.globalAlpha = 1;
     });
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.font = `bold 14px Arial, sans-serif`; ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillText('← BACK', W/2, H - 6);
-    this._achBackRect = { x:W/2-50, y:H-28, w:100, h:22 };
+    this._drawBigBack(ctx, W, H);
+    this._achBackRect = { x:W/2-80, y:H-52, w:160, h:46 };
   }
+  // Big, thumb-friendly BACK button used by daily/achievements/scores
+  _drawBigBack(ctx, W, H) {
+    const bw = 160, bh = 46, bx = W/2 - bw/2, by = H - bh - 6;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.fill(); ctx.stroke();
+    ctx.font = 'bold 18px "Nunito", Arial, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('\u2190 BACK', W/2, by + bh/2);
+    ctx.restore();
+  }
+
   _clickAchievements(mx, my) {
     if (this._achBackRect) {
       const r = this._achBackRect;
@@ -3339,9 +3425,9 @@ class SlashGame {
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.font = `bold ${Math.min(24,W*0.058)}px Arial Black, sans-serif`;
     ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
-    ctx.strokeText('🏆 LEADERBOARD', W/2, 12); ctx.fillText('🏆 LEADERBOARD', W/2, 12);
+    ctx.strokeText('🏆 BEST SCORES', W/2, 12); ctx.fillText('🏆 BEST SCORES', W/2, 12);
     ctx.font = `13px Arial, sans-serif`; ctx.fillStyle = '#888';
-    ctx.fillText('Endless Run · Best Score', W/2, 44);
+    ctx.fillText('Endless Run · scores on this device', W/2, 44);
     const leaders = this.progress.getLeaderboard();
     const rowH = Math.min(40, (H - 110) / 11);
     const medals = ['🥇','🥈','🥉'];
@@ -3364,9 +3450,7 @@ class SlashGame {
       ctx.font = `11px Arial, sans-serif`; ctx.fillStyle = '#666';
       ctx.fillText(`${l.dist}m`, W - 14, ry + rowH/2 + 7);
     });
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.font = `bold 14px Arial, sans-serif`; ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillText('← BACK', W/2, H - 6);
+    this._drawBigBack(ctx, W, H);
   }
   // ── ACHIEVEMENT POPUP SYSTEM ──────────────────────────────────
   _tickAchievementPopup() {

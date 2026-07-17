@@ -2725,3 +2725,70 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 .slash-exit-btn, .slash-fs-btn, .slash-pause-btn, .fd-btn {
     border: 1.5px solid rgba(255,255,255,0.22);
 }
+
+/* ============================================================
+   SOUND SETTINGS POPOVER (home screen gear)
+============================================================ */
+.mc-settings-btn {
+    background: rgba(0,0,0,0.35);
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    width: 36px; height: 36px;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.15s, background 0.15s;
+}
+.mc-settings-btn:hover { background: rgba(0,0,0,0.55); transform: rotate(30deg); }
+.mc-settings-panel {
+    position: absolute;
+    top: calc(52px + env(safe-area-inset-top));
+    right: 12px;
+    z-index: 60;
+    background: linear-gradient(180deg, #1c3f2a 0%, #0d2018 100%);
+    border: 2px solid rgba(255,215,0,0.4);
+    border-radius: 16px;
+    padding: 14px 16px;
+    width: 230px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+}
+.mc-settings-panel.open { display: flex; animation: screenRise 0.25s cubic-bezier(0.22,1,0.36,1) both; }
+.mc-settings-title {
+    color: #FFD700; font-size: 0.95rem; font-weight: 900;
+    margin: 0; text-align: center;
+}
+.mc-vol-row {
+    display: flex; align-items: center; gap: 8px;
+    color: rgba(255,255,255,0.85); font-size: 0.8rem; font-weight: 700;
+    white-space: nowrap;
+}
+.mc-vol-row input[type=range] {
+    flex: 1; accent-color: #FFD700; min-width: 0;
+    height: 22px; cursor: pointer;
+}
+.mc-mute-toggle {
+    background: rgba(255,215,0,0.15);
+    border: 2px solid rgba(255,215,0,0.5);
+    color: #FFD700; font-family: inherit; font-weight: 800;
+    font-size: 0.82rem; border-radius: 12px;
+    padding: 8px; cursor: pointer;
+    transition: background 0.15s;
+}
+.mc-mute-toggle:hover { background: rgba(255,215,0,0.3); }
+.mc-mute-toggle.muted { color: #EF9A9A; border-color: rgba(239,83,80,0.5); background: rgba(239,83,80,0.12); }
+
+/* Phase-2 boss gimmick: a locked/stolen tile */
+.be-tile-stolen {
+    background: linear-gradient(160deg, #4A148C, #7B1FA2) !important;
+    border-color: #4A148C !important;
+    color: #E1BEE7 !important;
+    opacity: 0.8 !important;
+    animation: stolenPulse 1.2s ease-in-out infinite !important;
+}
+@keyframes stolenPulse {
+    0%, 100% { box-shadow: 0 3px 0 #311B92, 0 0 6px rgba(156,39,176,0.5); }
+    50%      { box-shadow: 0 3px 0 #311B92, 0 0 16px rgba(156,39,176,0.9); }
+}
