@@ -144,10 +144,15 @@ class Player {
   draw(ctx) {
     ctx.save();
     ctx.translate(this.x + DINO_W / 2, this.y + DINO_H / 2);
-    ctx.rotate(this.angle * Math.PI / 180);
     if (this.sprite && this.sprite.complete && this.sprite.naturalWidth > 0) {
+      // Dino skins are normalised to face LEFT app-wide; Dino Dash flies
+      // right, so mirror the sprite — and negate the tilt angle so the
+      // nose still points up when rising / down when diving.
+      ctx.scale(-1, 1);
+      ctx.rotate(-this.angle * Math.PI / 180);
       ctx.drawImage(this.sprite, -DINO_W / 2, -DINO_H / 2, DINO_W, DINO_H);
     } else {
+      ctx.rotate(this.angle * Math.PI / 180);
       // Pixel-art fallback dino
       ctx.fillStyle = '#5a8a3c';
       ctx.fillRect(-DINO_W / 2, -DINO_H / 2, DINO_W, DINO_H);
