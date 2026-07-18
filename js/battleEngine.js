@@ -713,6 +713,11 @@ class BattleEngine {
       case 'first': case 'last': case 'missing': return len >= 2;
       case 'middle':       return len >= 3;
       case 'letter-sound': return len >= 1;
+      case 'oral-blend': {
+        const hinted = (this.stage.words || []).filter(x => x.hint && x.word !== w.word);
+        return !!w.hint && len >= 2 && len <= 4 && hinted.length >= 2;
+      }
+      case 'sound-count':  return len >= 2 && len <= 5;
       case 'segment-it':   return len >= 2;
       case 'rhyme':        return this._rhymePartners(w).correct.length > 0;
       case 'sight-word':   return (this.stage.words || []).length >= 2;
@@ -751,6 +756,8 @@ class BattleEngine {
       case 'rhyme':        this._startRhymeRound(baseWord); break;
       case 'sight-word':   this._startSightWordRound(baseWord); break;
       case 'letter-sound': this._startLetterSoundRound(baseWord); break;
+      case 'oral-blend':   this._startOralBlendRound(baseWord); break;
+      case 'sound-count':  this._startSoundCountRound(baseWord); break;
       default:             this._startSoundIsoRound(type, baseWord); break;
     }
     if (firstTime) this._coachSkill(type, baseWord);
@@ -767,6 +774,8 @@ class BattleEngine {
       rhyme:        '🎓 NEW! RHYMING — rhyming words end the same, like cat & hat.',
       'sight-word': '🎓 NEW! SIGHT WORDS — some words you just KNOW. Find the one you hear.',
       'segment-it': '🎓 NEW! SEGMENT IT — break the word into its separate sounds.',
+      'oral-blend': '🎓 NEW! HEAR & FIND — listen to the sounds, blend them in your head, find the picture!',
+      'sound-count':'🎓 NEW! COUNT THE SOUNDS — how many sounds does the word have?',
     };
     const tip = tips[type];
     if (!tip) return;
@@ -901,6 +910,59 @@ class BattleEngine {
     setTimeout(() => { if (!this.done) this.audio?.playWord(baseWord.word); }, 350);
   }
 
+  // ── ORAL BLEND (PhonicsQuest 'Hear the Sounds') ──────────────
+  // Pure phonemic awareness: the child HEARS the phonemes spoken one
+  // by one (never the whole word) and picks the matching PICTURE.
+  // No print anywhere — this is the pre-reading step.
+  _startOralBlendRound(baseWord) {
+    const others   = (this.stage.words || []).filter(w => w.hint && w.word !== baseWord.word);
+    const distract = this._shuffleArray([...others]).slice(0, 3);
+    const options  = this._shuffleArray([baseWord, ...distract])
+      .map(w => ({ key: w.word, word: w.word, hint: w.hint }));
+    this._challenge = {
+      type: 'oral-blend', baseWord, answer: baseWord.word, options,
+      cardKind: 'word', cardStyle: 'picture', showHint: true, playTarget: null,
+      instr: '👂 Listen to the sounds… which picture is it?', tag: 'HEAR & FIND',
+    };
+    this._currentWord = baseWord;
+    this._renderChallengePrompt();
+    this._renderChallengeTiles();
+    this._setFeedback(this._challenge.instr, '#80D8FF');
+    if (this._hintBtn) this._hintBtn.disabled = false;
+    setTimeout(() => this._playOralSequence(baseWord), 500);
+  }
+
+  // Speak the phonemes spaced apart so the child blends them mentally.
+  _playOralSequence(wordObj) {
+    if (this.done || this._destroyed) return;
+    (wordObj.phonemes || []).forEach((ph, i) => {
+      setTimeout(() => { if (!this.done) this.audio?.playPhoneme(ph); }, i * 620);
+    });
+  }
+
+  // ── SOUND COUNT (PhonicsQuest 'Count the Sounds') ────────────
+  // The child hears the word segmented and counts its phonemes.
+  _startSoundCountRound(baseWord) {
+    const n = (baseWord.phonemes || []).length;
+    const opts = new Set([n]);
+    for (const d of [n - 1, n + 1, n - 2, n + 2]) {
+      if (opts.size >= 4) break;
+      if (d >= 1 && d <= 6) opts.add(d);
+    }
+    const options = this._shuffleArray([...opts]).map(k => ({ key: String(k), word: String(k) }));
+    this._challenge = {
+      type: 'sound-count', baseWord, answer: String(n), options,
+      cardKind: 'word', cardStyle: 'number', showHint: false, playTarget: null,
+      instr: '🔢 How many sounds do you hear?', tag: 'COUNT THE SOUNDS',
+    };
+    this._currentWord = baseWord;
+    this._renderChallengePrompt();
+    this._renderChallengeTiles();
+    this._setFeedback(this._challenge.instr, '#FFCC80');
+    if (this._hintBtn) this._hintBtn.disabled = false;
+    setTimeout(() => this._playOralSequence(baseWord), 500);
+  }
+
   // Prompt: emoji + the word shown as slots, the queried slot a glowing "?".
   _renderChallengePrompt() {
     const c = this._challenge;
@@ -910,7 +972,29 @@ class BattleEngine {
     this._targetEmojiEl.textContent =
       c.type === 'sight-word' ? '🔊' :
       c.type === 'letter-sound' ? '🔡' :
+      c.type === 'oral-blend' ? '👂' :
+      c.type === 'sound-count' ? '🔢' :
       (c.baseWord.hint || '🔊');
+
+    if (c.type === 'oral-blend') {
+      // No print at all — the sounds live in the child's ears.
+      this._blanksEl.innerHTML = `<span class="be-blank be-blank-query">👂 ?</span>`;
+      if (this._wordPreviewEl) {
+        this._wordPreviewEl.textContent = '👂 HEAR & FIND — BLEND THE SOUNDS';
+        this._wordPreviewEl.style.color = '#80D8FF';
+      }
+      return;
+    }
+
+    if (c.type === 'sound-count') {
+      // No slots shown — visible slots would give the count away.
+      this._blanksEl.innerHTML = `<span class="be-blank be-blank-query">🔢 ?</span>`;
+      if (this._wordPreviewEl) {
+        this._wordPreviewEl.textContent = '🔢 COUNT THE SOUNDS';
+        this._wordPreviewEl.style.color = '#FFCC80';
+      }
+      return;
+    }
 
     if (c.type === 'segment-it') {
       this._blanksEl.innerHTML = `<span class="be-blank be-blank-ghost be-word-full">${c.baseWord.word.toUpperCase()}</span>`;
@@ -1016,8 +1100,16 @@ class BattleEngine {
       const isHint = this._showFirstHint && opt.key === c.answer;
       const card = document.createElement('button');
       card.className = 'be-segment-card be-word-card' + (isHint ? ' be-tile-hint' : '');
-      const emoji = (c.showHint && opt.hint) ? `<span class="be-seg-dot">${opt.hint}</span>` : '';
-      card.innerHTML = `${emoji}<span class="be-seg-ph">${opt.word}</span>`;
+      if (c.cardStyle === 'picture') {
+        // Picture-only card — no print, pure listening comprehension
+        card.innerHTML = `<span class="be-card-picture">${opt.hint || '❓'}</span>`;
+        card.setAttribute('aria-label', 'picture choice');
+      } else if (c.cardStyle === 'number') {
+        card.innerHTML = `<span class="be-card-number">${opt.word}</span>`;
+      } else {
+        const emoji = (c.showHint && opt.hint) ? `<span class="be-seg-dot">${opt.hint}</span>` : '';
+        card.innerHTML = `${emoji}<span class="be-seg-ph">${opt.word}</span>`;
+      }
       card.dataset.wordKey = opt.key;
       card.setAttribute('role', 'button');
       card.setAttribute('aria-label', opt.word);
