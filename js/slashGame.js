@@ -2379,7 +2379,7 @@ class SlashGame {
     const panelSlide = Math.min(1, t / 28);
     const panelEase  = 1 - Math.pow(1 - panelSlide, 3);
     const pw = Math.min(360, W - 40);
-    const ph = 366;
+    const ph = (stage.isBoss && (stage.sentences || []).length > 0) ? 420 : 366;
     const px = (W - pw) / 2;
     const pyTarget = (H - ph) / 2;
     const py = pyTarget - (1 - panelEase) * (pyTarget + ph * 0.5);
@@ -2454,9 +2454,24 @@ class SlashGame {
     const bonus = this._stageWinMastery?.bonus > 0 ? this._stageWinMastery.bonus : 0;
     ctx.fillText(`🍚 +${stars * 50 + 20 + bonus} rice earned!`, W / 2, py + 206);
 
+    // Boss stages earn the Read-with-Riku capstone: real decodable
+    // sentences made only of taught patterns — reading independently.
+    const hasStory = stage.isBoss && (stage.sentences || []).length > 0;
+    if (hasStory) {
+      ctx.font = `bold 14px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillStyle = '#80D8FF';
+      ctx.fillText('🎁 A story scroll appeared!', W / 2, py + 224);
+    }
+
     // Buttons — big and thumb-friendly
     this._resultBtnRects = [
-      { label: '▶ Next Stage', primary: true, x: W/2 - 110, y: py + 240, w: 220, h: 54,
+      ...(hasStory ? [{
+        label: '📖 Read with Riku  (+50 🍚)', primary: true,
+        x: W/2 - 130, y: py + 240, w: 260, h: 46,
+        action: () => this._openStoryScroll(stage),
+      }] : []),
+      { label: '▶ Next Stage', primary: !hasStory,
+        x: W/2 - 110, y: py + (hasStory ? 294 : 240), w: 220, h: hasStory ? 44 : 54,
         action: () => {
           if (this.stageId < PHONICS_DATA.stageCount && this.progress.isUnlocked(this.stageId + 1)) {
             this.stageId++;
@@ -2469,13 +2484,82 @@ class SlashGame {
           }
         }
       },
-      { label: '🗺 World Map', primary: false, x: W/2 - 80, y: py + 306, w: 160, h: 40,
+      { label: '🗺 World Map', primary: false, x: W/2 - 80, y: py + (hasStory ? 348 : 306), w: 160, h: 40,
         action: () => { this.state = 'world-map'; this._stateEntryFade = 1.0; }
       },
     ];
     this._drawResultButtons(ctx);
     ctx.textBaseline = 'alphabetic';
   }
+  // ── READ WITH RIKU — decodable-sentence capstone ──────────────
+  // After each world boss, the child reads real sentences built only
+  // from patterns they've been taught (PhonicsQuest journey step 5:
+  // reading independently). Every word is tappable for TTS support.
+  _openStoryScroll(stage) {
+    if (this._storyEl) this._storyEl.remove();
+    const sentences = stage.sentences || [];
+    if (!sentences.length) return;
+    let idx = 0;
+
+    const el = document.createElement('div');
+    el.className = 'story-scroll';
+    el.innerHTML = `
+      <div class="story-card">
+        <button class="story-close" aria-label="Close">✕</button>
+        <h3 class="story-title">📖 Read with Riku</h3>
+        <p class="story-sub">Tap any word to hear it. Read the sentence out loud!</p>
+        <div class="story-sentence"></div>
+        <div class="story-progress"></div>
+        <div class="story-btns">
+          <button class="story-hear">🔊 Read to me</button>
+          <button class="story-done">✅ I read it!</button>
+        </div>
+      </div>`;
+    document.getElementById('slashWrapper')?.appendChild(el);
+    this._storyEl = el;
+
+    const sentEl = el.querySelector('.story-sentence');
+    const progEl = el.querySelector('.story-progress');
+    const render = () => {
+      const words = sentences[idx].split(' ');
+      sentEl.innerHTML = '';
+      words.forEach(w => {
+        const b = document.createElement('button');
+        b.className = 'story-word';
+        b.textContent = w;
+        b.addEventListener('click', () => {
+          const clean = w.replace(/[^a-zA-Z']/g, '').toLowerCase();
+          if (clean) this.audio?.playWord(clean);
+          b.classList.add('story-word-heard');
+        });
+        sentEl.appendChild(b);
+      });
+      progEl.textContent = `Sentence ${idx + 1} of ${sentences.length}`;
+    };
+    render();
+
+    el.querySelector('.story-hear').addEventListener('click', () => {
+      this.audio?.speak?.(sentences[idx], 0.72, 1.05);
+    });
+    el.querySelector('.story-done').addEventListener('click', () => {
+      this.audio?.sfxPerfectBlend?.();
+      idx++;
+      if (idx >= sentences.length) {
+        this.progress.addRiceGrains(50);
+        this._queueAchievementPopup({ emoji: '📖', name: 'Story Read!', desc: '+50 Rice Grains — you read it yourself!' });
+        this.audio?.speak?.('Amazing reading! You read the whole scroll!', 0.9, 1.15);
+        el.remove();
+        this._storyEl = null;
+      } else {
+        render();
+      }
+    });
+    el.querySelector('.story-close').addEventListener('click', () => {
+      el.remove();
+      this._storyEl = null;
+    });
+  }
+
   // ── STAGE LOSE SCREEN ────────────────────────────────────────
   _drawStageLose() {
     const ctx = this.ctx;
