@@ -2188,14 +2188,22 @@ class BattleEngine {
     const stageSp = this.stage.bg && this.sprites[this.stage.bg];
     const bgSp  = (arenaSp && arenaSp.complete && arenaSp.naturalWidth > 0) ? arenaSp : stageSp;
     if (bgSp && bgSp.complete && bgSp.naturalWidth > 0) {
-      const imgW = bgSp.naturalWidth;
-      const imgH = bgSp.naturalHeight;
-      const scale = Math.max(this.W / imgW, this.H / imgH);
-      const dw = imgW * scale;
-      const dh = imgH * scale;
-      ctx.drawImage(bgSp, (this.W - dw) / 2, (this.H - dh) / 2, dw, dh);
-      ctx.fillStyle = 'rgba(0,0,0,0.30)';
-      ctx.fillRect(0, 0, this.W, this.H);
+      // Arena paintings are large; scale + darken once into a
+      // screen-sized cache so each frame is a single 1:1 blit.
+      const key = (bgSp.src || '') + '@' + this.W + 'x' + this.H;
+      if (!this._bgCache || this._bgCacheKey !== key) {
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, this.W); c.height = Math.max(1, this.H);
+        const g = c.getContext('2d');
+        const scale = Math.max(this.W / bgSp.naturalWidth, this.H / bgSp.naturalHeight);
+        const dw = bgSp.naturalWidth * scale, dh = bgSp.naturalHeight * scale;
+        g.drawImage(bgSp, (this.W - dw) / 2, (this.H - dh) / 2, dw, dh);
+        g.fillStyle = 'rgba(0,0,0,0.30)';
+        g.fillRect(0, 0, this.W, this.H);
+        this._bgCache    = c;
+        this._bgCacheKey = key;
+      }
+      ctx.drawImage(this._bgCache, 0, 0);
     } else {
       // Fallback: gradient fills the full canvas so no bare areas show
       const colors = this.stage.skyColor || ['#1565C0', '#42A5F5'];
@@ -2220,11 +2228,15 @@ class BattleEngine {
 
   _drawFloor(ctx) {
     const fy = this._floorY();
-    // Soft shadow above the ground line
-    const shadow = ctx.createLinearGradient(0, fy - 18, 0, fy + 4);
-    shadow.addColorStop(0, 'rgba(0,0,0,0.0)');
-    shadow.addColorStop(1, 'rgba(0,0,0,0.45)');
-    ctx.fillStyle = shadow;
+    // Soft shadow above the ground line (gradient cached per floor Y)
+    if (!this._floorGrad || this._floorGradY !== fy) {
+      const shadow = ctx.createLinearGradient(0, fy - 18, 0, fy + 4);
+      shadow.addColorStop(0, 'rgba(0,0,0,0.0)');
+      shadow.addColorStop(1, 'rgba(0,0,0,0.45)');
+      this._floorGrad  = shadow;
+      this._floorGradY = fy;
+    }
+    ctx.fillStyle = this._floorGrad;
     ctx.fillRect(0, fy - 18, this.W, 22);
     // Thin grass strip only — background image shows through below
     ctx.fillStyle = this.stage.groundColor || '#2E7D32';

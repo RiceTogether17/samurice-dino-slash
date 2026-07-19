@@ -163,6 +163,30 @@ const SLASH_SPRITE_SHEETS = {
   // don't issue 404s for non-existent files on startup.
 };
 // ─────────────────────────────────────────────────────────────
+// PERFORMANCE
+// ─────────────────────────────────────────────────────────────
+// shadowBlur is the single most expensive canvas state on mobile GPUs.
+// Patch the prototype once so LOW_FX mode silently disables every glow
+// in the app, and normal mode caps blur radius — no per-site edits.
+(function () {
+  if (window.__shadowPatched) return;
+  window.__shadowPatched = true;
+  try {
+    const proto = CanvasRenderingContext2D.prototype;
+    const desc  = Object.getOwnPropertyDescriptor(proto, 'shadowBlur');
+    if (!desc || !desc.set) return;
+    Object.defineProperty(proto, 'shadowBlur', {
+      configurable: true,
+      get: desc.get,
+      set(v) { desc.set.call(this, window.LOW_FX ? 0 : Math.min(v, 16)); },
+    });
+  } catch (_) { /* leave shadows untouched if the platform disallows this */ }
+})();
+// Sticky low-effects mode: once a device proves slow it stays in the
+// fast path on future visits instead of stuttering for 2s every boot.
+window.LOW_FX = localStorage.getItem('samurice_lowfx') === '1';
+
+// ─────────────────────────────────────────────────────────────
 // SLASH GAME
 // ─────────────────────────────────────────────────────────────
 class SlashGame {
@@ -170,7 +194,9 @@ class SlashGame {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext('2d');
     this.overlay = document.getElementById(overlayId);
-    this._dpr = window.devicePixelRatio || 1;
+    // DPR above 2 quadruples fill cost for no visible gain on phones;
+    // LOW_FX devices render at 1× and let the browser upscale.
+    this._dpr = window.LOW_FX ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     this._setupCanvas();
     // Global modules
     // One AudioManager for the whole app (shared with Dino Dash):
@@ -256,6 +282,7 @@ class SlashGame {
       if (this.endlessBattle) { this.endlessBattle.W = W; this.endlessBattle.H = H; }
     };
     resize();
+    this._resizeCanvas = resize;
     window.addEventListener('resize', resize);
     // Fullscreen change: browser needs two frames to finish expanding.
     // Fire resize after both frames so canvas picks up the new viewport size.
@@ -1098,7 +1125,13 @@ class SlashGame {
     const now = performance.now();
     if (!this._lastFrameTs) this._lastFrameTs = now;
     const elapsedMs = now - this._lastFrameTs;
-    // Step 6: 60 FPS pacing lock. Skip overly-fast RAF callbacks.
+    // Menus and result screens animate gently — 30 FPS there halves GPU
+    // load and battery drain; gameplay states keep the full 60 FPS.
+    const isGameplay = this.state === 'runner' || this.state === 'battle' ||
+                       this.state === 'boss-defeated' || this.state === 'transition' ||
+                       this.state === 'endless-runner' || this.state === 'endless-battle';
+    this._targetFrameMs = isGameplay ? 1000 / 60 : 1000 / 30;
+    // Step 6: FPS pacing lock. Skip overly-fast RAF callbacks.
     if (elapsedMs + 0.2 < this._targetFrameMs) return;
     this._lastFrameTs = now;
     const frameDtSec = Math.min(0.05, Math.max(1 / 120, elapsedMs / 1000));
@@ -1106,6 +1139,18 @@ class SlashGame {
     this._fpsSamples.push(1 / frameDtSec);
     if (this._fpsSamples.length > 30) this._fpsSamples.shift();
     this._age++;
+    // Adaptive quality: if a gameplay state sustains under ~40 FPS, drop
+    // to low-effects mode (no glows, 1× resolution) and remember it so
+    // the device never stutters through the discovery period again.
+    if (!window.LOW_FX && isGameplay && this._fpsSamples.length >= 30 && (this._age % 60 === 0)) {
+      const avg = this._fpsSamples.reduce((a, b) => a + b, 0) / this._fpsSamples.length;
+      if (avg < 40) {
+        window.LOW_FX = true;
+        try { localStorage.setItem('samurice_lowfx', '1'); } catch (_) {}
+        this._dpr = 1;
+        if (this._resizeCanvas) this._resizeCanvas();
+      }
+    }
     // Block all states until sprites + sheets + audio preload are ready.
     if (!this._spritesReady || !this._sheetsReady || !this._audioReady) { this._drawLoading(); return; }
     // Tick achievement popup
