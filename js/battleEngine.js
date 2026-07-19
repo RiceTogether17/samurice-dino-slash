@@ -2361,7 +2361,7 @@ class BattleEngine {
       // Sit above the boss's head, clamped on-screen (tall foes reach the
       // canvas top); shift left so it never collides with the HP bar.
       const bx = Math.min(bCX - tw / 2 - 14, this.W - tw - 40) - 60;
-      const by = Math.max(46, bFeetY - bH - 66 + bob);
+      const by = Math.max(74, bFeetY - bH - 66 + bob);
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.roundRect(bx, by, tw + 28, 34, 16); ctx.fill(); ctx.stroke();
@@ -2376,8 +2376,10 @@ class BattleEngine {
       ctx.restore();
     }
 
-    const nameY = bFeetY - bH + bob - 12;
-    ctx.font        = `bold ${Math.max(13, Math.floor(this.W * 0.027))}px "Nunito", "Comic Sans MS", system-ui`;
+    // Clamp below the HP bars so tall bosses on short screens don't
+    // push their name off the top of the canvas.
+    const nameY = Math.max(86, bFeetY - bH + bob - 12);
+    ctx.font        = `bold ${Math.min(22, Math.max(13, Math.floor(this.W * 0.027)))}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle   = '#fff';
     ctx.textAlign   = 'center';
     ctx.shadowColor = '#000';
@@ -2505,8 +2507,11 @@ class BattleEngine {
   }
 
   _drawHPBars(ctx) {
-    const margin = 14;
-    const barW   = Math.min(this.W * 0.42, 200);
+    // Keep clear of the floating shell buttons: pause (top-left, ~56px)
+    // and fullscreen + close (top-right, ~110px) sit over the canvas.
+    const marginL = 64;
+    const marginR = 116;
+    const barW   = Math.min(this.W * 0.42, 200, (this.W - marginL - marginR - 24) / 2);
     const barH   = 22;
     const barY   = 42;
 
@@ -2539,11 +2544,11 @@ class BattleEngine {
     const rikuPct = Math.max(0, this.rikuHp / this.rikuMaxHp);
     const rikuC1 = rikuPct > 0.5 ? '#6DD56B' : rikuPct > 0.25 ? '#FFCA28' : '#FF5252';
     const rikuC2 = rikuPct > 0.5 ? '#2E7D32' : rikuPct > 0.25 ? '#F57F17' : '#B71C1C';
-    drawBar(margin, rikuPct, rikuC1, rikuC2,
+    drawBar(marginL, rikuPct, rikuC1, rikuC2,
       `🍚 RIKU  ${Math.ceil(this.rikuHp)}/${this.rikuMaxHp}`, false);
 
     const bossPct = Math.max(0, this.bossHp / this.bossMaxHp);
-    drawBar(this.W - margin - barW, bossPct, '#FF7043', '#B71C1C',
+    drawBar(this.W - marginR - barW, bossPct, '#FF7043', '#B71C1C',
       `${this.stage.bossName}  ${Math.ceil(this.bossHp)}/${this.bossMaxHp}  🦖`, true);
 
     ctx.restore();
