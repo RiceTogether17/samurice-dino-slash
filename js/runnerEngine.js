@@ -612,8 +612,29 @@ class PhonemeCoin {
     const cy  = this.worldY + bob;
     const cx  = this.sx;
     const r   = R_COIN_R;
+    // Coins are the most numerous entity on screen; pre-rendering each
+    // phoneme's coin once (gradients + glow + text) turns two radial
+    // gradients per coin per frame into a single drawImage.
+    const spr = PhonemeCoin._sprite(this.phoneme, r);
+    ctx.drawImage(spr, cx - r * 1.5, cy - r * 1.5);
+  }
 
-    ctx.save();
+  static _sprite(phoneme, r) {
+    if (!PhonemeCoin._cache) {
+      PhonemeCoin._cache = new Map();
+      // Re-render once webfonts land so cached text isn't stuck in a fallback face
+      if (document.fonts?.ready) document.fonts.ready.then(() => PhonemeCoin._cache.clear());
+    }
+    const key = phoneme + '@' + r;
+    const hit = PhonemeCoin._cache.get(key);
+    if (hit) return hit;
+
+    const size = Math.ceil(r * 3);
+    const c   = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    const cx = size / 2, cy = size / 2;
+
     // Glow ring
     const glow = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 1.5);
     glow.addColorStop(0,   'rgba(255,215,0,0.45)');
@@ -637,7 +658,7 @@ class PhonemeCoin {
     ctx.stroke();
 
     // Phoneme text — scaled to coin radius
-    const text   = this.phoneme.toUpperCase();
+    const text   = phoneme.toUpperCase();
     const fsize  = text.length > 2 ? Math.round(r * 0.5) : text.length > 1 ? Math.round(r * 0.62) : Math.round(r * 0.72);
     ctx.font        = `bold ${fsize}px "Nunito", "Comic Sans MS", system-ui, sans-serif`;
     ctx.textAlign   = 'center';
@@ -645,7 +666,8 @@ class PhonemeCoin {
     ctx.fillStyle   = '#5D4037';
     ctx.fillText(text, cx, cy + 1);
 
-    ctx.restore();
+    PhonemeCoin._cache.set(key, c);
+    return c;
   }
 }
 
@@ -2803,7 +2825,9 @@ class RunnerEngine {
     this._updateAmbient();
     this._drawAmbient(ctx);
 
-    // Soft vignette focuses attention on the action
+    // Soft vignette focuses attention on the action (full-canvas alpha
+    // fill — skipped on devices already struggling)
+    if (window.LOW_FX) { this._drawHUD(ctx); return; }
     if (!this._vignette || this._vignetteW !== this.W || this._vignetteH !== this.H) {
       const v = ctx.createRadialGradient(
         this.W / 2, this.H / 2, Math.min(this.W, this.H) * 0.55,
@@ -2826,7 +2850,7 @@ class RunnerEngine {
   // different: W1 fireflies, W2 bamboo leaves, W3 cherry petals,
   // W4 torch motes, W5 snowflakes, W6 rising embers.
   _updateAmbient() {
-    if (window.REDUCED_MOTION) { this._ambient = []; return; }
+    if (window.REDUCED_MOTION || window.LOW_FX) { this._ambient = []; return; }
     if (!this._ambient) this._ambient = [];
     const world = this.stage?.world || 1;
     const CFG = {
@@ -2889,10 +2913,25 @@ class RunnerEngine {
     const bgKey = this.stage.bg;
     const bgSp  = bgKey && this.sprites[bgKey];
     if (bgSp && bgSp.complete && bgSp.naturalWidth > 0) {
-      const imgW  = bgSp.naturalWidth;
-      const imgH  = bgSp.naturalHeight;
       const drawH = this.H;
-      const drawW = drawH * (imgW / imgH);
+      const drawW = drawH * (bgSp.naturalWidth / bgSp.naturalHeight);
+      // Pre-scale the painted background (source images are large) into
+      // two screen-sized tiles — normal + mirrored — so each frame is
+      // plain 1:1 blits with no image resampling or transform churn.
+      if (!this._bgTiles || this._bgTilesH !== drawH || this._bgTilesKey !== bgKey) {
+        const tw = Math.max(1, Math.round(drawW)), th = Math.max(1, Math.round(drawH));
+        const mk = (flip) => {
+          const c = document.createElement('canvas');
+          c.width = tw; c.height = th;
+          const g = c.getContext('2d');
+          if (flip) { g.translate(tw, 0); g.scale(-1, 1); }
+          g.drawImage(bgSp, 0, 0, tw, th);
+          return c;
+        };
+        this._bgTiles    = [mk(false), mk(true)];
+        this._bgTilesH   = drawH;
+        this._bgTilesKey = bgKey;
+      }
       // Layer 1: far background scrolls very slowly.
       // Alternate tiles are mirrored so the left/right edges always
       // meet their own reflection — no visible repeat seam.
@@ -2900,15 +2939,7 @@ class RunnerEngine {
       const firstIdx = Math.floor(scroll1 / drawW);
       for (let i = firstIdx; (i * drawW - scroll1) < this.W; i++) {
         const x = i * drawW - scroll1;
-        if (((i % 2) + 2) % 2 === 1) {
-          ctx.save();
-          ctx.translate(x + drawW, 0);
-          ctx.scale(-1, 1);
-          ctx.drawImage(bgSp, 0, 0, drawW, drawH);
-          ctx.restore();
-        } else {
-          ctx.drawImage(bgSp, x, 0, drawW, drawH);
-        }
+        ctx.drawImage(this._bgTiles[((i % 2) + 2) % 2], x, 0);
       }
 
       // Layer 2: mid-ground tinted overlay for depth
@@ -2924,25 +2955,36 @@ class RunnerEngine {
     }
 
     // ── Procedural fallback ───────────────────────────────────
-    const colors = this.stage.skyColor || ['#87CEEB', '#c5e8f8'];
-    const sky = ctx.createLinearGradient(0, 0, 0, this.H);
-    sky.addColorStop(0,   colors[0]);
-    sky.addColorStop(0.7, colors[1]);
-    sky.addColorStop(1,   this.stage.groundColor || '#5a8a3c');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, this.W, this.H);
+    // Sky gradient + sun are static — render them once per canvas size
+    // instead of building two gradients every frame.
+    if (!this._skyCache || this._skyCacheW !== this.W || this._skyCacheH !== this.H) {
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, this.W); c.height = Math.max(1, this.H);
+      const g = c.getContext('2d');
+      const colors = this.stage.skyColor || ['#87CEEB', '#c5e8f8'];
+      const sky = g.createLinearGradient(0, 0, 0, this.H);
+      sky.addColorStop(0,   colors[0]);
+      sky.addColorStop(0.7, colors[1]);
+      sky.addColorStop(1,   this.stage.groundColor || '#5a8a3c');
+      g.fillStyle = sky;
+      g.fillRect(0, 0, this.W, this.H);
 
-    // Sun with a warm glow — anchors the sky and adds depth
-    const sunX = this.W * 0.82, sunY = this.H * 0.16;
-    const sunR = Math.min(this.W, this.H) * 0.07;
-    const glow = ctx.createRadialGradient(sunX, sunY, sunR * 0.3, sunX, sunY, sunR * 3.2);
-    glow.addColorStop(0,   'rgba(255,245,190,0.85)');
-    glow.addColorStop(0.35,'rgba(255,225,130,0.30)');
-    glow.addColorStop(1,   'rgba(255,225,130,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(sunX, sunY, sunR * 3.2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,250,210,0.95)';
-    ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
+      // Sun with a warm glow — anchors the sky and adds depth
+      const sunX = this.W * 0.82, sunY = this.H * 0.16;
+      const sunR = Math.min(this.W, this.H) * 0.07;
+      const glow = g.createRadialGradient(sunX, sunY, sunR * 0.3, sunX, sunY, sunR * 3.2);
+      glow.addColorStop(0,   'rgba(255,245,190,0.85)');
+      glow.addColorStop(0.35,'rgba(255,225,130,0.30)');
+      glow.addColorStop(1,   'rgba(255,225,130,0)');
+      g.fillStyle = glow;
+      g.beginPath(); g.arc(sunX, sunY, sunR * 3.2, 0, Math.PI * 2); g.fill();
+      g.fillStyle = 'rgba(255,250,210,0.95)';
+      g.beginPath(); g.arc(sunX, sunY, sunR, 0, Math.PI * 2); g.fill();
+      this._skyCache  = c;
+      this._skyCacheW = this.W;
+      this._skyCacheH = this.H;
+    }
+    ctx.drawImage(this._skyCache, 0, 0);
 
     // Layer 1: far clouds / snow peaks
     this._drawMountainLayer(ctx, this._bgOffset1, 0.28, 7, 110, 'rgba(255,255,255,0.10)');
@@ -2994,10 +3036,14 @@ class RunnerEngine {
     const gc = this.stage.groundColor || '#5a8a3c';
 
     // Dirt — vertical gradient reads as depth instead of a flat slab
-    const dirt = ctx.createLinearGradient(0, gy, 0, gy + R_GROUND_H);
-    dirt.addColorStop(0, '#8B6040');
-    dirt.addColorStop(1, '#5e3f28');
-    ctx.fillStyle = dirt;
+    if (!this._dirtGrad || this._dirtGradY !== gy) {
+      const dirt = ctx.createLinearGradient(0, gy, 0, gy + R_GROUND_H);
+      dirt.addColorStop(0, '#8B6040');
+      dirt.addColorStop(1, '#5e3f28');
+      this._dirtGrad  = dirt;
+      this._dirtGradY = gy;
+    }
+    ctx.fillStyle = this._dirtGrad;
     ctx.fillRect(0, gy, W, R_GROUND_H);
 
     // Scrolling soil speckles (pebbles) for texture
@@ -4491,11 +4537,15 @@ class EndlessRunnerEngine {
     ctx.save();
     ctx.translate(shakeX, shakeY);
 
-    // ── Sky gradient ──────────────────────────────────────────
-    const sky = ctx.createLinearGradient(0, 0, 0, this.groundY);
-    sky.addColorStop(0, zone.skyTop);
-    sky.addColorStop(1, zone.skyBot);
-    ctx.fillStyle = sky;
+    // ── Sky gradient ── cached per zone/size (rebuilt only on change)
+    if (!this._skyGrad || this._skyGradKey !== zone.skyTop + zone.skyBot + this.groundY) {
+      const sky = ctx.createLinearGradient(0, 0, 0, this.groundY);
+      sky.addColorStop(0, zone.skyTop);
+      sky.addColorStop(1, zone.skyBot);
+      this._skyGrad    = sky;
+      this._skyGradKey = zone.skyTop + zone.skyBot + this.groundY;
+    }
+    ctx.fillStyle = this._skyGrad;
     ctx.fillRect(0, 0, W, H);
 
     // Scenic endless backdrop: cycle campaign maps (including bonus map)
@@ -4511,11 +4561,20 @@ class EndlessRunnerEngine {
       const ar = bgSp.naturalWidth / bgSp.naturalHeight;
       const drawH = this.groundY;
       const drawW = drawH * ar;
+      // Pre-scale the large painted map to screen size once per zone —
+      // per-frame drawImage then blits 1:1 with no resampling cost.
+      if (!this._bgScaled || this._bgScaledKey !== bgKey + '@' + Math.round(drawH)) {
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(drawW)); c.height = Math.max(1, Math.round(drawH));
+        c.getContext('2d').drawImage(bgSp, 0, 0, c.width, c.height);
+        this._bgScaled    = c;
+        this._bgScaledKey = bgKey + '@' + Math.round(drawH);
+      }
       const scrollX = -((this._worldX * 0.22) % drawW);
       ctx.save();
       ctx.globalAlpha = 0.40;
       for (let x = scrollX; x < W + drawW; x += drawW) {
-        ctx.drawImage(bgSp, x, 0, drawW, drawH);
+        ctx.drawImage(this._bgScaled, x, 0);
       }
       ctx.restore();
     }
@@ -4568,20 +4627,30 @@ class EndlessRunnerEngine {
 
     // ── Rice grains ───────────────────────────────────────────
     const grainBob = Math.sin(this._age * 0.12) * 3;
+    if (!this._grainSprites) this._grainSprites = new Map();
     for (const g of this._grains) {
       const gy = g.y + Math.sin(this._age * 0.1 + g.wobble) * 4;
-      ctx.save();
-      // Glow
-      const gl = ctx.createRadialGradient(g.screenX, gy, 0, g.screenX, gy, g.r * 2.2);
-      gl.addColorStop(0, 'rgba(255,220,50,0.5)');
-      gl.addColorStop(1, 'rgba(255,180,0,0)');
-      ctx.fillStyle = gl;
-      ctx.beginPath(); ctx.arc(g.screenX, gy, g.r * 2.2, 0, Math.PI*2); ctx.fill();
-      // Grain
-      ctx.fillStyle = '#FFD700';
-      ctx.beginPath(); ctx.ellipse(g.screenX, gy, g.r * 0.6, g.r, -0.5, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = '#FF8C00'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.restore();
+      // Pre-render each grain size once (glow gradient + ellipse) —
+      // grains are plentiful and this was a radial gradient per grain per frame.
+      const rk = Math.round(g.r);
+      let spr = this._grainSprites.get(rk);
+      if (!spr) {
+        const s = Math.ceil(rk * 4.4) + 2;
+        spr = document.createElement('canvas');
+        spr.width = spr.height = s;
+        const gg = spr.getContext('2d');
+        const cx = s / 2, cy = s / 2;
+        const gl = gg.createRadialGradient(cx, cy, 0, cx, cy, rk * 2.2);
+        gl.addColorStop(0, 'rgba(255,220,50,0.5)');
+        gl.addColorStop(1, 'rgba(255,180,0,0)');
+        gg.fillStyle = gl;
+        gg.beginPath(); gg.arc(cx, cy, rk * 2.2, 0, Math.PI*2); gg.fill();
+        gg.fillStyle = '#FFD700';
+        gg.beginPath(); gg.ellipse(cx, cy, rk * 0.6, rk, -0.5, 0, Math.PI*2); gg.fill();
+        gg.strokeStyle = '#FF8C00'; gg.lineWidth = 1.5; gg.stroke();
+        this._grainSprites.set(rk, spr);
+      }
+      ctx.drawImage(spr, g.screenX - spr.width / 2, gy - spr.height / 2);
     }
 
     // ── Power items ───────────────────────────────────────────

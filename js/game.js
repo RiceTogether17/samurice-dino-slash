@@ -462,7 +462,8 @@ class FlappyGame {
     this.ctx    = this.canvas.getContext('2d');
     this.audio  = new FlappyAudioManager();
 
-    this._dpr   = window.devicePixelRatio || 1;
+    // Match SlashGame's policy: cap DPR at 2 (LOW_FX devices render 1×)
+    this._dpr   = window.LOW_FX ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     this._setupCanvas();
 
     // Game state
@@ -785,11 +786,15 @@ class FlappyGame {
   // ── DRAWING ───────────────────────────────────────────────
   _drawBg() {
     const ctx  = this.ctx;
-    const grad = ctx.createLinearGradient(0, 0, 0, this.H);
-    grad.addColorStop(0,   '#5baee8');
-    grad.addColorStop(0.6, '#c5e8f8');
-    grad.addColorStop(1,   '#8BC34A');
-    ctx.fillStyle = grad;
+    if (!this._skyGrad || this._skyGradH !== this.H) {
+      const grad = ctx.createLinearGradient(0, 0, 0, this.H);
+      grad.addColorStop(0,   '#5baee8');
+      grad.addColorStop(0.6, '#c5e8f8');
+      grad.addColorStop(1,   '#8BC34A');
+      this._skyGrad  = grad;
+      this._skyGradH = this.H;
+    }
+    ctx.fillStyle = this._skyGrad;
     ctx.fillRect(0, 0, this.W, this.H);
 
     this.hills.forEach(h => h.draw(ctx));
