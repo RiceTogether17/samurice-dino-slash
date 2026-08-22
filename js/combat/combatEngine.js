@@ -29,6 +29,11 @@
   const ROUND_GAP_MS = 900;     // beat between rounds so a result can land
   const COMBO_STEP = 0.25;      // damage multiplier gained per linked hit
   const COMBO_MAX = 3;
+  // Damage is a fraction of the boss's own health rather than a flat number,
+  // so a fight lasts about the same number of rounds in world 1 and world 6.
+  // Play-testing the flat version killed a world-2 boss in five correct
+  // answers, which is not a boss fight.
+  const ROUNDS_TO_WIN = 10;
   const CHIP_DAMAGE = 8;        // what a second miss costs the player
   const BOSS_PHASE_2 = 0.55;
   const BOSS_PHASE_3 = 0.25;
@@ -326,7 +331,7 @@
     _unleashSpecial() {
       if (this._charge < this._chargeMax || this.state !== 'duel') return false;
       this._charge = 0;
-      const dmg = 45 + this._streak * 12 + (this.stage.world || 1) * 4;
+      const dmg = Math.round(this.bossMaxHp * 0.16) + this._streak * 6;
       this.bossHp = Math.max(0, this.bossHp - dmg);
       this.score += dmg * 4;
       this._specialFx = 40;
@@ -444,8 +449,11 @@
     _completeRound(result, word, skill) {
       const combo = Math.min(COMBO_MAX, 1 + this._streak * COMBO_STEP);
       const clean = this._attemptInRound === 0;
-      const base = 18 + (this.stage.world || 1) * 2;
-      const dmg = Math.round(base * combo * (clean ? 1.25 : 0.7));
+      const base = this.bossMaxHp / ROUNDS_TO_WIN;
+      // Combo is compressed into the multiplier rather than applied raw: at
+      // full stretch it should reward mastery with a shorter fight, not turn
+      // three lucky answers into an instant win.
+      const dmg = Math.max(1, Math.round(base * (0.75 + 0.25 * combo) * (clean ? 1.15 : 0.75)));
 
       this.bossHp = Math.max(0, this.bossHp - dmg);
       this.score += dmg * 3 + (clean ? 40 : 10);

@@ -119,6 +119,18 @@ So the phonics is now the fighting. `js/combat/` splits into three pieces:
   runs off the phoneme data rather than hand-authored notes, so it covers the
   whole curriculum instead of the handful of words somebody wrote notes for.
 
+### Fight pacing
+
+Damage is a fraction of the boss's own health (`bossMaxHp / ROUNDS_TO_WIN`),
+not a flat number. With a flat value the same answer flattened a world-1 boss
+and barely marked a world-6 one; a play-test killed a world-2 boss in five
+correct answers. Every boss now falls in 8-14 rounds depending on how cleanly
+it is fought, and `tests/balance.test.js` fails if that spread drifts, if a
+combo starts trivialising fights, or if misses stop costing anything.
+
+Rice Storm — the charge meter's payoff — is deliberately damage only. It never
+answers a round, so what is rewarded stays what is being learned.
+
 Two properties are enforced by `tests/patterns.test.js` and worth keeping:
 every word in all 30 stages must build a round and be playable to completion
 (a round that cannot finish is a soft-lock), and relaxed mode — the default
