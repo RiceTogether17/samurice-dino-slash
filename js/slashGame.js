@@ -787,8 +787,16 @@ class SlashGame {
   }
 
   // ── Stage launch ─────────────────────────────────────────────
-  _launchStage(id) {
-    if (!this.progress.isUnlocked(id)) return;
+  /**
+   * @param {object} [opts]
+   * @param {boolean} [opts.preview] Play a stage the player has not unlocked.
+   *   Used only by shared links, so a link lands on the stage it names instead
+   *   of dumping the recipient at the beginning. A preview awards nothing and
+   *   unlocks nothing — see _onStageWin — so progression is untouched.
+   */
+  _launchStage(id, opts = {}) {
+    this._previewStage = !!opts.preview;
+    if (!this._previewStage && !this.progress.isUnlocked(id)) return;
     this.stageId = id;
     this._stateEntryFade = 1.0;
     this.overlay.classList.add('hidden');
@@ -1003,7 +1011,8 @@ class SlashGame {
     this._lastBattleAccuracy = this.battle?.getAccuracyPercent?.() ?? null;
     const runnerScore = this._lastRunnerScore || 0;
     const score = battleScore + runnerScore;
-    this.progress.completeStage(this.stageId, score);
+    // A previewed stage is someone else's link, not this player's progress.
+    if (!this._previewStage) this.progress.completeStage(this.stageId, score);
 
     const clearSec = this._stageStartedAt ? (Date.now() - this._stageStartedAt) / 1000 : null;
     const runnerTookHit = typeof this._lastRunnerHp === 'number' ? this._lastRunnerHp < 3 : false;
@@ -2574,9 +2583,15 @@ class SlashGame {
         x: W/2 - 130, y: py + 240, w: 260, h: 46,
         action: () => this._openStoryScroll(stage),
       }] : []),
-      { label: '▶ Next Stage', primary: !hasStory,
+      { label: this._previewStage ? '▶ Start my adventure' : '▶ Next Stage',
+        primary: !hasStory,
         x: W/2 - 110, y: py + (hasStory ? 294 : 240), w: 220, h: hasStory ? 44 : 54,
         action: () => {
+          if (this._previewStage) {
+            this._previewStage = false;
+            this._launchStage(this.progress.nextStageId(PHONICS_DATA.stageList.length));
+            return;
+          }
           if (this.stageId < PHONICS_DATA.stageCount && this.progress.isUnlocked(this.stageId + 1)) {
             this.stageId++;
             // Keep the world selection in sync so returning to the map lands right.
@@ -2588,13 +2603,91 @@ class SlashGame {
           }
         }
       },
-      { label: '🗺 World Map', primary: false, x: W/2 - 80, y: py + (hasStory ? 348 : 306), w: 160, h: 40,
+      { label: '🗺 Map', primary: false,
+        x: W/2 - 168, y: py + (hasStory ? 348 : 306), w: 160, h: 40,
         action: () => { this.state = 'world-map'; this._stateEntryFade = 1.0; }
+      },
+      { label: '💬 Share', primary: false,
+        x: W/2 + 8, y: py + (hasStory ? 348 : 306), w: 160, h: 40,
+        action: () => this._shareStageWin(stage),
       },
     ];
     this._drawResultButtons(ctx);
+    this._drawShareToast(ctx, W, H);
     ctx.textBaseline = 'alphabetic';
   }
+
+  /** Brief confirmation after a share — silent success reads as a dead button. */
+  _drawShareToast(ctx, W, H) {
+    const t = this._shareToast;
+    if (!t) return;
+    if (++t.age > 150) { this._shareToast = null; return; }
+    const fade = t.age > 110 ? 1 - (t.age - 110) / 40 : Math.min(1, t.age / 8);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, fade);
+    ctx.font = `800 14px ${UI.THEME.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = ctx.measureText(t.text).width + 34;
+    const y = H - 58;
+    ctx.fillStyle = 'rgba(14,9,13,0.92)';
+    ctx.strokeStyle = UI.THEME.goldDim;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(W / 2 - w / 2, y, w, 32, 16); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = UI.THEME.gold;
+    ctx.fillText(t.text, W / 2, y + 16.5);
+    ctx.restore();
+  }
+
+  /**
+   * Share what the child just did.
+   *
+   * The share unit for a phonics game is not a high score — a five-year-old
+   * is not going to post one. What travels is a grown-up telling another
+   * grown-up that their kid read some words, which is how this kind of game
+   * actually spreads: parent to parent, teacher to teacher. So the message
+   * names the words, and the link lands on the stage rather than a menu.
+   *
+   * Uses the native share sheet where there is one (which is where WhatsApp
+   * and Messages live), and falls back to the clipboard everywhere else.
+   */
+  _shareStageWin(stage) {
+    const words = (this._battleResults?.learnedWords || []).slice(0, 5);
+    const stars = this.progress.getStars(this.stageId);
+    const label = stage.world ? `${stage.world}-${stage.local}` : `${this.stageId}`;
+
+    const read = words.length
+      ? `They read ${words.slice(0, -1).join(', ')}${words.length > 1 ? ' and ' : ''}${words[words.length - 1]}.`
+      : 'They cleared it without a single miss.';
+    const text = `My reader just beat ${stage.bossName || 'the boss'} on stage ${label} `
+               + `${'⭐'.repeat(Math.max(1, stars))}\n${read}\n\nSamurice Dino Slash — free, no app needed:`;
+
+    let url = location.href;
+    try {
+      const u = new URL(location.href);
+      u.search = `?s=${this.stageId}`;
+      u.hash = '';
+      url = u.toString();
+    } catch (_) { /* keep the plain href */ }
+
+    const done = msg => { this._shareToast = { text: msg, age: 0 }; };
+
+    if (navigator.share) {
+      navigator.share({ title: 'Samurice Dino Slash', text, url })
+        .then(() => done('Shared!'))
+        .catch(() => { /* the user dismissed the sheet — not an error */ });
+      return;
+    }
+    const payload = `${text}\n${url}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(payload)
+        .then(() => done('Copied — paste it anywhere'))
+        .catch(() => done('Could not copy'));
+    } else {
+      done('Sharing is not available here');
+    }
+  }
+
   // ── READ WITH RIKU — decodable-sentence capstone ──────────────
   // After each world boss, the child reads real sentences built only
   // from patterns they've been taught (PhonicsQuest journey step 5:
@@ -3761,8 +3854,13 @@ function launchSlashGame(opts = {}) {
     if (!g._spritesReady || !g._sheetsReady) { setTimeout(go, 60); return; }
     const total = PHONICS_DATA.stageList.length;
     const wanted = Number(opts.stage) || g.progress.nextStageId(total);
-    const id = g.progress.isUnlocked(wanted) ? wanted : g.progress.nextStageId(total);
-    g._launchStage(id);
+    const valid = wanted >= 1 && wanted <= total;
+    if (opts.stage && valid && !g.progress.isUnlocked(wanted)) {
+      // Someone shared this stage. Let them play it without granting it.
+      g._launchStage(wanted, { preview: true });
+      return;
+    }
+    g._launchStage(valid ? wanted : g.progress.nextStageId(total));
   };
   go();
 }

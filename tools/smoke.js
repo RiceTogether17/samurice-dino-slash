@@ -189,6 +189,26 @@ function check(name, ok, detail = '') {
   check('boss defeat resolves to a result screen', true,
     await page.evaluate(() => _slashGameInstance.state));
 
+  // A shared ?s=<stage> link must land on that stage without granting it.
+  {
+    const p2 = await browser.newPage({ viewport: { width: 900, height: 520 } });
+    await p2.goto(`http://127.0.0.1:${port}/index.html?s=12`, { waitUntil: 'domcontentloaded' });
+    const landed = await p2.waitForFunction(
+      () => typeof _slashGameInstance !== 'undefined' && _slashGameInstance
+         && _slashGameInstance.state === 'runner',
+      null, { timeout: 45000 }).then(() => true).catch(() => false);
+    const info = landed ? await p2.evaluate(() => ({
+      stage: _slashGameInstance.stageId,
+      preview: !!_slashGameInstance._previewStage,
+      ownNext: _slashGameInstance.progress.nextStageId(30),
+    })) : null;
+    check('a shared link opens the stage it names', !!info && info.stage === 12,
+      info ? `stage ${info.stage}, preview ${info.preview}` : 'never reached the runner');
+    check('a shared link grants no progress', !!info && info.ownNext === 1,
+      info ? `their own next stage is still ${info.ownNext}` : '');
+    await p2.close();
+  }
+
   check('no page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));
   check('no failed requests', badRequests.length === 0, badRequests.slice(0, 3).join(' | '));
 

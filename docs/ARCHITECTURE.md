@@ -178,6 +178,32 @@ Two traps worth knowing:
   hearts ended up hidden behind the pause button. Keep 62 px clear on the left
   and 116 px on the right.
 
+## Reach
+
+Two numbers decide whether a shared link becomes a session, and both are
+measured, not guessed.
+
+**Taps to play.** PLAY drops straight into `progress.nextStageId()`; the mode
+picker lives behind "More modes". It used to be four taps across four menus.
+Keep it at one — anything added to that path costs sessions.
+
+**First contentful paint.** The web font loads non-blocking (`media="print"`,
+flipped to `all` on load). Measured with the font host unreachable, on the
+same build: 13,712 ms blocking versus 204 ms non-blocking. Never add a
+render-blocking third-party request; `domInteractive` is ~128 ms and should
+stay that way.
+
+**Shared links.** `?s=<stage>` opens that stage. If the recipient has not
+unlocked it, it runs as a *preview*: playable, but `completeStage` is skipped
+so it grants nothing. That combination is what lets a link land on the thing
+being shared without handing out progression, and `tests/progression.test.js`
+plus `tools/smoke.js` both pin it.
+
+The share text is deliberately written for a grown-up ("My reader just beat
+… They read ship, chat and fish"), because that is who forwards this kind of
+game — parent to parent, teacher to teacher. A five-year-old is not going to
+post a high score.
+
 ## Performance work
 
 Two numbers matter, both from `tools/profile.js`:
