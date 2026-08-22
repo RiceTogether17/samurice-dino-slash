@@ -118,6 +118,20 @@
 
       this._words = (stage.words || []).filter(w => w && w.word);
       this._wordMisses = new Map();   // word -> misses, for adaptive weighting
+      // A review session is a fixed list, not a pool: each word is asked
+      // once and the fight ends when the list does. Campaign stages leave
+      // this unset and draw with replacement until the boss falls.
+      this._pool = stage.oneShotWords ? this._words.slice() : null;
+      if (this._pool) {
+        for (let i = this._pool.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [this._pool[i], this._pool[j]] = [this._pool[j], this._pool[i]];
+        }
+      }
+      // How many clean rounds should take the boss down. A fixed list sizes
+      // this to its own length; see the one-shot branch in `_completeRound`,
+      // which then paces the bar to land on the last word exactly.
+      this._roundsToWin = Math.max(1, stage.roundsToWin || ROUNDS_TO_WIN);
       this._round = null;
       this._pattern = null;
       this._attemptInRound = 0;
@@ -235,15 +249,25 @@
     }
 
     // ── Round flow ───────────────────────────────────────────
+    _ladder() { return root.Review ? root.Review.shared() : null; }
+
     _pickWord() {
+      if (this._pool) return this._pool.shift() || null;
       if (!this._words.length) return null;
       // Words the child has missed come round again sooner. Same principle as
       // PhonicsQuest's weighted selection: practice should concentrate where
       // it is needed rather than cycling uniformly.
+      //
+      // The review ladder gets a say too: a word this stage teaches that is
+      // due for review is worth more than a word the child cleared an hour
+      // ago, so the fight quietly doubles as the day's practice.
+      const ladder = this._ladder();
+      const due = new Set(ladder ? ladder.dueWords() : []);
       const weighted = [];
       for (const w of this._words) {
         const misses = this._wordMisses.get(w.word) || 0;
-        const weight = 1 + Math.min(4, misses * 2);
+        let weight = 1 + Math.min(4, misses * 2);
+        if (due.has(String(w.word).toLowerCase())) weight += 2;
         for (let i = 0; i < weight; i++) weighted.push(w);
       }
       const pool = weighted.filter(w => w.word !== this._lastWord);
@@ -499,6 +523,7 @@
         // shown, rather than letting a child grind a single word forever.
         this._hit('riku', CHIP_DAMAGE);
         this.progress?.recordBlend?.(this.stage.id, word.word, false, false, word.phonemes || []);
+        this._ladder()?.grade(word.word, false, { stage: this.stage.id });
         if (this._pattern.reveal) this._pattern.reveal(this._round);
         this._endRound(false);
       }
@@ -507,11 +532,15 @@
     _completeRound(result, word, skill) {
       const combo = Math.min(COMBO_MAX, 1 + this._streak * COMBO_STEP);
       const clean = this._attemptInRound === 0;
-      const base = this.bossMaxHp / ROUNDS_TO_WIN;
       // Combo is compressed into the multiplier rather than applied raw: at
       // full stretch it should reward mastery with a shorter fight, not turn
       // three lucky answers into an instant win.
-      const dmg = Math.max(1, Math.round(base * (0.75 + 0.25 * combo) * (clean ? 1.15 : 0.75)));
+      const base = this.bossMaxHp / this._roundsToWin;
+      let dmg = Math.max(1, Math.round(base * (0.75 + 0.25 * combo) * (clean ? 1.15 : 0.75)));
+      // A fixed list has no spare rounds to speed through: spread whatever
+      // health is left over the words that are left, so the bar reaches
+      // empty on the last word rather than three words early.
+      if (this._pool) dmg = Math.max(1, Math.ceil(this.bossHp / (this._pool.length + 1)));
 
       this.score += dmg * 3 + (clean ? 40 : 10);
       this._correctBlends++;
@@ -532,6 +561,9 @@
         }
       }
       this.progress?.recordBlend?.(this.stage.id, word.word, true, clean, word.phonemes || []);
+      // Only a first-attempt answer moves a word up the ladder. Getting it
+      // right after being told the answer is worth praise, not promotion.
+      this._ladder()?.grade(word.word, clean, { stage: this.stage.id });
       this._say(root.Coach.praise({ skill, word: word.word, phonemes: word.phonemes || [],
                                     correct: result.expected }), 'praise', 3000);
       this._endRound(true);

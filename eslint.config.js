@@ -73,7 +73,7 @@ module.exports = [
         // Available inside page.evaluate callbacks, which run in the browser.
         window: 'readonly', document: 'readonly', performance: 'readonly',
         getComputedStyle: 'readonly',
-        CanvasRenderingContext2D: 'readonly', _slashGameInstance: 'readonly',
+        CanvasRenderingContext2D: 'readonly', _slashGameInstance: 'readonly', PHONICS_DATA: 'readonly',
       },
     },
     rules: {

@@ -189,6 +189,64 @@ function check(name, ok, detail = '') {
   check('boss defeat resolves to a result screen', true,
     await page.evaluate(() => _slashGameInstance.state));
 
+  // ── The review loop ────────────────────────────────────────
+  // The ladder is the game's reason to come back, so the whole round trip is
+  // checked here: due words in, a fight that ends with the list, grades out.
+  const review = await page.evaluate(async () => {
+    const g = _slashGameInstance;
+    const L = window.Review.shared();
+    L.reset();
+    const seed = [];
+    for (const st of PHONICS_DATA.stageList.slice(0, 4)) {
+      for (const w of st.words.slice(0, 2)) seed.push(w.word);
+    }
+    seed.forEach(w => L.introduce(w, 1));
+    const due = L.todaysQueue().length;
+
+    g.battle = null;
+    g.state = 'mode-select';
+    g._startReview();
+    if (g.state !== 'review') return { failed: 'did not enter review', due };
+    const words = g.review.stage.words.length;
+    const notAStage = g.review.stage.id === 0;
+
+    for (let i = 0; i < 900 && g.state === 'review'; i++) {
+      const be = g.review;
+      if (!be) break;
+      if (be.state === 'primer') { be._primerAge = 999; be._dismissPrimer(); }
+      else if (be.state === 'duel') {
+        for (const t of be._pattern.targets(be._round) || []) {
+          const r = be._pattern.resolve(be._round, t.id);
+          if (r && r.correct) { be._apply(r); break; }
+        }
+      }
+      await new Promise(r => setTimeout(r, 30));
+    }
+    return {
+      due, words, notAStage,
+      state: g.state,
+      summary: g._reviewSummary,
+      after: L.stats(),
+    };
+  });
+  check('a review session is built from the words that are due',
+    review.words === review.due && review.due > 0,
+    `${review.words} words for ${review.due} due`);
+  check('a review clears no campaign progress', review.notAStage === true);
+  check('a review ends when its word list does', review.state === 'review-done',
+    review.summary ? `${review.summary.correct}/${review.summary.words} first try` : review.state);
+  check('answering moves words up the ladder',
+    review.after && review.after.doneToday >= review.words && review.after.due === 0,
+    JSON.stringify(review.after));
+
+  // The stopping cue: once the day's practice is done the game says so.
+  const stop = await page.evaluate(() => {
+    const L = window.Review.shared();
+    return { done: L.doneForToday(), queue: L.todaysQueue().length };
+  });
+  check('the game stops asking once the day is done',
+    stop.done === true && stop.queue === 0, JSON.stringify(stop));
+
   // A shared ?s=<stage> link must land on that stage without granting it.
   {
     const p2 = await browser.newPage({ viewport: { width: 900, height: 520 } });
