@@ -1892,7 +1892,12 @@ class SlashGame {
       ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.28)';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
-      ctx.fillText(world.name, n.cx, cy + nodeR + (unlocked ? 26 : 16));
+      // Nudge the label back inside the canvas. Centring it on the node alone
+      // ran the outermost worlds — "Volcanic Samurai Peak" especially — off
+      // the edge of the screen.
+      const halfLabel = ctx.measureText(world.name).width / 2;
+      const labelX = Math.min(Math.max(n.cx, halfLabel + 6), W - halfLabel - 6);
+      ctx.fillText(world.name, labelX, cy + nodeR + (unlocked ? 26 : 16));
       ctx.shadowBlur = 0;
       if (lockedJx) ctx.restore();
     });
@@ -1933,6 +1938,20 @@ class SlashGame {
     // ── Title header ──────────────────────────────────────────
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     const titleSz = Math.min(20, W * 0.046);
+    // Drifting clouds pass behind this text and were washing it out — the
+    // subtitle in particular became white-on-white. A soft scrim keeps the
+    // header readable whatever happens to float past.
+    // Hold the scrim at close to full strength until past the subtitle's
+    // baseline before fading: a gradient that thins out over the header itself
+    // leaves the second line unprotected, which is exactly the line a cloud
+    // was drifting behind.
+    const hdrH = 7 + titleSz + 3 + 16;
+    const scrim = ctx.createLinearGradient(0, 0, 0, hdrH + 24);
+    scrim.addColorStop(0,    'rgba(8,20,40,0.62)');
+    scrim.addColorStop(0.62, 'rgba(8,20,40,0.52)');
+    scrim.addColorStop(1,    'rgba(8,20,40,0)');
+    ctx.fillStyle = scrim;
+    ctx.fillRect(0, 0, W, hdrH + 24);
     ctx.font = `900 ${titleSz}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 12;
     ctx.fillStyle = '#FFD700';
