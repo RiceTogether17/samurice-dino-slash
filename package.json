@@ -1,0 +1,25 @@
+{
+  "name": "samurice-dino-slash",
+  "version": "2.0.0",
+  "description": "Phonics action-platformer \u2014 Riku the Samurice fights dinosaurs by blending words.",
+  "scripts": {
+    "test": "node --test tests/",
+    "lint": "eslint js tools tests",
+    "profile": "node tools/profile.js",
+    "screenshot": "node tools/screenshot.js",
+    "optimize-assets": "node tools/optimize-assets.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RiceTogether17/samurice-dino-slash.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/RiceTogether17/samurice-dino-slash/issues"
+  },
+  "homepage": "https://github.com/RiceTogether17/samurice-dino-slash#readme",
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  },
+  "private": true
+}

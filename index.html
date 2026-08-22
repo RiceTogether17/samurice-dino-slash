@@ -293,6 +293,9 @@
        6. slashGame – main orchestrator; overrides launchSlashGame()
        7. game.js – Dino Dash (untouched)
 ═══════════════════════════════════════════════════════════════ -->
+<!-- Core systems — must load before the engines that use them -->
+<script src="js/core/spriteCache.js"></script>
+<script src="js/core/renderPatch.js"></script>
 <script src="js/phonicsData.js"></script>
 <script src="js/progressTracker.js"></script>
 <script src="js/audioManager.js"></script>

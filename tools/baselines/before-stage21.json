@@ -1,0 +1,57 @@
+{
+  "stage": 21,
+  "state": "runner",
+  "cpuThrottle": 1,
+  "frameCostMs": {
+    "frames": 300,
+    "mean": 2.251,
+    "p50": 2.8,
+    "p95": 4.2,
+    "p99": 5.3,
+    "max": 7.7,
+    "overBudget": 0
+  },
+  "drawMs": {
+    "frames": 300,
+    "mean": 2.221,
+    "p50": 2.8,
+    "p95": 4.1,
+    "p99": 4.7,
+    "max": 7.6,
+    "overBudget": 0
+  },
+  "updateMs": {
+    "frames": 118,
+    "mean": 0.078,
+    "p50": 0.1,
+    "p95": 0.2,
+    "p99": 1.2,
+    "max": 1.4,
+    "overBudget": 0
+  },
+  "blit": {
+    "drawImageCallsPerFrame": 68.4,
+    "sourceMPPerFrame": 85.09,
+    "heavyDownscalesPerFrame": 61.6
+  },
+  "heap": {
+    "usedMB": 5.4
+  },
+  "quality": {
+    "LOW_FX": false,
+    "tier": null,
+    "dpr": 1
+  },
+  "errors": [
+    "Failed to load resource: net::ERR_CONNECTION_RESET",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}
