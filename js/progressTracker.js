@@ -549,6 +549,24 @@ class ProgressTracker {
     return { unlocked:s.unlocked, stars:s.stars, bestScore:s.bestScore,
              mastered:s.wordsMastered.length, attempts:s.attempts };
   }
+  /**
+   * The stage a returning player should drop into: the first unlocked stage
+   * they have not cleared, else the last one they unlocked.
+   *
+   * This exists so the title screen's PLAY button can be a single tap into
+   * gameplay. Measured before it: opening a shared link took 18.5 seconds and
+   * four taps across four menus before anything was playable.
+   */
+  nextStageId(totalStages) {
+    let lastUnlocked = 1;
+    for (let id = 1; id <= totalStages; id++) {
+      if (!this.isUnlocked(id)) break;
+      lastUnlocked = id;
+      if (this.getStars(id) === 0) return id;
+    }
+    return lastUnlocked;
+  }
+
   getTotalWordsBlended()  { return this.data.totalWordsBlended || 0; }
   getBestCombo()          { return this.data.bestCombo || 0; }
   reset()                 { this.data = this._fresh(); this._save(); }

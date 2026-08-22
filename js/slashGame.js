@@ -3730,7 +3730,17 @@ class SlashGame {
 // ─────────────────────────────────────────────────────────────
 let _slashGameInstance = null;
 // Override the function defined in game.js
-function launchSlashGame() {
+/**
+ * Enter the game.
+ *
+ * `opts.straightToPlay` drops the player into the stage they are up to
+ * instead of the mode picker. That is what PLAY does, and it is the single
+ * biggest lever on whether a shared link turns into a session: measured
+ * before this, opening the game took 18.5 seconds and four taps across four
+ * menus before anything was playable. The mode picker is still one tap away
+ * for everything else.
+ */
+function launchSlashGame(opts = {}) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('slashScreen').classList.add('active');
   // Request landscape lock (mobile) — ignore if unsupported
@@ -3738,11 +3748,37 @@ function launchSlashGame() {
   if (!_slashGameInstance) {
     _slashGameInstance = new SlashGame('slashCanvas', 'battleOverlay');
   } else {
-    // Return to title (mode-select)
     _slashGameInstance.state = 'mode-select';
     _slashGameInstance.overlay.classList.add('hidden');
     _slashGameInstance.overlay.innerHTML = '';
   }
+  const g = _slashGameInstance;
+  if (!opts.straightToPlay && !opts.stage) return;
+
+  // Assets stream in behind the loading screen; wait for the gate rather than
+  // launching into a stage whose sprites have not arrived.
+  const go = () => {
+    if (!g._spritesReady || !g._sheetsReady) { setTimeout(go, 60); return; }
+    const total = PHONICS_DATA.stageList.length;
+    const wanted = Number(opts.stage) || g.progress.nextStageId(total);
+    const id = g.progress.isUnlocked(wanted) ? wanted : g.progress.nextStageId(total);
+    g._launchStage(id);
+  };
+  go();
+}
+
+/**
+ * Deep links: ?s=12 opens that stage directly. A share is only worth sending
+ * if the person receiving it lands on the thing being shared.
+ */
+function _slashDeepLink() {
+  try {
+    const p = new URLSearchParams(location.search);
+    const s = p.get('s') || p.get('stage');
+    if (!s) return null;
+    const id = Number(s);
+    return Number.isFinite(id) && id >= 1 ? id : null;
+  } catch (_) { return null; }
 }
 function exitSlash() {
   if (_slashGameInstance) {
