@@ -2022,7 +2022,25 @@ class SlashGame {
       return;
     }
 
-    this.runner.update(_dt);
+    // Fixed-step physics. Entity motion is tuned in per-frame units, so
+    // driving it straight from wall-clock dt makes the game literally run
+    // slower whenever frames are dropped. Stepping a fixed 1/60 s and
+    // carrying the remainder keeps play at real-time pace instead.
+    //
+    // Catch-up is capped at two steps: past that, a device that cannot keep
+    // up would be asked to simulate ever more per frame, fall further behind,
+    // and spiral. Better to let a genuinely slow device run slightly slow.
+    const STEP = 1 / 60;
+    this._runnerAccum = Math.min((this._runnerAccum || 0) + _dt, STEP * 3);
+    let steps = 0;
+    while (this._runnerAccum >= STEP && steps < 2) {
+      this.runner.update(STEP);
+      this._runnerAccum -= STEP;
+      steps++;
+    }
+    // Never skip a frame entirely — a dt shorter than one step still needs
+    // the world advanced once, or input would feel dropped.
+    if (steps === 0) { this.runner.update(_dt); this._runnerAccum = 0; }
     this.runner.draw();
     this._updateTutorial(_dt);
     this._drawTutorialOverlay(this.ctx);

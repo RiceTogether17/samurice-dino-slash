@@ -74,7 +74,7 @@ class ParticleSystem {
   }
   update(dt = 1 / 60) {
     this.items.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.16; p.vx *= 0.96; p.age++; });
-    this.items = this.items.filter(p => p.age < p.life);
+    ArrayOps.compact(this.items, p => p.age < p.life);
   }
   draw(ctx) {
     this.items.forEach(p => {
@@ -1942,6 +1942,16 @@ class DustParticle {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Shared predicates for in-place list pruning.
+// These live at module scope on purpose: an inline arrow would allocate a
+// fresh closure on every frame, which is most of what compacting in place
+// was meant to avoid.
+// ─────────────────────────────────────────────────────────────
+const NOT_GONE  = e => !e.isGone();
+const NOT_DEAD  = e => !e.isDead();
+const COLLECTED = c => c.collected;
+
+// ─────────────────────────────────────────────────────────────
 // LEVEL GENERATOR
 // Produces platform, coin, minion, flag, moving platforms,
 // question blocks, power-ups, and flying enemies for a stage.
@@ -2402,7 +2412,7 @@ class RunnerEngine {
         this._onPowerUpCollect(pu);
       }
     });
-    this.powerUps = this.powerUps.filter(pu => !pu.collected || pu._age < 5);
+    ArrayOps.compact(this.powerUps, pu => !pu.collected || pu._age < 5);
 
     // Ground minions
     this.minions.forEach(m => {
@@ -2432,7 +2442,7 @@ class RunnerEngine {
         }
       }
     });
-    this.minions = this.minions.filter(m => !m.isGone());
+    ArrayOps.compact(this.minions, NOT_GONE);
 
     // Shell dinos (Koopa-style)
     this.shellDinos.forEach(sd => {
@@ -2462,7 +2472,7 @@ class RunnerEngine {
         }
       }
     });
-    this.shellDinos = this.shellDinos.filter(sd => !sd.isGone());
+    ArrayOps.compact(this.shellDinos, NOT_GONE);
 
     // Spiny dinos (stomp-immune)
     this.spinyDinos.forEach(sp => {
@@ -2486,7 +2496,7 @@ class RunnerEngine {
         }
       }
     });
-    this.spinyDinos = this.spinyDinos.filter(sp => !sp.isGone());
+    ArrayOps.compact(this.spinyDinos, NOT_GONE);
 
     // Bomb minions (Bullet Bill-style)
     this.bombMinions.forEach(bm => {
@@ -2504,7 +2514,7 @@ class RunnerEngine {
         }
       }
     });
-    this.bombMinions = this.bombMinions.filter(bm => !bm.isGone());
+    ArrayOps.compact(this.bombMinions, NOT_GONE);
 
     // Flying enemies
     this.flyingEnemies.forEach(fe => {
@@ -2525,7 +2535,7 @@ class RunnerEngine {
         }
       }
     });
-    this.flyingEnemies = this.flyingEnemies.filter(fe => !fe.isGone());
+    ArrayOps.compact(this.flyingEnemies, NOT_GONE);
 
     // Spring pads
     this.springs.forEach(sp => {
@@ -2559,16 +2569,16 @@ class RunnerEngine {
 
     // Particles
     this.particles.forEach(p => p.update());
-    this.particles = this.particles.filter(p => !p.isDead());
+    ArrayOps.compact(this.particles, NOT_DEAD);
     this.fx.update();
 
     // Dust particles
     this.dustParticles.forEach(p => p.update());
-    this.dustParticles = this.dustParticles.filter(p => !p.isDead());
+    ArrayOps.compact(this.dustParticles, NOT_DEAD);
 
     // Phase 7: shockwave rings
     this._shockwaveRings.forEach(r => r.update());
-    this._shockwaveRings = this._shockwaveRings.filter(r => !r.isDead());
+    ArrayOps.compact(this._shockwaveRings, NOT_DEAD);
   }
 
   // ── Stomp an enemy (shared for ground + flying) ──────────────
@@ -2747,7 +2757,10 @@ class RunnerEngine {
     this._drawGround(ctx);
 
     // Spring pads (drawn behind platforms)
-    this.springs.filter(sp => sp.isVisible(this.W)).forEach(sp => sp.draw(ctx));
+    for (let i = 0; i < this.springs.length; i++) {
+      const sp = this.springs[i];
+      if (sp.isVisible(this.W)) sp.draw(ctx);
+    }
 
     // Checkpoint flag
     if (this.checkpoint && this.checkpoint.isVisible(this.W)) {
@@ -2755,28 +2768,44 @@ class RunnerEngine {
     }
 
     // Moving platforms
-    this.movingPlatforms.filter(mp => mp.isVisible(this.W)).forEach(mp => mp.draw(ctx));
+    for (let i = 0; i < this.movingPlatforms.length; i++) {
+      const mp = this.movingPlatforms[i];
+      if (mp.isVisible(this.W)) mp.draw(ctx);
+    }
 
     // Static platforms
-    this.platforms.filter(p => p.isVisible(this.W)).forEach(p => p.draw(ctx, this.sprites.tiles));
+    const tileSprites = this.sprites.tiles;
+    for (let i = 0; i < this.platforms.length; i++) {
+      const p = this.platforms[i];
+      if (p.isVisible(this.W)) p.draw(ctx, tileSprites);
+    }
 
     // Question blocks
-    this.questionBlocks.filter(qb => qb.isVisible(this.W)).forEach(qb => qb.draw(ctx));
+    for (let i = 0; i < this.questionBlocks.length; i++) {
+      const qb = this.questionBlocks[i];
+      if (qb.isVisible(this.W)) qb.draw(ctx);
+    }
 
     // Coins
-    this.coins.filter(c => c.isVisible(this.W) && !c.collected).forEach(c => c.draw(ctx, this.audio));
+    for (let i = 0; i < this.coins.length; i++) {
+      const c = this.coins[i];
+      if (!c.collected && c.isVisible(this.W)) c.draw(ctx, this.audio);
+    }
 
     // Power-up items
-    this.powerUps.filter(pu => pu.isVisible(this.W) && !pu.collected).forEach(pu => pu.draw(ctx));
+    for (let i = 0; i < this.powerUps.length; i++) {
+      const pu = this.powerUps[i];
+      if (!pu.collected && pu.isVisible(this.W)) pu.draw(ctx);
+    }
 
     // Ground minions + new enemy types
-    this.minions.forEach(m => m.draw(ctx));
-    this.shellDinos.forEach(sd => sd.draw(ctx));
-    this.spinyDinos.forEach(sp => sp.draw(ctx));
-    this.bombMinions.forEach(bm => bm.draw(ctx));
+    for (let i = 0; i < this.minions.length; i++) this.minions[i].draw(ctx);
+    for (let i = 0; i < this.shellDinos.length; i++) this.shellDinos[i].draw(ctx);
+    for (let i = 0; i < this.spinyDinos.length; i++) this.spinyDinos[i].draw(ctx);
+    for (let i = 0; i < this.bombMinions.length; i++) this.bombMinions[i].draw(ctx);
 
     // Flying enemies
-    this.flyingEnemies.forEach(fe => fe.draw(ctx));
+    for (let i = 0; i < this.flyingEnemies.length; i++) this.flyingEnemies[i].draw(ctx);
 
     // Flag
     if (this.flag.sx < this.W + 100 && this.flag.sx > -100) {
@@ -2784,10 +2813,10 @@ class RunnerEngine {
     }
 
     // Phase 7: shockwave rings drawn behind dust (ground-level ellipses)
-    this._shockwaveRings.forEach(r => r.draw(ctx));
+    for (let i = 0; i < this._shockwaveRings.length; i++) this._shockwaveRings[i].draw(ctx);
 
     // Dust particles (at player feet, behind player)
-    this.dustParticles.forEach(p => p.draw(ctx));
+    for (let i = 0; i < this.dustParticles.length; i++) this.dustParticles[i].draw(ctx);
 
     // Companion pal — bobs along behind Riku
     if (this._compSprite && this._compSprite.complete && this._compSprite.naturalWidth > 0) {
@@ -2816,7 +2845,7 @@ class RunnerEngine {
     }
 
     // Particles
-    this.particles.forEach(p => p.draw(ctx));
+    for (let i = 0; i < this.particles.length; i++) this.particles[i].draw(ctx);
     this.fx.draw(ctx);
 
     ctx.restore(); // end screen-shake transform
@@ -2882,7 +2911,7 @@ class RunnerEngine {
       p.x += Math.sin(this._age * 0.03 + p.phase) * p.sway - 0.4; // slight leftward drift with camera
       p.rot += p.rotV;
     });
-    this._ambient = this._ambient.filter(p => p.y > -30 && p.y < this.H + 30);
+    ArrayOps.compact(this._ambient, p => p.y > -30 && p.y < this.H + 30);
   }
 
   _drawAmbient(ctx) {
@@ -3177,7 +3206,7 @@ class RunnerEngine {
 
     // ── Coins collected (top-right)
     const total     = this.coins.length;
-    const collected = this.coins.filter(c => c.collected).length;
+    const collected = ArrayOps.countWhere(this.coins, COLLECTED);
     ctx.font      = 'bold 16px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'right';
@@ -3304,7 +3333,7 @@ class RunnerEngine {
 
   // ── Public getters for battle phase ─────────────────────────
   getCollectedPhonemes() { return this.collectedPhonemes.slice(); }
-  getCollectedCount()    { return this.coins.filter(c => c.collected).length; }
+  getCollectedCount()    { return ArrayOps.countWhere(this.coins, COLLECTED); }
 }
 
 // ============================================================
