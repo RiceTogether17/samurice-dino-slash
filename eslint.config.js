@@ -35,7 +35,7 @@ module.exports = [
         AudioManager: 'readonly', RunnerEngine: 'readonly',
         SlashGame: 'readonly', CombatEngine: 'readonly',
         CombatPatterns: 'readonly', Coach: 'readonly',
-        SpriteCache: 'readonly', Quality: 'readonly', ArrayOps: 'readonly',
+        SpriteCache: 'readonly', Quality: 'readonly', ArrayOps: 'readonly', UI: 'readonly',
         haptic: 'readonly', Tutorial: 'readonly',
         ACHIEVEMENTS: 'readonly', SHOP_ITEMS: 'readonly',
         EndlessParticle: 'readonly', EndlessRunnerEngine: 'readonly',

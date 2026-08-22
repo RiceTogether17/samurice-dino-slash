@@ -72,3 +72,26 @@ test('phase poses follow the naming the resolver depends on', () => {
     assert.strictEqual(species(`https://x/assets/dinosaurs/${file}`), base);
   }
 });
+
+test('every boss sprite faces the player', async () => {
+  // Riku always stands on the left. The art was generated facing both ways,
+  // and mirroring at draw time is wrong for one group whichever way it is
+  // set — which is exactly how the boss ended up facing away from the fight.
+  // tools/normalise-facing.js flips the data instead; this keeps it flipped.
+  const sharp = require('sharp');
+  const dir = path.join(ROOT, 'assets/dinosaurs');
+  const wrong = [];
+  for (const name of fs.readdirSync(dir).filter(f => /\.(webp|png)$/i.test(f))) {
+    const file = path.join(dir, name);
+    const meta = await sharp(file).metadata();
+    const raw = await sharp(file).ensureAlpha().raw().toBuffer();
+    const W = meta.width, H = meta.height;
+    let left = 0, right = 0;
+    for (let y = Math.floor(H * 0.10); y < Math.floor(H * 0.40); y++) {
+      for (let x = 0; x < W; x++) if (raw[(y * W + x) * 4 + 3] > 40) (x < W / 2 ? left++ : right++);
+    }
+    if (right > left * 1.05) wrong.push(name);
+  }
+  assert.deepStrictEqual(wrong, [],
+    `these face away from Riku — run tools/normalise-facing.js --write:\n${wrong.join('\n')}`);
+});

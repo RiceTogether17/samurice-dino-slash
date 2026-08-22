@@ -33,72 +33,19 @@ body {
 /* ============================================================
    MODE CHOOSER  — bright, warm, kid-friendly layout
 ============================================================ */
-#modeChooser {
-    background:
-        radial-gradient(ellipse at 20% 10%, rgba(255,220,100,0.4) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 90%, rgba(255,140,50,0.3) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 50%, rgba(255,255,200,0.15) 0%, transparent 60%),
-        linear-gradient(160deg, #1a6b3a 0%, #2d8a4e 35%, #44a864 70%, #3d9a55 100%);
-    flex-direction: column;
-    gap: 0;
-    overflow: hidden;
-}
 
 /* Decorative floating sparkles */
-#modeChooser::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image:
-        radial-gradient(circle 3px at 15% 25%, rgba(255,230,100,0.55) 100%, transparent),
-        radial-gradient(circle 4px at 80% 15%, rgba(255,215,0,0.45)  100%, transparent),
-        radial-gradient(circle 3px at 50% 70%, rgba(255,255,200,0.4) 100%, transparent),
-        radial-gradient(circle 4px at 25% 80%, rgba(255,215,0,0.5)   100%, transparent),
-        radial-gradient(circle 3px at 90% 55%, rgba(255,230,100,0.35) 100%, transparent),
-        radial-gradient(circle 2px at 45% 15%, rgba(255,255,255,0.5) 100%, transparent),
-        radial-gradient(circle 2px at 70% 45%, rgba(255,255,255,0.4) 100%, transparent),
-        radial-gradient(circle 2px at 10% 60%, rgba(255,255,255,0.35) 100%, transparent);
-    pointer-events: none;
-    animation: sparkleFloat 6s ease-in-out infinite alternate;
-}
 @keyframes sparkleFloat {
     0%   { transform: translateY(0); }
     100% { transform: translateY(-8px); }
 }
 
-.mc-hero {
-    padding: 20px 20px 10px;
-    text-align: center;
-    position: relative;
-}
 
-.mc-mascot {
-    height: clamp(160px, 35vh, 300px);
-    object-fit: contain;
-    filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5));
-    animation: mascotBounce 2.2s ease-in-out infinite;
-    display: block;
-    margin: 0 auto 12px;
-}
 @keyframes mascotBounce {
     0%, 100% { transform: translateY(0) rotate(-3deg) scale(1); }
     50%       { transform: translateY(-14px) rotate(3deg) scale(1.03); }
 }
 
-.mc-title {
-    font-size: clamp(2.6rem, 11vw, 4rem);
-    color: #fff;
-    text-shadow:
-        0 4px 0 #b85400,
-        0 0 20px rgba(255,200,50,0.8),
-        0 0 50px rgba(255,150,0,0.5),
-        0 0 80px rgba(255,100,0,0.3);
-    animation: titleBounce 2.4s ease-in-out infinite;
-    margin-bottom: 10px;
-    line-height: 1.15;
-    letter-spacing: 0.04em;
-    -webkit-text-stroke: 1px rgba(180,80,0,0.3);
-}
 @keyframes titleBounce {
     0%, 100% { transform: translateY(0) scale(1); }
     50%       { transform: translateY(-7px) scale(1.03); }
@@ -1197,9 +1144,6 @@ body {
     .mc-buttons { padding: 8px 12px 20px; gap: 10px; }
 }
 @media (orientation: landscape) and (max-height: 500px) {
-    .mc-hero    { padding: 8px 20px 4px; }
-    .mc-mascot  { height: clamp(90px, 22vh, 160px); }
-    .mc-title   { font-size: 2rem; }
     .mc-buttons { padding: 4px 16px 10px; gap: 10px; }
     .mc-btn     { padding: 18px 22px; border-radius: 22px; }
     .mc-icon    { font-size: 2.6rem; }
@@ -1389,13 +1333,6 @@ body {
 .endless-mode .dpad-move { display: none; }
 
 /* ── Mode chooser — updated hero & button styles ─────────── */
-#modeChooser {
-    background:
-        radial-gradient(ellipse at 20% 10%, rgba(255,220,100,0.4) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 90%, rgba(255,140,50,0.3) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 50%, rgba(255,255,200,0.15) 0%, transparent 60%),
-        linear-gradient(160deg, #1a6b3a 0%, #2d8a4e 35%, #44a864 70%, #3d9a55 100%);
-}
 
 /* ── Enhanced battle overlay for campaign mode ───────────── */
 .battle-overlay {
@@ -2316,7 +2253,6 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 }
 
 /* Mode chooser breathes around the notch & gesture bar */
-.mc-hero    { padding-top: calc(20px + env(safe-area-inset-top)); }
 .mc-buttons { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
 
 /* Battle tiles stay above the gesture bar so the bottom row is tappable */
@@ -2329,24 +2265,6 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 ============================================================ */
 
 /* Override hero: mascot dominates the top half */
-.mc-hero {
-    padding: calc(48px + env(safe-area-inset-top)) 20px 4px;
-    flex: 1;
-    min-height: 0;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-.mc-hero .mc-mascot {
-    height: clamp(170px, 36vh, 380px);
-    margin-bottom: 8px;
-}
-.mc-hero .mc-title {
-    font-size: clamp(2rem, 8vw, 3rem);
-    margin-bottom: 0;
-}
 
 /* ── Top corner strip: streak chip + level badge ── */
 .mc-top-strip {
@@ -2388,66 +2306,13 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 }
 
 /* ── Hero CTA wrap ── */
-.mc-cta-wrap {
-    flex-shrink: 0;
-    padding: 14px 18px 8px;
-    width: 100%;
-    max-width: 480px;
-    align-self: center;
-}
 
 /* BIG PLAY button — centred, no left/right sub-labels */
-.mc-play-btn {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 18px;
-    padding: 22px 28px;
-    background: linear-gradient(135deg, #FFD700 0%, #FFA000 45%, #FF4500 100%);
-    border: 4px solid rgba(255,255,255,0.45);
-    border-radius: 28px;
-    cursor: pointer;
-    font-family: inherit;
-    box-shadow: 0 10px 0 rgba(170,60,0,0.5), 0 8px 28px rgba(255,100,0,0.4);
-    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s;
-    position: relative;
-    overflow: hidden;
-}
-.mc-play-btn::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(170deg, rgba(255,255,255,0.22) 0%, transparent 50%);
-    pointer-events: none;
-}
-.mc-play-btn:hover  { transform: translateY(-5px); box-shadow: 0 15px 0 rgba(170,60,0,0.5), 0 12px 36px rgba(255,100,0,0.5); }
-.mc-play-btn:active { transform: translateY(6px);  box-shadow: 0 4px 0 rgba(170,60,0,0.5); }
 
-.mc-play-icon {
-    font-size: clamp(2.8rem, 8vw, 3.5rem);
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
-    flex-shrink: 0;
-    animation: playIconWiggle 3.2s ease-in-out infinite;
-}
 @keyframes playIconWiggle {
     0%, 75%, 100% { transform: rotate(0deg) scale(1); }
     82% { transform: rotate(-13deg) scale(1.1); }
     90% { transform: rotate(8deg) scale(1.05); }
-}
-.mc-play-name {
-    font-size: clamp(2rem, 7vw, 2.8rem);
-    font-weight: 900;
-    color: #fff;
-    text-shadow: 0 3px 0 rgba(160,55,0,0.6);
-    letter-spacing: 0.08em;
-    line-height: 1;
-}
-.mc-play-arrow {
-    font-size: 2rem;
-    color: rgba(255,255,255,0.9);
-    flex-shrink: 0;
-    animation: playArrowBounce 1.6s ease-in-out infinite;
 }
 @keyframes playArrowBounce {
     0%, 100% { transform: translateX(0); }
@@ -2455,49 +2320,6 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 }
 
 /* ── Secondary row: 3 equal buttons ── */
-.mc-secondary {
-    flex-shrink: 0;
-    display: flex;
-    gap: 10px;
-    padding: 0 18px calc(18px + env(safe-area-inset-bottom));
-    width: 100%;
-    max-width: 520px;
-    align-self: center;
-}
-.mc-sec-btn {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    padding: 12px 8px;
-    background: rgba(255,255,255,0.12);
-    border: 2.5px solid rgba(255,255,255,0.22);
-    border-radius: 20px;
-    cursor: pointer;
-    font-family: inherit;
-    color: #fff;
-    box-shadow: 0 4px 0 rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.25);
-    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s, background 0.15s;
-    position: relative;
-}
-.mc-sec-btn:hover  {
-    transform: translateY(-3px);
-    box-shadow: 0 7px 0 rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.3);
-    background: rgba(255,255,255,0.2);
-}
-.mc-sec-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,0.3); }
-.mc-sec-icon {
-    font-size: clamp(1.5rem, 5vw, 1.9rem);
-    filter: drop-shadow(0 2px 5px rgba(0,0,0,0.4));
-    line-height: 1;
-}
-.mc-sec-label {
-    font-size: clamp(0.68rem, 2.2vw, 0.82rem);
-    font-weight: 900;
-    color: rgba(255,240,200,0.9);
-}
 .mc-notif-dot {
     position: absolute;
     top: 6px; right: 7px;
@@ -2686,20 +2508,8 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 .be-feedback:not(:empty) { animation: feedbackPop 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
 
 /* ── Home screen: brighter secondary labels for readability ── */
-.mc-sec-label { color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.5); }
 
 /* ── PLAY button: periodic shine sweep draws the eye ───────── */
-.mc-play-btn::before {
-    content: '';
-    position: absolute;
-    top: 0; bottom: 0;
-    left: -75%;
-    width: 45%;
-    background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.42) 50%, transparent 100%);
-    transform: skewX(-18deg);
-    animation: playShine 3.4s ease-in-out infinite;
-    pointer-events: none;
-}
 @keyframes playShine {
     0%, 55% { left: -75%; }
     75%, 100% { left: 130%; }
@@ -2996,3 +2806,336 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
   .battle-overlay .cb-btn { font-size: 0.85rem; padding: 9px 10px; }
   .battle-overlay .cb-coach { font-size: 0.85rem; max-width: 92%; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   TITLE SCREEN
+   Rebuilt around the game's own painted art. The previous version was a
+   flat green gradient with emoji standing in for icons, which looked like
+   a placeholder next to the artwork the rest of the game ships.
+   ═══════════════════════════════════════════════════════════════ */
+
+#modeChooser {
+    --ink:        #17110D;
+    --lacquer:    #C8342B;
+    --lacquer-dk: #8E1F19;
+    --gold:       #F2C14E;
+    --gold-dk:    #B4832A;
+    --rice:       #F7F1E4;
+
+    /* .screen positions these absolutely; restating it here keeps the rule
+       self-contained — declaring `relative` collapsed the screen to its
+       content height and let the page background show underneath.
+       Note what is deliberately NOT here: `display`. An id selector outranks
+       `.screen { display: none }`, so setting it here left the title screen
+       painted on top of every other screen in the game. Layout lives in the
+       `.active` rule below, where it cannot fight the screen system. */
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    color: var(--rice);
+    background: var(--ink);
+}
+
+#modeChooser.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(10px, 2.4vh, 22px);
+    padding: clamp(56px, 9vh, 78px) 16px clamp(16px, 3vh, 28px);
+}
+
+/* ── Painted scene ─────────────────────────────────────────── */
+.mc-scene { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.mc-scene-img {
+    position: absolute;
+    inset: -3%;
+    background: url('../assets/backgrounds/arena-3.jpg') center/cover no-repeat;
+    /* A slow drift keeps the screen alive without asking anything of the GPU
+       that a phone would notice. */
+    animation: mcDrift 38s ease-in-out infinite alternate;
+}
+@keyframes mcDrift {
+    from { transform: scale(1.06) translate3d(-1.2%, 0.6%, 0); }
+    to   { transform: scale(1.12) translate3d(1.2%, -0.6%, 0); }
+}
+.mc-scene-scrim {
+    position: absolute;
+    inset: 0;
+    /* Two jobs: sink the busy middle of the painting so type reads, and pull
+       a warm dark base under the buttons at the bottom. */
+    background:
+        radial-gradient(120% 80% at 50% 34%, rgba(10, 6, 16, 0.10) 0%, rgba(10, 6, 16, 0.62) 62%, rgba(8, 5, 12, 0.86) 100%),
+        linear-gradient(to bottom, rgba(24, 10, 26, 0.42) 0%, rgba(18, 8, 20, 0.14) 34%, rgba(12, 6, 14, 0.80) 100%);
+}
+
+/* Blossom drift, echoing the cherry trees in the painting. */
+.mc-petals { position: absolute; inset: 0; overflow: hidden; }
+.mc-petals span {
+    position: absolute;
+    top: -6%;
+    width: 9px; height: 9px;
+    border-radius: 60% 10% 60% 10%;
+    background: rgba(255, 214, 229, 0.85);
+    animation: mcPetal linear infinite;
+}
+@keyframes mcPetal {
+    0%   { transform: translate3d(0, -10vh, 0) rotate(0deg); opacity: 0; }
+    10%  { opacity: 0.9; }
+    100% { transform: translate3d(9vw, 112vh, 0) rotate(420deg); opacity: 0; }
+}
+.mc-petals span:nth-child(1) { left:  6%; animation-duration: 15s; animation-delay: 0s;    }
+.mc-petals span:nth-child(2) { left: 18%; animation-duration: 19s; animation-delay: -4s; width: 7px; height: 7px; }
+.mc-petals span:nth-child(3) { left: 31%; animation-duration: 13s; animation-delay: -9s;  }
+.mc-petals span:nth-child(4) { left: 44%; animation-duration: 21s; animation-delay: -2s; width: 6px; height: 6px; }
+.mc-petals span:nth-child(5) { left: 57%; animation-duration: 16s; animation-delay: -12s; }
+.mc-petals span:nth-child(6) { left: 68%; animation-duration: 18s; animation-delay: -6s; width: 8px; height: 8px; }
+.mc-petals span:nth-child(7) { left: 79%; animation-duration: 14s; animation-delay: -15s; }
+.mc-petals span:nth-child(8) { left: 88%; animation-duration: 20s; animation-delay: -8s; width: 7px; height: 7px; }
+.mc-petals span:nth-child(9) { left: 95%; animation-duration: 17s; animation-delay: -18s; }
+
+/* ── Hero: title lockup + mascot ───────────────────────────── */
+.mc-hero {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    /* Bottom-aligned: centring a short mascot against a three-line lockup
+       pushed it into the wordmark. */
+    align-items: flex-end;
+    justify-content: center;
+    gap: clamp(14px, 3.4vw, 40px);
+}
+.mc-lockup { text-align: center; }
+
+.mc-kicker {
+    margin: 0 0 4px;
+    font-size: clamp(0.58rem, 1.5vw, 0.72rem);
+    font-weight: 800;
+    letter-spacing: 0.30em;
+    text-transform: uppercase;
+    color: var(--gold);
+    opacity: 0.95;
+}
+.mc-title { margin: 0; line-height: 0.94; }
+.mc-title-main {
+    display: block;
+    font-size: clamp(2.4rem, 8.4vw, 4.4rem);
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    color: var(--rice);
+    /* A cut edge rather than a soft blur: the art is crisp, so the type is. */
+    text-shadow:
+        0 2px 0 var(--lacquer-dk),
+        0 4px 0 rgba(0, 0, 0, 0.45),
+        0 10px 26px rgba(0, 0, 0, 0.6);
+}
+.mc-title-rule {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 5px auto 3px;
+    width: min(320px, 74%);
+}
+.mc-title-rule i {
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(to right, transparent, var(--gold), transparent);
+}
+.mc-title-rule svg {
+    width: 18px; height: 18px;
+    fill: none;
+    stroke: var(--gold);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex: none;
+}
+.mc-title-sub {
+    display: block;
+    font-size: clamp(1.05rem, 3.6vw, 1.75rem);
+    font-weight: 800;
+    letter-spacing: 0.34em;
+    text-indent: 0.34em;
+    text-transform: uppercase;
+    color: #FFD9E4;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+}
+
+.mc-mascot {
+    width: clamp(70px, 13.5vw, 124px);
+    margin-bottom: 2px;
+    filter: drop-shadow(0 12px 16px rgba(0, 0, 0, 0.55));
+    animation: mcBob 3.4s ease-in-out infinite;
+}
+@keyframes mcBob {
+    0%, 100% { transform: translateY(0)     rotate(-1.5deg); }
+    50%      { transform: translateY(-7px)  rotate(1.5deg);  }
+}
+
+/* ── Primary action ────────────────────────────────────────── */
+.mc-cta-wrap { position: relative; z-index: 2; }
+.mc-play-btn {
+    display: block;
+    min-width: clamp(210px, 42vw, 300px);
+    padding: clamp(10px, 1.9vh, 16px) 34px;
+    border: 2px solid rgba(255, 226, 168, 0.55);
+    border-radius: 16px;
+    font-family: inherit;
+    color: #FFF8E9;
+    cursor: pointer;
+    background: linear-gradient(180deg, #D8433A 0%, var(--lacquer) 46%, var(--lacquer-dk) 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.35),
+        0 5px 0 var(--lacquer-dk),
+        0 14px 30px rgba(0, 0, 0, 0.55);
+    transition: transform 0.09s ease, box-shadow 0.09s ease;
+}
+.mc-play-btn:hover { transform: translateY(-1px); }
+.mc-play-btn:active {
+    transform: translateY(5px);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45), 0 0 0 var(--lacquer-dk);
+}
+.mc-play-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.mc-play-name {
+    display: block;
+    font-size: clamp(1.5rem, 4.6vw, 2.05rem);
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-indent: 0.16em;
+}
+.mc-play-sub {
+    display: block;
+    margin-top: 1px;
+    font-size: clamp(0.6rem, 1.7vw, 0.74rem);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.82;
+}
+
+/* ── Secondary row ─────────────────────────────────────────── */
+.mc-secondary {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(8px, 1.6vw, 14px);
+    width: min(430px, 94%);
+}
+.mc-sec-btn {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: clamp(8px, 1.5vh, 12px) 6px;
+    border: 1px solid rgba(255, 232, 198, 0.22);
+    border-radius: 14px;
+    font-family: inherit;
+    color: var(--rice);
+    cursor: pointer;
+    /* Frosted over the painting rather than an opaque slab, so the scene
+       still reads behind the controls. */
+    background: rgba(28, 18, 26, 0.52);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    transition: background 0.14s ease, transform 0.09s ease, border-color 0.14s ease;
+}
+.mc-sec-btn:hover {
+    background: rgba(52, 32, 44, 0.72);
+    border-color: rgba(242, 193, 78, 0.6);
+}
+.mc-sec-btn:active { transform: translateY(2px); }
+.mc-sec-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+.mc-sec-icon {
+    display: grid;
+    place-items: center;
+    width: clamp(26px, 5.4vw, 32px);
+    height: clamp(26px, 5.4vw, 32px);
+}
+.mc-sec-icon img { width: 100%; height: 100%; object-fit: contain; }
+.mc-sec-icon svg {
+    width: 100%; height: 100%;
+    fill: none;
+    stroke: var(--gold);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.mc-sec-label {
+    font-size: clamp(0.62rem, 1.8vw, 0.76rem);
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+/* Short landscape phones: drop the mascot rather than squeeze everything. */
+@media (max-height: 430px) and (orientation: landscape) {
+    .mc-mascot { display: none; }
+    #modeChooser { gap: 8px; padding-top: 48px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mc-scene-img, .mc-petals span, .mc-mascot { animation: none; }
+    .mc-petals { display: none; }
+}
+
+/* ── Title-screen top strip ────────────────────────────────────
+   Re-skinned to the lacquer/gold palette; the old chips were carried over
+   from the green layout and read as leftovers on the painted scene. */
+#modeChooser .mc-top-strip {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    pointer-events: none;
+}
+#modeChooser .mc-top-spacer { flex: 1; }
+
+#modeChooser .mc-streak-chip,
+#modeChooser .mc-level-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 13px;
+    border: 1px solid rgba(242, 193, 78, 0.45);
+    border-radius: 999px;
+    background: rgba(24, 14, 20, 0.62);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    color: #FFE6B8;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    box-shadow: none;
+    pointer-events: auto;
+}
+#modeChooser .mc-level-badge { color: #F2C14E; }
+
+#modeChooser .mc-settings-btn {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid rgba(242, 193, 78, 0.45);
+    border-radius: 50%;
+    background: rgba(24, 14, 20, 0.62);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: transform 0.18s ease, border-color 0.18s ease;
+}
+#modeChooser .mc-settings-btn:hover {
+    transform: rotate(35deg);
+    border-color: var(--gold);
+    background: rgba(48, 26, 34, 0.78);
+}
+#modeChooser .mc-settings-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }

@@ -14,6 +14,7 @@ everything else assumes it exists.
 
 ```
 js/core/arrays.js        allocation-free list maintenance
+js/core/ui.js            shared look for the canvas menus
 js/core/quality.js       device tier + adaptive graphics settings
 js/core/spriteCache.js   pre-scaled texture cache
 js/core/renderPatch.js   installs the cache over ctx.drawImage
@@ -138,6 +139,30 @@ for new readers — must never let the clock take a round away.
 
 Adding a skill means adding a pattern and an entry in `BY_SKILL`. If a new
 activity has no mechanic, the tests fail rather than silently falling back.
+
+## Menus
+
+The title screen is DOM (`#modeChooser` in `index.html`); everything past
+PLAY is drawn on the canvas. Both now share one palette — ink ground, lacquer
+for the single primary action, gold for accents, frosted panels over the
+game's own painted backgrounds.
+
+`js/core/ui.js` carries that for the canvas side: `scene` (painted background
+plus a tunable scrim, cached per size), `heading`, `chip`, `card` and `ghost`.
+Describe a menu with those rather than drawing one from scratch, or it will
+drift — the mode picker used to be eight saturated pills in eight different
+colours with no hierarchy, and stage select was dark green cards on a dark
+green field.
+
+Two traps worth knowing:
+
+- **Never set `display` on a screen's id selector.** `.screen { display: none }`
+  is what hides inactive screens, and an id outranks it — doing this left the
+  title screen painted on top of the running game. Put layout in
+  `#id.active` instead. `tools/smoke.js` asserts exactly one screen is visible.
+- **The top-right of the canvas is not yours.** The fullscreen and close
+  buttons are DOM elements floating over it; canvas HUD needs to keep about
+  116 px clear on that side.
 
 ## Performance work
 
