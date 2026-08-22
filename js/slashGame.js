@@ -265,6 +265,10 @@ class SlashGame {
     this.runner = null;
     this.battle = null;
     // Input for menus
+    // One cache slot per screen: UI.scene keys its cache but hangs it on the
+    // holder, so screens sharing a holder would evict each other every frame.
+    this._sceneHolders = { modeSelect: {}, stageSelect: {}, shop: {},
+                           achievements: {}, leaderboard: {} };
     this._menuSel = 0;   // selected stage within the open world (stage-select)
     this._worldSel = 0;  // selected world (world-map)
     this._bindMenuInput();
@@ -1461,7 +1465,7 @@ class SlashGame {
     // ('stage-1-rice-paddy', not 'stage-1').
     const firstStage = PHONICS_DATA.stageList[world.startId - 1];
     UI.scene(ctx, this.sprites[firstStage && firstStage.bg],
-             W, H, this, `stageselect-${world.id}`);
+             W, H, this._sceneHolders.stageSelect, `stageselect-${world.id}`);
     const ids   = world.stageIds;
     if (this._menuSel >= ids.length) this._menuSel = ids.length - 1;
     // Header — world name, the skill it teaches, and the rice count
@@ -2818,7 +2822,7 @@ class SlashGame {
     ctx.clearRect(0, 0, W, H);
     // Same painted-and-scrimmed treatment as the title screen, so pressing
     // PLAY does not drop the player from a painted scene into a flat gradient.
-    UI.scene(ctx, this.sprites['arena-3'] || this.sprites['stage-3'], W, H, this, 'modeselect');
+    UI.scene(ctx, this.sprites['arena-3'], W, H, this._sceneHolders.modeSelect, 'modeselect');
 
     const afterHeading = UI.heading(ctx, 'CHOOSE YOUR ADVENTURE', W, 16);
     // Left, not right: the fullscreen and close buttons are DOM elements
@@ -3128,19 +3132,9 @@ class SlashGame {
   _drawShop() {
     const ctx = this.ctx, W = this.W, H = this.H;
     ctx.clearRect(0, 0, W, H);
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#1a0d2e'); bg.addColorStop(1, '#0d1a1a');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-    // Header
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(26, W*0.06)}px Arial Black, sans-serif`;
-    ctx.fillStyle = '#FFD700';
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
-    ctx.strokeText('🏪 RICE GRAIN SHOP', W/2, 14);
-    ctx.fillText('🏪 RICE GRAIN SHOP', W/2, 14);
-    // Grain count
-    ctx.textAlign = 'right'; ctx.font = `bold 16px Arial, sans-serif`;
-    ctx.fillStyle = '#FFD700'; ctx.fillText(`🌾 ${this.progress.getRiceGrains()}`, W-10, 16);
+    UI.scene(ctx, this.sprites['bonus-training'], W, H, this._sceneHolders.shop, 'shop', 1.5);
+    UI.heading(ctx, 'RICE GRAIN SHOP', W, 12);
+    UI.chip(ctx, `${this.progress.getRiceGrains()} rice`, 12, 12);
     // Tabs
     const tabs = ['swords','hats','companions','powerups'];
     const tabLabels = { swords:'⚔️ Swords', hats:'🎩 Hats', companions:'🐾 Pals', powerups:'💊 Power' };
@@ -3149,18 +3143,19 @@ class SlashGame {
     tabs.forEach((tab, i) => {
       const tx = i * tabW, ty = 50, tw = tabW - 2, th = 36;
       const isActive = this._shopTab === tab;
-      ctx.fillStyle = isActive ? '#FFD700' : 'rgba(255,255,255,0.1)';
-      ctx.beginPath(); ctx.roundRect(tx+1, ty, tw, th, 6); ctx.fill();
-      ctx.strokeStyle = isActive ? '#FFD700' : 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1;
+      ctx.fillStyle = isActive ? 'rgba(74,48,20,0.95)' : UI.THEME.panel;
+      ctx.beginPath(); ctx.roundRect(tx+1, ty, tw, th, 10); ctx.fill();
+      ctx.strokeStyle = isActive ? UI.THEME.gold : UI.THEME.stroke;
+      ctx.lineWidth = isActive ? 2 : 1;
       ctx.stroke();
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.min(13,W*0.032)}px Arial, sans-serif`;
-      ctx.fillStyle = isActive ? '#000' : '#fff';
+      ctx.font = `800 ${Math.min(13,W*0.032)}px ${UI.THEME.font}`;
+      ctx.fillStyle = isActive ? UI.THEME.gold : UI.THEME.muted;
       ctx.fillText(tabLabels[tab], tx + tw/2, ty + th/2);
       this._shopTabRects.push({ x:tx, y:ty, w:tw, h:th, tab });
     });
     // Items grid
-    const items = SHOP_ITEMS[this._shopTab] || [];
+    const items = SHOP_ITEMS[this._shopTab] || SHOP_ITEMS.swords || [];
     const cols = 2;
     const itemW = (W - 24) / cols;
     const itemH = Math.min(110, (H - 120) / 3);
@@ -3176,10 +3171,11 @@ class SlashGame {
       const isEquip = Object.values(equipped).includes(item.id);
       const pcount = this.progress.getPowerupCount(item.id);
       // Background
-      ctx.fillStyle = isEquip ? 'rgba(255,215,0,0.15)' : owned ? 'rgba(255,255,255,0.08)' : 'rgba(100,100,100,0.1)';
-      ctx.strokeStyle = isEquip ? '#FFD700' : owned ? '#888' : '#444';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.roundRect(ix, iy, itemW, itemH, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = isEquip ? 'rgba(74,48,20,0.92)'
+                    : owned ? UI.THEME.panelHot : UI.THEME.panel;
+      ctx.strokeStyle = isEquip ? UI.THEME.gold : UI.THEME.stroke;
+      ctx.lineWidth = isEquip ? 2 : 1;
+      ctx.beginPath(); ctx.roundRect(ix, iy, itemW, itemH, 12); ctx.fill(); ctx.stroke();
       // Icon image (painted item art), emoji fallback
       const iconSp = this.sprites[`item-${item.id}`];
       const iconSz = Math.min(44, itemH * 0.52);
@@ -3218,11 +3214,7 @@ class SlashGame {
       ctx.fillText(btnLabel, bx + bw/2, by + bh/2);
       this._shopItemRects.push({ x:ix, y:iy, w:itemW, h:itemH, item, bx, by, bw, bh });
     });
-    // Back button
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.font = `bold 14px Arial, sans-serif`;
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.fillText('← BACK', W/2, H - 6);
+    UI.ghost(ctx, 'Back', W / 2, H - 34);
   }
   _clickShop(mx, my) {
     // Tab clicks
@@ -3431,16 +3423,14 @@ class SlashGame {
   _drawAchievements() {
     const ctx = this.ctx, W = this.W, H = this.H;
     ctx.clearRect(0, 0, W, H);
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#0d1a2e'); bg.addColorStop(1, '#1a2e0d');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(24,W*0.058)}px Arial Black, sans-serif`;
-    ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
-    ctx.strokeText('🥇 ACHIEVEMENTS', W/2, 12); ctx.fillText('🥇 ACHIEVEMENTS', W/2, 12);
+    UI.scene(ctx, this.sprites['victory-golden-harvest'], W, H,
+             this._sceneHolders.achievements, 'achievements', 1.55);
+    UI.heading(ctx, 'ACHIEVEMENTS', W, 12);
     const unlocked = this.progress.data.achievements || [];
-    ctx.font = `13px Arial, sans-serif`; ctx.fillStyle = '#aaa';
-    ctx.fillText(`${unlocked.length} / ${ACHIEVEMENTS.length} unlocked`, W/2, 44);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `800 13px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.gold;
+    ctx.fillText(`${unlocked.length} of ${ACHIEVEMENTS.length} unlocked`, W/2, 46);
     const cols = 2, rows = Math.ceil(ACHIEVEMENTS.length / cols);
     const cellW = (W - 24) / cols, cellH = Math.min(64, (H - 90) / 4.5);
     const startY = 62;
@@ -3451,11 +3441,14 @@ class SlashGame {
       if (ay + cellH < 60 || ay > H) return;
       const isUnlocked = unlocked.includes(ach.id);
       const isNew = this.progress.data.newAchievements?.includes(ach.id);
-      ctx.fillStyle = isNew ? 'rgba(255,215,0,0.18)' : isUnlocked ? 'rgba(255,255,255,0.1)' : 'rgba(50,50,50,0.5)';
-      ctx.strokeStyle = isNew ? '#FFD700' : isUnlocked ? '#888' : '#333';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.roundRect(ax, ay, cellW - 4, cellH, 8); ctx.fill(); ctx.stroke();
-      ctx.globalAlpha = isUnlocked ? 1 : 0.45;
+      ctx.fillStyle = isNew ? 'rgba(74,48,20,0.92)'
+                    : isUnlocked ? UI.THEME.panel : 'rgba(14,9,13,0.80)';
+      ctx.strokeStyle = isNew ? UI.THEME.gold
+                      : isUnlocked ? UI.THEME.stroke : 'rgba(255,255,255,0.10)';
+      ctx.lineWidth = isNew ? 2 : 1;
+      ctx.beginPath(); ctx.roundRect(ax, ay, cellW - 4, cellH, 10); ctx.fill(); ctx.stroke();
+      // Locked rows still have to be readable; 0.45 alpha over art was not.
+      ctx.globalAlpha = isUnlocked ? 1 : 0.72;
       // Medal frame (gold w/ ribbon when unlocked, grey padlock when locked)
       const medalSp = this.sprites[isUnlocked ? 'medal-unlocked' : 'medal-locked'];
       const medalSz = Math.min(40, cellH * 0.78);
@@ -3487,15 +3480,16 @@ class SlashGame {
   }
   // Big, thumb-friendly BACK button used by daily/achievements/scores
   _drawBigBack(ctx, W, H) {
-    const bw = 160, bh = 46, bx = W/2 - bw/2, by = H - bh - 6;
+    const bw = 160, bh = 44, bx = W / 2 - bw / 2, by = H - bh - 8;
     ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.fill(); ctx.stroke();
-    ctx.font = 'bold 18px "Nunito", Arial, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillStyle = 'rgba(10,6,12,0.72)';
+    ctx.strokeStyle = UI.THEME.stroke;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, bh / 2); ctx.fill(); ctx.stroke();
+    ctx.font = `800 16px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.rice;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('\u2190 BACK', W/2, by + bh/2);
+    ctx.fillText('Back', W / 2, by + bh / 2 + 0.5);
     ctx.restore();
   }
 
@@ -3513,35 +3507,35 @@ class SlashGame {
   _drawLeaderboard() {
     const ctx = this.ctx, W = this.W, H = this.H;
     ctx.clearRect(0, 0, W, H);
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#0d0d2e'); bg.addColorStop(1, '#2e0d0d');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    UI.scene(ctx, this.sprites['arena-5'], W, H,
+                 this._sceneHolders.leaderboard, 'leaderboard', 1.6);
+    UI.heading(ctx, 'BEST SCORES', W, 12);
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(24,W*0.058)}px Arial Black, sans-serif`;
-    ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
-    ctx.strokeText('🏆 BEST SCORES', W/2, 12); ctx.fillText('🏆 BEST SCORES', W/2, 12);
-    ctx.font = `13px Arial, sans-serif`; ctx.fillStyle = '#888';
-    ctx.fillText('Endless Run · scores on this device', W/2, 44);
+    ctx.font = `700 12px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.fillText('Endless Run · scores on this device', W/2, 46);
     const leaders = this.progress.getLeaderboard();
     const rowH = Math.min(40, (H - 110) / 11);
     const medals = ['🥇','🥈','🥉'];
     leaders.forEach((l, i) => {
       const ry = 64 + i * (rowH + 4);
       const isMe = l.isMe;
-      ctx.fillStyle = isMe ? 'rgba(255,215,0,0.18)' : i < 3 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)';
-      ctx.strokeStyle = isMe ? '#FFD700' : '#333'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.roundRect(10, ry, W-20, rowH, 8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = isMe ? 'rgba(74,48,20,0.92)'
+                    : i < 3 ? UI.THEME.panelHot : UI.THEME.panel;
+      ctx.strokeStyle = isMe ? UI.THEME.gold : UI.THEME.stroke;
+      ctx.lineWidth = isMe ? 2 : 1;
+      ctx.beginPath(); ctx.roundRect(10, ry, W-20, rowH, 10); ctx.fill(); ctx.stroke();
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.font = `${Math.min(16,W*0.038)}px serif`;
       ctx.fillText(i < 3 ? medals[i] : `${i+1}.`, 16, ry + rowH/2);
-      ctx.font = `bold ${Math.min(14,W*0.034)}px Arial, sans-serif`;
-      ctx.fillStyle = isMe ? '#FFD700' : '#fff';
+      ctx.font = `800 ${Math.min(14,W*0.034)}px ${UI.THEME.font}`;
+      ctx.fillStyle = isMe ? UI.THEME.gold : UI.THEME.rice;
       ctx.fillText(l.name, 46, ry + rowH/2);
       ctx.textAlign = 'right';
-      ctx.font = `bold ${Math.min(14,W*0.034)}px Arial, sans-serif`;
-      ctx.fillStyle = isMe ? '#FFD700' : '#aaa';
+      ctx.font = `900 ${Math.min(14,W*0.034)}px ${UI.THEME.font}`;
+      ctx.fillStyle = isMe ? UI.THEME.gold : UI.THEME.rice;
       ctx.fillText(l.score.toLocaleString(), W - 14, ry + rowH/2 - 8);
-      ctx.font = `11px Arial, sans-serif`; ctx.fillStyle = '#666';
+      ctx.font = `700 11px ${UI.THEME.font}`; ctx.fillStyle = UI.THEME.muted;
       ctx.fillText(`${l.dist}m`, W - 14, ry + rowH/2 + 7);
     });
     this._drawBigBack(ctx, W, H);

@@ -1090,23 +1090,53 @@
     }
 
     _drawPause(ctx, L) {
-      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      const cx = L.W / 2, cy = L.H / 2;
+      ctx.save();
+      ctx.fillStyle = 'rgba(6,4,10,0.74)';
       ctx.fillRect(0, 0, L.W, L.H);
+
+      const pw = Math.min(320, L.W * 0.76), ph = 196;
+      const px = cx - pw / 2, py = cy - ph / 2;
+      ctx.fillStyle = 'rgba(18,12,20,0.94)';
+      ctx.strokeStyle = root.UI.THEME.goldDim;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 18); ctx.fill(); ctx.stroke();
+
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#fff';
-      ctx.font = '900 34px "Nunito", system-ui';
-      ctx.fillText('Paused', L.W / 2, L.H / 2 - 24);
-      const bw = 190, bh = 44;
-      this._pauseResumeBtnRect = { x: L.W / 2 - bw / 2, y: L.H / 2, w: bw, h: bh };
-      this._pauseQuitBtnRect   = { x: L.W / 2 - bw / 2, y: L.H / 2 + 56, w: bw, h: bh };
-      for (const [r, t, c] of [[this._pauseResumeBtnRect, 'Resume', '#43A047'],
-                               [this._pauseQuitBtnRect, 'Quit to map', '#546E7A']]) {
-        ctx.fillStyle = c;
-        ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12); ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 17px "Nunito", system-ui';
-        ctx.fillText(t, r.x + r.w / 2, r.y + 28);
-      }
+      ctx.textBaseline = 'middle';
+      ctx.font = `900 ${Math.round(Math.min(30, pw * 0.11))}px ${root.UI.THEME.font}`;
+      ctx.fillStyle = root.UI.THEME.rice;
+      ctx.fillText('Paused', cx, py + 36);
+
+      const rw = Math.min(160, pw * 0.55);
+      const grad = ctx.createLinearGradient(cx - rw / 2, 0, cx + rw / 2, 0);
+      grad.addColorStop(0, 'rgba(242,193,78,0)');
+      grad.addColorStop(0.5, root.UI.THEME.gold);
+      grad.addColorStop(1, 'rgba(242,193,78,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(cx - rw / 2, py + 58, rw, 2);
+
+      const btnW = pw - 44, btnH = 46;
+      const resumeY = py + 74;
+      const g2 = ctx.createLinearGradient(0, resumeY, 0, resumeY + btnH);
+      g2.addColorStop(0, '#D8433A'); g2.addColorStop(1, root.UI.THEME.lacquerDk);
+      ctx.fillStyle = g2;
+      ctx.strokeStyle = 'rgba(255,226,168,0.55)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(px + 22, resumeY, btnW, btnH, 13); ctx.fill(); ctx.stroke();
+      ctx.font = `900 ${Math.round(Math.min(19, pw * 0.068))}px ${root.UI.THEME.font}`;
+      ctx.fillStyle = '#FFF8E9';
+      ctx.fillText('Resume', cx, resumeY + btnH / 2);
+      this._pauseResumeBtnRect = { x: px + 22, y: resumeY, w: btnW, h: btnH };
+
+      const quitY = resumeY + btnH + 12;
+      ctx.fillStyle = 'rgba(28,18,26,0.85)';
+      ctx.strokeStyle = root.UI.THEME.stroke; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(px + 22, quitY, btnW, btnH - 6, 13); ctx.fill(); ctx.stroke();
+      ctx.font = `800 ${Math.round(Math.min(15, pw * 0.055))}px ${root.UI.THEME.font}`;
+      ctx.fillStyle = root.UI.THEME.muted;
+      ctx.fillText('Quit to map', cx, quitY + (btnH - 6) / 2);
+      this._pauseQuitBtnRect = { x: px + 22, y: quitY, w: btnW, h: btnH - 6 };
+      ctx.restore();
     }
 
     // ── Messaging ────────────────────────────────────────────

@@ -3310,46 +3310,57 @@ class RunnerEngine {
   }
 
   _drawPauseOverlay(ctx) {
+    // Same panel language as the menus: ink card, gold rule, one primary
+    // action in lacquer. The old version was a gold-outlined box with a green
+    // and a red button and read as a different game.
     const cx = this.W / 2;
     const cy = this.H / 2;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillStyle = 'rgba(6,4,10,0.74)';
     ctx.fillRect(0, 0, this.W, this.H);
-    // Panel
-    const pw = Math.min(300, this.W * 0.72);
-    const ph = 188;
+
+    const pw = Math.min(320, this.W * 0.76);
+    const ph = 196;
     const px = cx - pw / 2, py = cy - ph / 2;
-    ctx.fillStyle   = 'rgba(10,10,30,0.92)';
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth   = 2.5;
+    ctx.fillStyle = 'rgba(18,12,20,0.94)';
+    ctx.strokeStyle = UI.THEME.goldDim;
+    ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 18); ctx.fill(); ctx.stroke();
-    // Title
-    ctx.textAlign    = 'center';
+
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle    = '#FFD700';
-    ctx.shadowColor  = '#FF6F00'; ctx.shadowBlur = 14;
-    ctx.fillText('⏸ PAUSED', cx, py + 34);
-    ctx.shadowBlur   = 0;
-    // ── Resume button ────────────────────────────────────────
-    const btnW = pw - 40, btnH = 44;
-    const resumeY = py + 66;
-    ctx.fillStyle = 'rgba(50,180,80,0.85)';
-    ctx.strokeStyle = '#7CFC9A'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(px + 20, resumeY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#fff';
-    ctx.fillText('▶ RESUME', cx, resumeY + btnH / 2);
-    this._pauseResumeBtnRect = { x: px + 20, y: resumeY, w: btnW, h: btnH };
-    // ── Quit button ──────────────────────────────────────────
+    ctx.font = `900 ${Math.round(Math.min(30, pw * 0.11))}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.rice;
+    ctx.fillText('Paused', cx, py + 36);
+
+    const rw = Math.min(160, pw * 0.55);
+    const grad = ctx.createLinearGradient(cx - rw / 2, 0, cx + rw / 2, 0);
+    grad.addColorStop(0, 'rgba(242,193,78,0)');
+    grad.addColorStop(0.5, UI.THEME.gold);
+    grad.addColorStop(1, 'rgba(242,193,78,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - rw / 2, py + 58, rw, 2);
+
+    const btnW = pw - 44, btnH = 46;
+    const resumeY = py + 74;
+    const g2 = ctx.createLinearGradient(0, resumeY, 0, resumeY + btnH);
+    g2.addColorStop(0, '#D8433A'); g2.addColorStop(1, UI.THEME.lacquerDk);
+    ctx.fillStyle = g2;
+    ctx.strokeStyle = 'rgba(255,226,168,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 22, resumeY, btnW, btnH, 13); ctx.fill(); ctx.stroke();
+    ctx.font = `900 ${Math.round(Math.min(19, pw * 0.068))}px ${UI.THEME.font}`;
+    ctx.fillStyle = '#FFF8E9';
+    ctx.fillText('Resume', cx, resumeY + btnH / 2);
+    this._pauseResumeBtnRect = { x: px + 22, y: resumeY, w: btnW, h: btnH };
+
     const quitY = resumeY + btnH + 12;
-    ctx.fillStyle = 'rgba(180,50,20,0.75)';
-    ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(px + 20, quitY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFD9D0';
-    ctx.fillText('🗺 Quit to Map', cx, quitY + btnH / 2);
-    this._pauseQuitBtnRect = { x: px + 20, y: quitY, w: btnW, h: btnH };
+    ctx.fillStyle = 'rgba(28,18,26,0.85)';
+    ctx.strokeStyle = UI.THEME.stroke; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(px + 22, quitY, btnW, btnH - 6, 13); ctx.fill(); ctx.stroke();
+    ctx.font = `800 ${Math.round(Math.min(15, pw * 0.055))}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.fillText('Quit to map', cx, quitY + (btnH - 6) / 2);
+    this._pauseQuitBtnRect = { x: px + 22, y: quitY, w: btnW, h: btnH - 6 };
     ctx.restore();
   }
 
