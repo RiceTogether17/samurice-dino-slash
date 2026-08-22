@@ -2902,3 +2902,44 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
     .be-seg-ph          { font-size: 0.95rem; }
     .be-seg-dot         { font-size: 1.1rem; }
 }
+
+/* ── Graphics quality selector (settings popover) ─────────────
+   Sits under the sound controls; mirrors their chip styling so the
+   panel reads as one group rather than two bolted-together sections. */
+.mc-quality-row {
+  /* Two columns rather than four: the panel is sized for a phone, and four
+     side-by-side labels overflow it and clip the last option. */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+.mc-quality-btn {
+  padding: 7px 4px;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.mc-quality-btn:hover { background: rgba(255, 255, 255, 0.16); }
+.mc-quality-btn:active { transform: scale(0.95); }
+.mc-quality-btn.active {
+  background: #E0541A;
+  border-color: #ffd7a8;
+}
+.mc-quality-btn:focus-visible {
+  outline: 3px solid #ffd7a8;
+  outline-offset: 2px;
+}
+.mc-quality-hint {
+  margin: 2px 0 0;
+  font-size: 0.68rem;
+  color: #ffe9c9;
+  opacity: 0.9;
+  text-align: center;
+}

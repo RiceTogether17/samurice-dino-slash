@@ -60,6 +60,30 @@ Plus shop, achievements, daily challenge, and an endless mode.
 
 ## Development
 
-Static site — no build step required. Open `index.html` directly or deploy to any static host (GitHub Pages, Netlify, Vercel, etc.).
+Static site — no build step required. Open `index.html` directly or deploy to
+any static host (GitHub Pages, Netlify, Vercel, etc.).
+
+Tooling is dev-only; the shipped game has no dependencies.
+
+```bash
+npm install
+npm test              # unit tests (node --test)
+npm run smoke         # end-to-end playthrough in headless Chromium
+npm run lint          # eslint
+npm run profile       # measure frame cost in headless Chromium
+npm run perf:check    # the performance budget CI enforces
+npm run screenshot    # capture gameplay stills for visual review
+```
+
+After changing art or audio:
+
+```bash
+npm run optimize-assets -- --write   # re-encode art to WebP
+npm run audio:manifest               # rebuild the shipped-audio manifest
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the pieces fit
+together, why rendering goes through a texture cache, and which performance
+numbers matter.
 
 Made with ❤️ — Educational phonics + cute action = perfect for kids.

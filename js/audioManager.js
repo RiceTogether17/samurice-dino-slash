@@ -66,12 +66,13 @@ const LETTER_SOUNDS_TTS = {
 // HOW TO ADD YOUR AUDIO FILES (see full guide at bottom):
 //   assets/audio/phonemes/<phoneme>.mp3   e.g. "sh.mp3", "ai.mp3"
 //   assets/audio/words/<word>.mp3         e.g. "ship.mp3"
-//   assets/audio/sfx/coin.mp3
-//   assets/audio/sfx/boost.mp3
-//   assets/audio/sfx/slash.mp3
-//   assets/audio/sfx/boss-hit.mp3
-//   assets/audio/sfx/victory.mp3
-//   assets/audio/sfx/riku-hurt.mp3
+//   assets/audio/sfx/<name>   — see _sfxFileMap below for the exact
+//                                filenames and extensions actually loaded
+//
+// After adding or removing any file here, re-run:
+//   node tools/build-audio-manifest.js
+// The manager only requests what the manifest lists, so a file that is not
+// in it is silently replaced by speech synthesis rather than fetched.
 // ============================================================
 
 class AudioManager {
@@ -186,14 +187,42 @@ class AudioManager {
   }
 
   // ── Preload a single audio file into buffer cache ────────────
+  // ── Shipped-audio manifest ───────────────────────────────────
+  // The phonics tables name a recording for every word in all 30 stages, but
+  // only the phoneme and SFX clips were ever produced. Guessing URLs meant
+  // ~250 failed requests on every cold boot, all of them competing with
+  // sprite loading for the browser's connection pool. The manifest (built by
+  // tools/build-audio-manifest.js) says what actually exists, so anything
+  // missing goes straight to the speech-synthesis fallback with no request.
+  _loadManifest() {
+    if (this._manifestPromise) return this._manifestPromise;
+    this._manifestPromise = fetch('assets/audio/manifest.json')
+      .then(r => (r.ok ? r.json() : null))
+      .then(m => { this._manifest = m && Array.isArray(m.files) ? new Set(m.files) : null; })
+      // No manifest (e.g. someone dropped the file) — fall back to the old
+      // optimistic behaviour rather than muting the game entirely.
+      .catch(() => { this._manifest = null; });
+    return this._manifestPromise;
+  }
+
+  _isShipped(url) {
+    if (!this._manifest) return true;
+    const rel = String(url).replace(/^.*assets\/audio\//, '');
+    return this._manifest.has(rel);
+  }
+
   _preload(key, url) {
     if (this.buffers[key]) return Promise.resolve(this.buffers[key]);
     if (this.loading[key]) return this.loading[key];
-    this.loading[key] = fetch(url)
-      .then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-      .then(ab => this.ctx ? this.ctx.decodeAudioData(ab) : null)
-      .then(buf => { if (buf) this.buffers[key] = buf; return buf; })
-      .catch(() => null) // file not uploaded yet — TTS fallback will handle
+    this.loading[key] = this._loadManifest()
+      .then(() => {
+        if (!this._isShipped(url)) return null;
+        return fetch(url)
+          .then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+          .then(ab => (this.ctx ? this.ctx.decodeAudioData(ab) : null))
+          .then(buf => { if (buf) this.buffers[key] = buf; return buf; });
+      })
+      .catch(() => null) // unreadable or undecodable — TTS fallback will handle
       .finally(() => { delete this.loading[key]; });
     return this.loading[key];
   }
@@ -215,13 +244,20 @@ class AudioManager {
     return Promise.all(jobs);
   }
 
-  preloadAllGameAudio() {
-    const jobs = [];
-    for (let i = 1; i <= (PHONICS_DATA?.stageList?.length || 0); i++) {
-      jobs.push(this.preloadStage(i));
+  // Warm every stage's audio in the background. SFX come first because they
+  // are the only clips needed the moment play starts; the per-stage phoneme
+  // sets then trickle in a few stages at a time so the preload never saturates
+  // the connection pool that sprite loading is also using.
+  async preloadAllGameAudio() {
+    await Promise.all(this._sfxKeys.map(k => this._preload(`sfx/${k}`, this._sfxFileMap[k])));
+    const total = PHONICS_DATA?.stageList?.length || 0;
+    const BATCH = 4;
+    for (let i = 1; i <= total; i += BATCH) {
+      const batch = [];
+      for (let j = i; j < i + BATCH && j <= total; j++) batch.push(this.preloadStage(j));
+      await Promise.all(batch);
+      await new Promise(r => setTimeout(r, 0)); // yield to rendering
     }
-    this._sfxKeys.forEach(k => jobs.push(this._preload(`sfx/${k}`, this._sfxFileMap[k])));
-    return Promise.all(jobs);
   }
 
   // ── Play a loaded buffer ─────────────────────────────────────

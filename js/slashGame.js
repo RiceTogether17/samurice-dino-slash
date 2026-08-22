@@ -19,85 +19,85 @@
 // Dino Dash originals remain at assets/*.png (game.js untouched).
 const SLASH_SPRITES = {
   // ── Riku animation frames ─────────────────────────────────
-  'riku-idle': 'assets/sprites/riku-idle.png',
-  'riku-walk-1': 'assets/sprites/riku-walk-1.png',
-  'riku-walk-2': 'assets/sprites/riku-walk-2.png',
-  'riku-walk-3': 'assets/sprites/riku-walk-3.png',
-  'riku-walk-4': 'assets/sprites/riku-walk-4.png',
-  'riku-run': 'assets/sprites/riku-run.png', // attack/run pose
-  'riku-jump': 'assets/sprites/riku-jump-1.png', // alias
-  'riku-jump-1': 'assets/sprites/riku-jump-1.png',
-  'riku-hurt': 'assets/sprites/riku-hurt.png',
-  'riku-victory': 'assets/sprites/riku-victory.png',
+  'riku-idle': 'assets/sprites/riku-idle.webp',
+  'riku-walk-1': 'assets/sprites/riku-walk-1.webp',
+  'riku-walk-2': 'assets/sprites/riku-walk-2.webp',
+  'riku-walk-3': 'assets/sprites/riku-walk-3.webp',
+  'riku-walk-4': 'assets/sprites/riku-walk-4.webp',
+  'riku-run': 'assets/sprites/riku-run.webp', // attack/run pose
+  'riku-jump': 'assets/sprites/riku-jump-1.webp', // alias
+  'riku-jump-1': 'assets/sprites/riku-jump-1.webp',
+  'riku-hurt': 'assets/sprites/riku-hurt.webp',
+  'riku-victory': 'assets/sprites/riku-victory.webp',
   // ── Runner entities & tiles ──────────────────────────────
-  'checkpoint-flag': 'assets/sprites/checkpoint-flag.png',
-  'flying-enemy': 'assets/sprites/flying-enemy.png',
-  'spring-pad': 'assets/sprites/spring-pad.png',
-  'tile-dojo': 'assets/sprites/tile-dojo.png',
-  'tile-rice': 'assets/sprites/tile-rice.png',
+  'checkpoint-flag': 'assets/sprites/checkpoint-flag.webp',
+  'flying-enemy': 'assets/sprites/flying-enemy.webp',
+  'spring-pad': 'assets/sprites/spring-pad.webp',
+  'tile-dojo': 'assets/sprites/tile-dojo.webp',
+  'tile-rice': 'assets/sprites/tile-rice.webp',
   // ── Minion dino ───────────────────────────────────────────
-  'minion-dino': 'assets/sprites/dino-minion.png',
-  'dino-minion': 'assets/sprites/dino-minion.png',
+  'minion-dino': 'assets/sprites/dino-minion.webp',
+  'dino-minion': 'assets/sprites/dino-minion.webp',
   // ── Runner enemy variants ─────────────────────────────────
-  'shell-dino': 'assets/sprites/shell-dino.png',
-  'shell-dino-shell': 'assets/sprites/shell-dino-shell.png',
-  'spiny-dino': 'assets/sprites/spiny-dino.png',
-  'bomb-minion': 'assets/sprites/bomb-minion.png',
+  'shell-dino': 'assets/sprites/shell-dino.webp',
+  'shell-dino-shell': 'assets/sprites/shell-dino-shell.webp',
+  'spiny-dino': 'assets/sprites/spiny-dino.webp',
+  'bomb-minion': 'assets/sprites/bomb-minion.webp',
   // ── Mini-bosses: unique named characters (worlds 1–2) ─────
-  'sound-sprout': 'assets/dinosaurs/sound-sprout.png',
-  'echo-imp': 'assets/dinosaurs/echo-imp.png',
-  'rhyme-sprite': 'assets/dinosaurs/rhyme-sprite.png',
-  'glyph-goblin': 'assets/dinosaurs/glyph-goblin.png',
-  'paddy-pup': 'assets/dinosaurs/paddy-pup.png',
-  'bamboo-bub': 'assets/dinosaurs/bamboo-bub.png',
-  'reed-raptor': 'assets/dinosaurs/reed-raptor.png',
-  'dojo-dino': 'assets/dinosaurs/dojo-dino.png',
+  'sound-sprout': 'assets/dinosaurs/sound-sprout.webp',
+  'echo-imp': 'assets/dinosaurs/echo-imp.webp',
+  'rhyme-sprite': 'assets/dinosaurs/rhyme-sprite.webp',
+  'glyph-goblin': 'assets/dinosaurs/glyph-goblin.webp',
+  'paddy-pup': 'assets/dinosaurs/paddy-pup.webp',
+  'bamboo-bub': 'assets/dinosaurs/bamboo-bub.webp',
+  'reed-raptor': 'assets/dinosaurs/reed-raptor.webp',
+  'dojo-dino': 'assets/dinosaurs/dojo-dino.webp',
   // ── Mini-bosses: per-world dinos with attack/hurt variants ─
-  'mini-w1': 'assets/dinosaurs/mini-w1.png',
-  'mini-w1-attack': 'assets/dinosaurs/mini-w1-attack.png',
-  'mini-w1-hurt': 'assets/dinosaurs/mini-w1-hurt.png',
-  'mini-w2': 'assets/dinosaurs/mini-w2.png',
-  'mini-w2-attack': 'assets/dinosaurs/mini-w2-attack.png',
-  'mini-w2-hurt': 'assets/dinosaurs/mini-w2-hurt.png',
-  'mini-w3': 'assets/dinosaurs/mini-w3.png',
-  'mini-w3-attack': 'assets/dinosaurs/mini-w3-attack.png',
-  'mini-w3-hurt': 'assets/dinosaurs/mini-w3-hurt.png',
-  'mini-w4': 'assets/dinosaurs/mini-w4.png',
-  'mini-w4-attack': 'assets/dinosaurs/mini-w4-attack.png',
-  'mini-w4-hurt': 'assets/dinosaurs/mini-w4-hurt.png',
-  'mini-w5': 'assets/dinosaurs/mini-w5.png',
-  'mini-w5-attack': 'assets/dinosaurs/mini-w5-attack.png',
-  'mini-w5-hurt': 'assets/dinosaurs/mini-w5-hurt.png',
-  'mini-w6': 'assets/dinosaurs/mini-w6.png',
-  'mini-w6-attack': 'assets/dinosaurs/mini-w6-attack.png',
-  'mini-w6-hurt': 'assets/dinosaurs/mini-w6-hurt.png',
+  'mini-w1': 'assets/dinosaurs/mini-w1.webp',
+  'mini-w1-attack': 'assets/dinosaurs/mini-w1-attack.webp',
+  'mini-w1-hurt': 'assets/dinosaurs/mini-w1-hurt.webp',
+  'mini-w2': 'assets/dinosaurs/mini-w2.webp',
+  'mini-w2-attack': 'assets/dinosaurs/mini-w2-attack.webp',
+  'mini-w2-hurt': 'assets/dinosaurs/mini-w2-hurt.webp',
+  'mini-w3': 'assets/dinosaurs/mini-w3.webp',
+  'mini-w3-attack': 'assets/dinosaurs/mini-w3-attack.webp',
+  'mini-w3-hurt': 'assets/dinosaurs/mini-w3-hurt.webp',
+  'mini-w4': 'assets/dinosaurs/mini-w4.webp',
+  'mini-w4-attack': 'assets/dinosaurs/mini-w4-attack.webp',
+  'mini-w4-hurt': 'assets/dinosaurs/mini-w4-hurt.webp',
+  'mini-w5': 'assets/dinosaurs/mini-w5.webp',
+  'mini-w5-attack': 'assets/dinosaurs/mini-w5-attack.webp',
+  'mini-w5-hurt': 'assets/dinosaurs/mini-w5-hurt.webp',
+  'mini-w6': 'assets/dinosaurs/mini-w6.webp',
+  'mini-w6-attack': 'assets/dinosaurs/mini-w6-attack.webp',
+  'mini-w6-hurt': 'assets/dinosaurs/mini-w6-hurt.webp',
   // ── Shop equipment & reward icons ─────────────────────────
-  'item-sword-basic': 'assets/items/sword-basic.png',
-  'item-sword-golden': 'assets/items/sword-golden.png',
-  'item-sword-fire': 'assets/items/sword-fire.png',
-  'item-sword-ice': 'assets/items/sword-ice.png',
-  'item-sword-thunder': 'assets/items/sword-thunder.png',
-  'item-sword-rainbow': 'assets/items/sword-rainbow.png',
-  'item-hat-ninja': 'assets/items/hat-ninja.png',
-  'item-hat-crown': 'assets/items/hat-crown.png',
-  'item-hat-mushroom': 'assets/items/hat-mushroom.png',
-  'item-hat-star': 'assets/items/hat-star.png',
-  'item-comp-baby-rex': 'assets/items/comp-baby-rex.png',
-  'item-comp-duck': 'assets/items/comp-duck.png',
-  'item-comp-koi': 'assets/items/comp-koi.png',
-  'item-comp-panda': 'assets/items/comp-panda.png',
-  'item-pu-magnet': 'assets/items/pu-magnet.png',
-  'item-pu-timeslow': 'assets/items/pu-timeslow.png',
-  'item-pu-autoblend': 'assets/items/pu-autoblend.png',
-  'item-pu-dbljump': 'assets/items/pu-dbljump.png',
-  'item-pu-shield': 'assets/items/pu-shield.png',
+  'item-sword-basic': 'assets/items/sword-basic.webp',
+  'item-sword-golden': 'assets/items/sword-golden.webp',
+  'item-sword-fire': 'assets/items/sword-fire.webp',
+  'item-sword-ice': 'assets/items/sword-ice.webp',
+  'item-sword-thunder': 'assets/items/sword-thunder.webp',
+  'item-sword-rainbow': 'assets/items/sword-rainbow.webp',
+  'item-hat-ninja': 'assets/items/hat-ninja.webp',
+  'item-hat-crown': 'assets/items/hat-crown.webp',
+  'item-hat-mushroom': 'assets/items/hat-mushroom.webp',
+  'item-hat-star': 'assets/items/hat-star.webp',
+  'item-comp-baby-rex': 'assets/items/comp-baby-rex.webp',
+  'item-comp-duck': 'assets/items/comp-duck.webp',
+  'item-comp-koi': 'assets/items/comp-koi.webp',
+  'item-comp-panda': 'assets/items/comp-panda.webp',
+  'item-pu-magnet': 'assets/items/pu-magnet.webp',
+  'item-pu-timeslow': 'assets/items/pu-timeslow.webp',
+  'item-pu-autoblend': 'assets/items/pu-autoblend.webp',
+  'item-pu-dbljump': 'assets/items/pu-dbljump.webp',
+  'item-pu-shield': 'assets/items/pu-shield.webp',
   'power-echo-ears': 'assets/items/power-echo-ears.svg',
   'power-rice-rocket': 'assets/items/power-rice-rocket.svg',
   'power-rhyme-cape': 'assets/items/power-rhyme-cape.svg',
   'power-glyph-boots': 'assets/items/power-glyph-boots.svg',
   'power-boss-star': 'assets/items/power-boss-star.svg',
-  'medal-unlocked': 'assets/items/medal-unlocked.png',
-  'medal-locked': 'assets/items/medal-locked.png',
+  'medal-unlocked': 'assets/items/medal-unlocked.webp',
+  'medal-locked': 'assets/items/medal-locked.webp',
   // ── Battle arena backgrounds (per world) ──────────────────
   'arena-1': 'assets/backgrounds/arena-1.jpg',
   'arena-2': 'assets/backgrounds/arena-2.jpg',
@@ -106,37 +106,37 @@ const SLASH_SPRITES = {
   'arena-5': 'assets/backgrounds/arena-5.jpg',
   'arena-6': 'assets/backgrounds/arena-6.jpg',
   // ── Stage bosses ──────────────────────────────────────────
-  'stage-1-rex': 'assets/dinosaurs/trex.png',
-  'stage-1-tri': 'assets/dinosaurs/triceratops.png',
-  'stage-2-rapi': 'assets/dinosaurs/velociraptor.png',
-  'stage-2-stego': 'assets/dinosaurs/stegosaurus.png',
-  'stage-3-brachio':'assets/dinosaurs/brachiosaurus.png',
-  'stage-3-ptera': 'assets/dinosaurs/pteranodon.png',
-  'stage-4-anky': 'assets/dinosaurs/ankylosaurus.png',
-  'stage-5-spino': 'assets/dinosaurs/spinosaurus.png',
-  'stage-5-pachy': 'assets/dinosaurs/pachycephalosaurus.png',
-  'stage-6-dilo': 'assets/dinosaurs/dilophosaurus.png',
+  'stage-1-rex': 'assets/dinosaurs/trex.webp',
+  'stage-1-tri': 'assets/dinosaurs/triceratops.webp',
+  'stage-2-rapi': 'assets/dinosaurs/velociraptor.webp',
+  'stage-2-stego': 'assets/dinosaurs/stegosaurus.webp',
+  'stage-3-brachio':'assets/dinosaurs/brachiosaurus.webp',
+  'stage-3-ptera': 'assets/dinosaurs/pteranodon.webp',
+  'stage-4-anky': 'assets/dinosaurs/ankylosaurus.webp',
+  'stage-5-spino': 'assets/dinosaurs/spinosaurus.webp',
+  'stage-5-pachy': 'assets/dinosaurs/pachycephalosaurus.webp',
+  'stage-6-dilo': 'assets/dinosaurs/dilophosaurus.webp',
   // ── Boss variants ────────────────────────────────────────
-  'trex-attack': 'assets/dinosaurs/trex-attack.png',
-  'trex-hurt': 'assets/dinosaurs/trex-hurt.png',
-  'triceratops-attack': 'assets/dinosaurs/triceratops-attack.png',
-  'triceratops-hurt': 'assets/dinosaurs/triceratops-hurt.png',
-  'velociraptor-attack': 'assets/dinosaurs/velociraptor-attack.png',
-  'velociraptor-hurt': 'assets/dinosaurs/velociraptor-hurt.png',
-  'stegosaurus-attack': 'assets/dinosaurs/stegosaurus-attack.png',
-  'stegosaurus-hurt': 'assets/dinosaurs/stegosaurus-hurt.png',
-  'brachiosaurus-attack': 'assets/dinosaurs/brachiosaurus-attack.png',
-  'brachiosaurus-hurt': 'assets/dinosaurs/brachiosaurus-hurt.png',
-  'pteranodon-attack': 'assets/dinosaurs/pteranodon-attack.png',
-  'pteranodon-hurt': 'assets/dinosaurs/pteranodon-hurt.png',
-  'ankylosaurus-attack': 'assets/dinosaurs/ankylosaurus-attack.png',
-  'ankylosaurus-hurt': 'assets/dinosaurs/ankylosaurus-hurt.png',
-  'spinosaurus-attack': 'assets/dinosaurs/spinosaurus-attack.png',
-  'spinosaurus-hurt': 'assets/dinosaurs/spinosaurus-hurt.png',
-  'pachycephalosaurus-attack': 'assets/dinosaurs/pachycephalosaurus-attack.png',
-  'pachycephalosaurus-hurt': 'assets/dinosaurs/pachycephalosaurus-hurt.png',
-  'dilophosaurus-attack': 'assets/dinosaurs/dilophosaurus-attack.png',
-  'dilophosaurus-hurt': 'assets/dinosaurs/dilophosaurus-hurt.png',
+  'trex-attack': 'assets/dinosaurs/trex-attack.webp',
+  'trex-hurt': 'assets/dinosaurs/trex-hurt.webp',
+  'triceratops-attack': 'assets/dinosaurs/triceratops-attack.webp',
+  'triceratops-hurt': 'assets/dinosaurs/triceratops-hurt.webp',
+  'velociraptor-attack': 'assets/dinosaurs/velociraptor-attack.webp',
+  'velociraptor-hurt': 'assets/dinosaurs/velociraptor-hurt.webp',
+  'stegosaurus-attack': 'assets/dinosaurs/stegosaurus-attack.webp',
+  'stegosaurus-hurt': 'assets/dinosaurs/stegosaurus-hurt.webp',
+  'brachiosaurus-attack': 'assets/dinosaurs/brachiosaurus-attack.webp',
+  'brachiosaurus-hurt': 'assets/dinosaurs/brachiosaurus-hurt.webp',
+  'pteranodon-attack': 'assets/dinosaurs/pteranodon-attack.webp',
+  'pteranodon-hurt': 'assets/dinosaurs/pteranodon-hurt.webp',
+  'ankylosaurus-attack': 'assets/dinosaurs/ankylosaurus-attack.webp',
+  'ankylosaurus-hurt': 'assets/dinosaurs/ankylosaurus-hurt.webp',
+  'spinosaurus-attack': 'assets/dinosaurs/spinosaurus-attack.webp',
+  'spinosaurus-hurt': 'assets/dinosaurs/spinosaurus-hurt.webp',
+  'pachycephalosaurus-attack': 'assets/dinosaurs/pachycephalosaurus-attack.webp',
+  'pachycephalosaurus-hurt': 'assets/dinosaurs/pachycephalosaurus-hurt.webp',
+  'dilophosaurus-attack': 'assets/dinosaurs/dilophosaurus-attack.webp',
+  'dilophosaurus-hurt': 'assets/dinosaurs/dilophosaurus-hurt.webp',
   // ── Stage backgrounds (.jpg) ──────────────────────────────
   'stage-1-rice-paddy': 'assets/backgrounds/stage-1.jpg',
   'stage-2-bamboo': 'assets/backgrounds/stage-2.jpg',
@@ -171,8 +171,9 @@ const SLASH_SPRITE_SHEETS = {
 // PERFORMANCE
 // ─────────────────────────────────────────────────────────────
 // shadowBlur is the single most expensive canvas state on mobile GPUs.
-// Patch the prototype once so LOW_FX mode silently disables every glow
-// in the app, and normal mode caps blur radius — no per-site edits.
+// Patch the prototype once so the active quality tier caps glow radius for the
+// whole app — shadowBlur is one of the most expensive things Canvas2D can do,
+// and this avoids editing the ~120 call sites that set it.
 (function () {
   if (window.__shadowPatched) return;
   window.__shadowPatched = true;
@@ -183,13 +184,14 @@ const SLASH_SPRITE_SHEETS = {
     Object.defineProperty(proto, 'shadowBlur', {
       configurable: true,
       get: desc.get,
-      set(v) { desc.set.call(this, window.LOW_FX ? 0 : Math.min(v, 16)); },
+      set(v) {
+        const cap = window.Quality ? window.Quality.flags.shadowBlurMax
+                                   : (window.LOW_FX ? 0 : 16);
+        desc.set.call(this, Math.min(v, cap));
+      },
     });
   } catch (_) { /* leave shadows untouched if the platform disallows this */ }
 })();
-// Sticky low-effects mode: once a device proves slow it stays in the
-// fast path on future visits instead of stuttering for 2s every boot.
-window.LOW_FX = localStorage.getItem('samurice_lowfx') === '1';
 
 // ─────────────────────────────────────────────────────────────
 // SLASH GAME
@@ -199,9 +201,18 @@ class SlashGame {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext('2d');
     this.overlay = document.getElementById(overlayId);
-    // DPR above 2 quadruples fill cost for no visible gain on phones;
-    // LOW_FX devices render at 1× and let the browser upscale.
-    this._dpr = window.LOW_FX ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+    // DPR above 2 quadruples fill cost for no visible gain on phones, and
+    // lower tiers render below native and let the browser upscale.
+    this._dpr = Math.min(window.devicePixelRatio || 1,
+                         window.Quality ? window.Quality.flags.maxDpr : 2);
+    // Re-resolution when the tier changes, so a device that speeds up or slows
+    // down mid-session gets the sharpness or the headroom straight away.
+    if (window.Quality) {
+      window.Quality.onChange(() => {
+        this._dpr = Math.min(window.devicePixelRatio || 1, window.Quality.flags.maxDpr);
+        if (this._resizeCanvas) this._resizeCanvas();
+      });
+    }
     this._setupCanvas();
     // Global modules
     // One AudioManager for the whole app (shared with Dino Dash):
@@ -1144,23 +1155,16 @@ class SlashGame {
     this._fpsSamples.push(1 / frameDtSec);
     if (this._fpsSamples.length > 30) this._fpsSamples.shift();
     this._age++;
-    // Adaptive quality: if a gameplay state sustains under ~40 FPS, drop
-    // to low-effects mode (no glows, 1× resolution) and remember it so
-    // the device never stutters through the discovery period again.
-    if (!window.LOW_FX && isGameplay && this._fpsSamples.length >= 30 && (this._age % 60 === 0)) {
-      const avg = this._fpsSamples.reduce((a, b) => a + b, 0) / this._fpsSamples.length;
-      if (avg < 40) {
-        window.LOW_FX = true;
-        try { localStorage.setItem('samurice_lowfx', '1'); } catch (_) {}
-        this._dpr = 1;
-        if (this._resizeCanvas) this._resizeCanvas();
-      }
-    }
+    // Adaptive quality is driven by how long this frame's own work takes,
+    // measured around the state switch below. Wall-clock frame *interval* is
+    // the wrong signal: it also moves with vsync, throttling and page
+    // visibility, none of which the renderer can do anything about.
     // Block all states until sprites + sheets + audio preload are ready.
     if (!this._spritesReady || !this._sheetsReady || !this._audioReady) { this._drawLoading(); return; }
     // Tick achievement popup
     this._tickAchievementPopup();
     this._syncShellMusic();
+    const workStart = isGameplay ? performance.now() : 0;
     switch (this.state) {
       case 'onboarding': this._updateOnboarding(); break; // PHASE 6
       case 'title': this._updateTitle(); break;
@@ -1183,6 +1187,7 @@ class SlashGame {
       case 'leaderboard': this._updateLeaderboard(); break;
       case 'dashboard':   this._drawDashboard(); break;  // Phase 9
     }
+    if (workStart && window.Quality) window.Quality.sample(performance.now() - workStart);
     // Achievement popup on top of everything
     this._drawAchievementPopup();
     if (this._debugOverlay) this._drawDebugOverlay();
@@ -1887,7 +1892,12 @@ class SlashGame {
       ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.28)';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
-      ctx.fillText(world.name, n.cx, cy + nodeR + (unlocked ? 26 : 16));
+      // Nudge the label back inside the canvas. Centring it on the node alone
+      // ran the outermost worlds — "Volcanic Samurai Peak" especially — off
+      // the edge of the screen.
+      const halfLabel = ctx.measureText(world.name).width / 2;
+      const labelX = Math.min(Math.max(n.cx, halfLabel + 6), W - halfLabel - 6);
+      ctx.fillText(world.name, labelX, cy + nodeR + (unlocked ? 26 : 16));
       ctx.shadowBlur = 0;
       if (lockedJx) ctx.restore();
     });
@@ -1928,6 +1938,20 @@ class SlashGame {
     // ── Title header ──────────────────────────────────────────
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     const titleSz = Math.min(20, W * 0.046);
+    // Drifting clouds pass behind this text and were washing it out — the
+    // subtitle in particular became white-on-white. A soft scrim keeps the
+    // header readable whatever happens to float past.
+    // Hold the scrim at close to full strength until past the subtitle's
+    // baseline before fading: a gradient that thins out over the header itself
+    // leaves the second line unprotected, which is exactly the line a cloud
+    // was drifting behind.
+    const hdrH = 7 + titleSz + 3 + 16;
+    const scrim = ctx.createLinearGradient(0, 0, 0, hdrH + 24);
+    scrim.addColorStop(0,    'rgba(8,20,40,0.62)');
+    scrim.addColorStop(0.62, 'rgba(8,20,40,0.52)');
+    scrim.addColorStop(1,    'rgba(8,20,40,0)');
+    ctx.fillStyle = scrim;
+    ctx.fillRect(0, 0, W, hdrH + 24);
     ctx.font = `900 ${titleSz}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 12;
     ctx.fillStyle = '#FFD700';
@@ -2017,7 +2041,25 @@ class SlashGame {
       return;
     }
 
-    this.runner.update(_dt);
+    // Fixed-step physics. Entity motion is tuned in per-frame units, so
+    // driving it straight from wall-clock dt makes the game literally run
+    // slower whenever frames are dropped. Stepping a fixed 1/60 s and
+    // carrying the remainder keeps play at real-time pace instead.
+    //
+    // Catch-up is capped at two steps: past that, a device that cannot keep
+    // up would be asked to simulate ever more per frame, fall further behind,
+    // and spiral. Better to let a genuinely slow device run slightly slow.
+    const STEP = 1 / 60;
+    this._runnerAccum = Math.min((this._runnerAccum || 0) + _dt, STEP * 3);
+    let steps = 0;
+    while (this._runnerAccum >= STEP && steps < 2) {
+      this.runner.update(STEP);
+      this._runnerAccum -= STEP;
+      steps++;
+    }
+    // Never skip a frame entirely — a dt shorter than one step still needs
+    // the world advanced once, or input would feel dropped.
+    if (steps === 0) { this.runner.update(_dt); this._runnerAccum = 0; }
     this.runner.draw();
     this._updateTutorial(_dt);
     this._drawTutorialOverlay(this.ctx);

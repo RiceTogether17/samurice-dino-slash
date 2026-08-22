@@ -1,0 +1,56 @@
+{
+  "stage": 21,
+  "state": "runner",
+  "cpuThrottle": 1,
+  "frameCostMs": {
+    "frames": 300,
+    "mean": 0.789,
+    "p50": 0.5,
+    "p95": 1.7,
+    "p99": 8.7,
+    "max": 10.8,
+    "overBudget": 0
+  },
+  "drawMs": {
+    "frames": 300,
+    "mean": 0.73,
+    "p50": 0.5,
+    "p95": 1.6,
+    "p99": 8.5,
+    "max": 9.6,
+    "overBudget": 0
+  },
+  "updateMs": {
+    "frames": 324,
+    "mean": 0.058,
+    "p50": 0,
+    "p95": 0.2,
+    "p99": 0.4,
+    "max": 1.5,
+    "overBudget": 0
+  },
+  "blit": {
+    "drawImageCallsPerFrame": 31,
+    "sourceMPPerFrame": 0.88,
+    "heavyDownscalesPerFrame": 0
+  },
+  "cache": {
+    "hits": 9277,
+    "misses": 17,
+    "evictions": 0,
+    "bytes": 3746304,
+    "entries": 17,
+    "pixels": 936576
+  },
+  "heap": {
+    "usedMB": 5.6
+  },
+  "quality": {
+    "LOW_FX": false,
+    "tier": "high",
+    "dpr": 1
+  },
+  "errors": [
+    "Failed to load resource: net::ERR_CONNECTION_RESET"
+  ]
+}
