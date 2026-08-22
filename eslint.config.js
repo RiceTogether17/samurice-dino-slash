@@ -71,6 +71,7 @@ module.exports = [
         setTimeout: 'readonly', clearTimeout: 'readonly', globalThis: 'readonly',
         // Available inside page.evaluate callbacks, which run in the browser.
         window: 'readonly', document: 'readonly', performance: 'readonly',
+        getComputedStyle: 'readonly',
         CanvasRenderingContext2D: 'readonly', _slashGameInstance: 'readonly',
       },
     },
