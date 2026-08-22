@@ -23,6 +23,7 @@ js/progressTracker.js    save data, achievements, shop
 js/audioManager.js       Web Audio + speech synthesis
 js/runnerEngine.js       the auto-runner phase
 js/endlessBattle.js      the quick word challenge inside Dino Dash
+js/learn/review.js       the spaced-review ladder
 js/combat/coach.js       what to say when an answer is wrong
 js/combat/patterns.js    one play mechanic per phonics skill
 js/combat/combatEngine.js the boss fight
@@ -30,7 +31,7 @@ js/tutorial.js           first-play onboarding
 js/slashGame.js          state machine, menus, world map
 js/game.js               entry points and mode chooser
 js/parentDashboard.js    progress reporting
-js/engagementEngine.js   streaks and daily challenge
+js/engagementEngine.js   streaks, daily gift, login calendar
 ```
 
 `sw.js` precaches this list for offline play. **If you add a script to
@@ -177,6 +178,81 @@ Two traps worth knowing:
   Anything the HUD draws under them is invisible — this is how the runner's
   hearts ended up hidden behind the pause button. Keep 62 px clear on the left
   and 116 px on the right.
+
+## Retention
+
+The game's reason to come back is the material, not a prize. This is a
+deliberate position and the code is arranged to hold it.
+
+### The review ladder — `js/learn/review.js`
+
+A Leitner ladder of six boxes. Every word a child answers is filed in one,
+and the box decides how many days pass before it is asked again:
+
+| Box | 1 | 2 | 3 | 4 | 5 | 6 |
+|-----|---|---|---|---|---|---|
+| Days of rest | 0 | 1 | 2 | 4 | 8 | 16 |
+
+Right answers move a word up; a miss drops it **two** boxes, not back to
+one — wiping out a fortnight of work over one bad tap is punishing and
+inaccurate. Everything is scheduled in whole local days, so there is no
+midnight boundary to race.
+
+Every mode grades into the same ladder. The campaign already practises
+these words, so a child who plays thirty stage words has practised, and the
+game does not then ask for twelve more. Combat also weights word selection
+toward whatever is due, which makes a stage fight double as review.
+
+Two rules that are easy to break by accident:
+
+* **The day's queue is capped** (`DAILY_TARGET`). An uncapped ladder turns
+  into a chore the first time somebody takes a week off, and a five-year-old
+  who opens the game to sixty due words closes it again. A backlog is served
+  worst-first, `DAILY_TARGET` at a time.
+* **Nothing leaves the ladder.** A word in the top box still comes round
+  again. Reading is not a checkbox.
+
+### The review session
+
+`_startReview` in `slashGame.js` builds a synthetic stage from the due
+words: the arena and boss of the furthest stage in the queue, and every
+mechanic those stages use, so each word is reviewed with the verb it was
+taught with. Two combat options support it — `stage.oneShotWords` draws each
+word once instead of sampling with replacement, and `stage.roundsToWin` plus
+the one-shot branch in `_completeRound` pace the health bar across the words
+that remain, so it empties on the last word rather than three words early.
+`stage.id` is `0`, which is what stops a review touching campaign progress.
+
+### The stopping cue
+
+`_drawReviewDone` ends the session by saying the practice is finished. It
+does not hide the other buttons — a child who wants to keep playing still
+can — but "that's enough for today" is a first-class button next to "keep
+playing", and nothing on the screen implies more is owed.
+
+### What was removed, and why it must not come back
+
+The engagement layer used to open with a numbered list that named its own
+methods accurately: a "variable-ratio reward (most addictive loop)", a "Live
+Countdown Timer — FOMO", and a "Streak Shield — spend rice to save a streak
+(loss aversion)". Those are a slot machine, a sale timer and an insurance
+policy, and the audience is five-year-olds. Beyond the ethics, nudge
+techniques aimed at children are what the UK Children's Code exists to
+prohibit, so this is a shipping risk as well.
+
+| Was | Is | Why |
+|-----|----|-----|
+| Lucky Jar, random 8–60 rice | Daily Gift, fixed `DAILY_GIFT`, amount shown before the tap | The uncertainty was the mechanism; a known gift conditions nobody |
+| Live countdown to midnight | A line saying what is ready to practise | Nothing expires at midnight, so there is nothing to count down |
+| Streak Shield, 75 rice | Free automatic grace for one missed day | Selling protection only works if the child fears the loss |
+
+`tests/engagement.test.js` pins all three by name. It asserts the absence of
+`setInterval`, `SHIELD_COST`, `canUseShield` and the countdown helpers, and
+that the daily gift contains no `Math.random`. A failure there is not a
+rendering bug — it is the game going back to pressuring children.
+
+What stayed, because it rewards returning without punishing absence: XP and
+levels, the 7-day calendar, and the welcome-back bonus.
 
 ## Reach
 
