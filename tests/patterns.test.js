@@ -149,7 +149,7 @@ test('relaxed mode never lets the clock take a round away', () => {
 });
 
 test('each pattern implements the whole engine contract', () => {
-  const required = ['id', 'title', 'skills', 'canBuild', 'build', 'skill',
+  const required = ['id', 'title', 'howTo', 'skills', 'canBuild', 'build', 'skill',
                     'instruction', 'targets', 'hitTest', 'resolve', 'update', 'draw'];
   for (const pattern of P.ALL) {
     for (const key of required) {
@@ -157,6 +157,9 @@ test('each pattern implements the whole engine contract', () => {
     }
     assert.ok(Array.isArray(pattern.skills) && pattern.skills.length,
       `${pattern.id} must declare the skills it plays`);
+    // The primer is the only teaching a child gets for a new verb, so it has
+    // to describe the action, not the topic.
+    assert.ok(pattern.howTo.length > 30, `${pattern.id} needs a usable how-to`);
   }
 });
 

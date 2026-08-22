@@ -96,7 +96,20 @@ function serve(root) {
         be._say(pattern.instruction(be._round), 'neutral', 8000);
       }, forced);
     }
-    await page.waitForTimeout(2500);
+    if (get('--victory', null)) {
+      await page.evaluate(() => {
+        const be = _slashGameInstance.battle;
+        if (be.state === 'primer') { be._primerAge = 999; be._dismissPrimer(); }
+        be.bossHp = 0; be._win();
+      });
+      await page.waitForTimeout(Number(get('--victory-ms', 700)));
+    } else if (get('--skip-primer', null)) {
+      await page.evaluate(() => {
+        const be = _slashGameInstance.battle;
+        if (be.state === 'primer') { be._primerAge = 999; be._dismissPrimer(); }
+      });
+    }
+    await page.waitForTimeout(get('--victory', null) ? 0 : 2500);
   } else {
     await page.evaluate(st => { _slashGameInstance.state = st; }, state);
     await page.waitForTimeout(1200);

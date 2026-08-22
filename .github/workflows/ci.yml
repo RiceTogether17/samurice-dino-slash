@@ -54,3 +54,7 @@ jobs:
       - name: Stage 21 frame budget
         # A late, entity-heavy stage — the one that used to hurt most.
         run: node tools/profile.js --stage 21 --frames 300 --max-source-mp 5 --max-p95 8
+      - name: Combat frame budget
+        # The boss fight is real-time now, so it needs its own budget rather
+        # than riding on the runner's.
+        run: node tools/profile.js --state battle --stage 5 --frames 250 --max-source-mp 5 --max-p95 8

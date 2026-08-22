@@ -96,6 +96,7 @@
   const bladeRush = {
     id: 'blade-rush',
     title: 'Blade Rush',
+    howTo: 'The sounds of the word are scattered. Slash them in the order you say them — first sound first.',
     skills: ['oral-blend', 'blend', 'sight-word'],
 
     canBuild(word) { return (word.phonemes || []).length >= 2; },
@@ -214,6 +215,7 @@
   const soundCleave = {
     id: 'sound-cleave',
     title: 'Sound Cleave',
+    howTo: 'The word is one solid block. Swipe down where one sound ends and the next begins.',
     skills: ['segment-it', 'sound-count'],
 
     canBuild(word) {
@@ -380,6 +382,7 @@
   const soundStrike = {
     id: 'sound-strike',
     title: 'Sound Strike',
+    howTo: 'The sounds circle the boss. Strike the one in the position you are asked for.',
     skills: ['first', 'last', 'middle', 'letter-sound'],
 
     canBuild(word, ctx) {
@@ -490,6 +493,7 @@
   const echoDuel = {
     id: 'echo-duel',
     title: 'Echo Duel',
+    howTo: 'Words fly at you. Slash the ones that rhyme — and let the ones that do not fly straight past.',
     skills: ['rhyme'],
 
     _rime(w) {
@@ -633,6 +637,7 @@
   const flashGuard = {
     id: 'flash-guard',
     title: 'Flash Guard',
+    howTo: 'Watch the word flash, then strike the shield carrying it.',
     skills: ['sight-word'],
 
     canBuild(word, ctx) { return (ctx.words || []).length >= 3; },

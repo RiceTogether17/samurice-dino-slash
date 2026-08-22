@@ -2339,9 +2339,11 @@ class SlashGame {
 
     // Stats — each row counts up from 0 to final value
     const rows = [
+      // `unit` is a prefix, `suffix` a trailing one: "×5" reads correctly with
+      // the symbol in front, "82%" does not.
       { emoji: '📖', label: 'Words Blended',  val: stats.wordsBlended ?? 0, color: '#76FF03', unit: '' },
       { emoji: '🔥', label: 'Best Streak',    val: stats.bestStreak   ?? 0, color: '#FF9800', unit: '×' },
-      { emoji: '🎯', label: 'Accuracy',        val: stats.accuracy     ?? 0, color: '#00E5FF', unit: '%' },
+      { emoji: '🎯', label: 'Accuracy',        val: stats.accuracy     ?? 0, color: '#00E5FF', unit: '', suffix: '%' },
       { emoji: '🍚', label: 'Rice Earned',     val: stats.riceEarned   ?? 0, color: '#FFD700', unit: '' },
     ];
 
@@ -2376,7 +2378,7 @@ class SlashGame {
       ctx.font = `900 ${Math.min(22, W * 0.048)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = row.color;
       ctx.shadowColor = row.color; ctx.shadowBlur = 8;
-      ctx.fillText(`${row.unit}${displayVal}${row.unit === '%' ? '' : row.unit === '×' ? '' : ''}`, 0, 0);
+      ctx.fillText(`${row.unit || ''}${displayVal}${row.suffix || ''}`, 0, 0);
       ctx.restore();
 
       ctx.restore();

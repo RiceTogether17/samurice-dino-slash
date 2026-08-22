@@ -71,6 +71,9 @@
       this._flash = 0;
       this._slashFx = [];
       this._floaters = [];
+      this._shards = [];
+      this._banner = null;
+      this._specialFx = 0;
       this._nextRoundAt = 0;
 
       // Sounds gathered in the runner charge the special attack, so the
@@ -83,6 +86,15 @@
       // instead of advancing, so nothing is lost by thinking for a while.
       this.relaxed = true;
       try { this.relaxed = localStorage.getItem('samurice_relaxed') !== '0'; } catch (_) {}
+
+      // Each mechanic is taught once, the first time it ever appears. Without
+      // this a child meets "cut the word between its sounds" with no idea
+      // that swiping is even a thing the game accepts.
+      this._seenPatterns = new Set();
+      try {
+        const raw = localStorage.getItem('samurice_seen_patterns');
+        if (raw) this._seenPatterns = new Set(JSON.parse(raw));
+      } catch (_) { /* private mode: teach it again, which is harmless */ }
 
       this._words = (stage.words || []).filter(w => w && w.word);
       this._wordMisses = new Map();   // word -> misses, for adaptive weighting
@@ -179,6 +191,10 @@
       this._key = e => {
         if (this.done) return;
         const k = e.key;
+        if (this.state === 'primer') {
+          if (k === ' ' || k === 'Enter') { this._dismissPrimer(); e.preventDefault(); }
+          return;
+        }
         if (k === 'ArrowLeft' || k === 'ArrowRight') {
           this._moveCursor(k === 'ArrowLeft' ? -1 : 1);
           e.preventDefault();
@@ -187,6 +203,9 @@
           e.preventDefault();
         } else if (k === 'h' || k === 'H') {
           this._speakTarget();
+        } else if (k === 's' || k === 'S') {
+          this._unleashSpecial();
+          e.preventDefault();
         }
       };
       this.canvas.addEventListener('pointerdown', this._down);
@@ -233,6 +252,13 @@
       this._pattern = built.pattern;
       this._round = built.round;
       this._attemptInRound = 0;
+
+      if (!this._seenPatterns.has(this._pattern.id)) {
+        this.state = 'primer';
+        this._primerAge = 0;
+        this._say(this._pattern.howTo, 'neutral', 9000);
+        return;
+      }
       this.state = 'duel';
       this._say(this._pattern.instruction(this._round), 'neutral', 2600);
       setTimeout(() => { if (!this.done) this._speakTarget(); }, 320);
@@ -253,23 +279,95 @@
     }
 
     // ── Input resolution ─────────────────────────────────────
+    _dismissPrimer() {
+      if (this.state !== 'primer' || this._primerAge < 20) return;
+      this._seenPatterns.add(this._pattern.id);
+      try {
+        localStorage.setItem('samurice_seen_patterns',
+                             JSON.stringify([...this._seenPatterns]));
+      } catch (_) { /* nothing to do */ }
+      this.state = 'duel';
+      this._say(this._pattern.instruction(this._round), 'neutral', 2600);
+      setTimeout(() => { if (!this.done) this._speakTarget(); }, 200);
+    }
+
     _strike(x, y) {
+      if (this.state === 'primer') { this._dismissPrimer(); return; }
       if (!this._round || !this._pattern || this.state !== 'duel') return;
+      if (this._hitRiku(x, y) && this._unleashSpecial()) return;
       const id = this._pattern.hitTest(this._round, x, y, this._layout());
       if (id == null) return;
       this._slashFx.push({ x, y, age: 0, life: 18, angle: Math.random() * Math.PI });
       this.audio?.sfxSlash?.();
-      this._apply(this._pattern.resolve(this._round, id));
+      const res = this._pattern.resolve(this._round, id);
+      if (res) res.at = { x, y };
+      this._apply(res);
     }
 
     _swipe(start, end) {
       if (!this._round || !this._pattern || this.state !== 'duel') return;
       if (!this._pattern.onSwipe) { this._strike(end.x, end.y); return; }
-      this._slashFx.push({ x: (start.x + end.x) / 2, y: (start.y + end.y) / 2,
-                           age: 0, life: 20,
+      const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+      this._slashFx.push({ ...mid, age: 0, life: 20,
                            angle: Math.atan2(end.y - start.y, end.x - start.x) });
       this.audio?.sfxSlash?.();
-      this._apply(this._pattern.onSwipe(this._round, start, end, this._layout()));
+      const res = this._pattern.onSwipe(this._round, start, end, this._layout());
+      if (res) res.at = mid;
+      this._apply(res);
+    }
+
+    /**
+     * Rice Storm — the charge meter's payoff.
+     *
+     * Deliberately damage only: it never answers a round for the child. The
+     * reward for accuracy is a bigger hit, not a skipped question, so the
+     * thing being rewarded stays the thing being learned.
+     */
+    _unleashSpecial() {
+      if (this._charge < this._chargeMax || this.state !== 'duel') return false;
+      this._charge = 0;
+      const dmg = 45 + this._streak * 12 + (this.stage.world || 1) * 4;
+      this.bossHp = Math.max(0, this.bossHp - dmg);
+      this.score += dmg * 4;
+      this._specialFx = 40;
+      this._bossShake = 26;
+      this._flash = 0.6;
+      const L = this._layout();
+      this._floaters.push({ text: `-${dmg}`, x: L.boss.x, y: L.boss.y - L.boss.size * 0.7,
+                            age: 0, life: 70, tone: 'dmg' });
+      this._showBanner('RICE STORM!', '#FF7043');
+      this.audio?.sfxStarPower?.();
+      this.audio?.sfxBossHit?.();
+      if (this.bossHp <= 0) this._endRound(true);
+      return true;
+    }
+
+    /** Did this strike land on Riku himself? That is how the special fires. */
+    _hitRiku(x, y) {
+      const L = this._layout();
+      return Math.abs(x - L.riku.x) < L.riku.size * 0.5 &&
+             y > L.riku.y - L.riku.size && y < L.riku.y + 10;
+    }
+
+    _showBanner(text, color) {
+      this._banner = { text, color, age: 0, life: 70 };
+    }
+
+    /** Shatter shards where a sound was cut. Density follows the quality tier. */
+    _burst(at) {
+      if (!at || root.REDUCED_MOTION) return;
+      const density = root.Quality ? root.Quality.flags.particles : 1;
+      const n = Math.round(14 * density);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 2 + Math.random() * 5;
+        this._shards.push({
+          x: at.x, y: at.y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5,
+          r: 2 + Math.random() * 3, age: 0, life: 26 + Math.random() * 16,
+          hue: 40 + Math.random() * 40,
+        });
+      }
     }
 
     _moveCursor(dir) {
@@ -287,7 +385,9 @@
       const t = list[this._round.cursor || 0];
       this._slashFx.push({ x: t.x, y: t.y, age: 0, life: 18, angle: 0.5 });
       this.audio?.sfxSlash?.();
-      this._apply(this._pattern.resolve(this._round, t.id));
+      const res = this._pattern.resolve(this._round, t.id);
+      if (res) res.at = { x: t.x, y: t.y };
+      this._apply(res);
     }
 
     /** Turn a pattern's verdict into damage, combo, coaching and score. */
@@ -301,6 +401,14 @@
         this._bestStreak = Math.max(this._bestStreak, this._streak);
         this._hits++; this._attempts++;
         this.audio?.sfxCoin?.();
+        this._burst(result.at);
+        // Rewards escalate rather than firing at one volume for everything:
+        // a sound landing is a spark, a run of them earns a banner, a clean
+        // round earns charge, and only the boss falling gets the full show.
+        if (this._streak === 3 || this._streak === 5 || this._streak % 8 === 0) {
+          this._showBanner(`${this._streak} IN A ROW!`, '#FFD54F');
+          this.audio?.sfxBoost?.();
+        }
         if (result.complete) this._completeRound(result, word, skill);
         return;
       }
@@ -349,7 +457,13 @@
                             age: 0, life: 60, tone: 'dmg' });
 
       if (clean) {
+        const was = this._charge;
         this._charge = Math.min(this._chargeMax, this._charge + 1);
+        this._showBanner('PERFECT!', '#7CFF9B');
+        if (was < this._chargeMax && this._charge >= this._chargeMax) {
+          this._showBanner('RICE STORM READY — tap Riku!', '#FF7043');
+          this.audio?.sfxStarPower?.();
+        }
         if (!this._learned.has(word.word)) {
           this._learned.add(word.word);
           this.learnedWords = [...this._learned];
@@ -399,6 +513,13 @@
         f.age++; f.y -= 1.1;
         if (f.age > f.life) this._floaters.splice(i, 1);
       }
+      for (let i = this._shards.length - 1; i >= 0; i--) {
+        const p = this._shards[i];
+        p.age++; p.x += p.vx; p.y += p.vy; p.vy += 0.28; p.vx *= 0.98;
+        if (p.age > p.life) this._shards.splice(i, 1);
+      }
+      if (this._banner && ++this._banner.age > this._banner.life) this._banner = null;
+      if (this._specialFx > 0) this._specialFx--;
 
       const pct = this.bossHp / this.bossMaxHp;
       const phase = pct <= BOSS_PHASE_3 ? 3 : pct <= BOSS_PHASE_2 ? 2 : 1;
@@ -407,6 +528,7 @@
         this._say(phase === 3 ? 'The boss is enraged!' : 'The boss speeds up!', 'warn', 2200);
       }
 
+      if (this.state === 'primer') { this._primerAge++; return; }
       if (this.state === 'boss-defeated') {
         if (--this._defeatFrames <= 0) { this.done = true; this.outcome = 'victory'; this.state = 'done'; }
         return;
@@ -444,9 +566,15 @@
         this._pattern.draw(this._round, ctx,
           { ...L, relaxed: this.relaxed, phase: this._bossPhase, age: this._age });
       }
+      if (this.state === 'primer') this._drawPrimer(ctx, L);
+      if (this.state === 'boss-defeated') this._drawVictory(ctx, L);
+      this._drawShards(ctx);
       this._drawSlashes(ctx);
+      if (this._specialFx > 0) this._drawSpecial(ctx, L);
       this._drawFloaters(ctx);
       this._drawHud(ctx, L);
+      this._drawCharge(ctx, L);
+      if (this._banner) this._drawBanner(ctx, L);
       if (this._paused) this._drawPause(ctx, L);
     }
 
@@ -537,6 +665,83 @@
       }
     }
 
+    _drawShards(ctx) {
+      for (const p of this._shards) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 1 - p.age / p.life);
+        ctx.fillStyle = `hsl(${p.hue},100%,62%)`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    _drawSpecial(ctx, L) {
+      const t = 1 - this._specialFx / 40;
+      ctx.save();
+      ctx.globalAlpha = (1 - t) * 0.9;
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 10 * (1 - t) + 2;
+      for (let i = 0; i < 5; i++) {
+        const y = L.field.y + L.field.h * (i / 4);
+        ctx.beginPath();
+        ctx.moveTo(L.riku.x, y - 40 + t * 60);
+        ctx.lineTo(L.boss.x, y + 40 - t * 60);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    /**
+     * The charge meter, drawn under Riku so the payoff sits with the fighter
+     * it belongs to rather than in a corner of the HUD.
+     */
+    _drawCharge(ctx, L) {
+      const full = this._charge >= this._chargeMax;
+      const w = L.riku.size * 0.9, h = 9;
+      const x = L.riku.x - w / 2;
+      const y = L.riku.y - L.riku.size - 18;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.beginPath(); ctx.roundRect(x - 2, y - 2, w + 4, h + 4, 6); ctx.fill();
+      const pct = this._charge / this._chargeMax;
+      if (pct > 0) {
+        const pulse = full ? 0.75 + Math.sin(this._age * 0.2) * 0.25 : 1;
+        ctx.globalAlpha = pulse;
+        const g = ctx.createLinearGradient(x, 0, x + w, 0);
+        g.addColorStop(0, '#FFB300'); g.addColorStop(1, '#FF7043');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.roundRect(x, y, w * pct, h, 4); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (full) {
+        ctx.fillStyle = '#FFD54F';
+        ctx.font = '900 11px "Nunito", system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('TAP ME', L.riku.x, y - 6);
+      }
+      ctx.restore();
+    }
+
+    _drawBanner(ctx, L) {
+      const b = this._banner;
+      const t = b.age / b.life;
+      const pop = t < 0.2 ? t / 0.2 : 1;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, (1 - t) * 2.2);
+      ctx.translate(L.W / 2, L.field.y + L.field.h + 40);
+      ctx.scale(0.75 + pop * 0.35, 0.75 + pop * 0.35);
+      ctx.font = '900 30px "Nunito", system-ui';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+      ctx.strokeText(b.text, 0, 0);
+      ctx.fillStyle = b.color;
+      ctx.fillText(b.text, 0, 0);
+      ctx.restore();
+    }
+
     _drawFloaters(ctx) {
       for (const f of this._floaters) {
         ctx.save();
@@ -577,13 +782,15 @@
 
       // Combo meter — the reason to keep a run of correct sounds going.
       if (this._streak > 1) {
+        // Left-aligned under Riku's health, not centred: the middle of the
+        // screen belongs to whatever status line the active pattern draws.
         ctx.save();
-        ctx.font = '900 20px "Nunito", system-ui';
-        ctx.textAlign = 'center';
+        ctx.font = '900 18px "Nunito", system-ui';
+        ctx.textAlign = 'left';
         ctx.fillStyle = '#FFD700';
         ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 4;
         const t = `COMBO x${this._streak}`;
-        ctx.strokeText(t, L.W / 2, 84); ctx.fillText(t, L.W / 2, 84);
+        ctx.strokeText(t, marginL, 84); ctx.fillText(t, marginL, 84);
         ctx.restore();
       }
 
@@ -599,6 +806,116 @@
         ctx.fillText(label, L.W / 2, 24);
         ctx.restore();
       }
+    }
+
+    /**
+     * First-encounter primer: the one time a child is told what a new
+     * mechanic's verb actually is. Blocks play until dismissed, because a
+     * mechanic explained while sounds are already closing in is not explained.
+     */
+    _drawPrimer(ctx, L) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(4,8,20,0.82)';
+      ctx.fillRect(0, 0, L.W, L.H);
+
+      const cw = Math.min(L.W * 0.78, 560);
+      const ch = Math.min(L.H * 0.56, 250);
+      const cx = L.W / 2, cy = L.H * 0.44;
+      const pop = Math.min(1, this._primerAge / 12);
+
+      ctx.translate(cx, cy);
+      ctx.scale(0.9 + pop * 0.1, 0.9 + pop * 0.1);
+      ctx.globalAlpha = pop;
+
+      const g = ctx.createLinearGradient(0, -ch / 2, 0, ch / 2);
+      g.addColorStop(0, '#243A6B');
+      g.addColorStop(1, '#101A33');
+      ctx.fillStyle = g;
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(-cw / 2, -ch / 2, cw, ch, 20);
+      ctx.fill(); ctx.stroke();
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#FFD54F';
+      ctx.font = '900 15px "Nunito", system-ui';
+      ctx.fillText('NEW MOVE', 0, -ch / 2 + 34);
+      ctx.fillStyle = '#fff';
+      ctx.font = `900 ${Math.round(Math.min(34, cw * 0.075))}px "Nunito", system-ui`;
+      ctx.fillText(this._pattern.title, 0, -ch / 2 + 74);
+
+      ctx.fillStyle = '#D9E4FF';
+      ctx.font = `600 ${Math.round(Math.min(17, cw * 0.036))}px "Nunito", system-ui`;
+      this._wrap(ctx, this._pattern.howTo, cw - 64).forEach((line, i) => {
+        ctx.fillText(line, 0, -ch / 2 + 112 + i * 24);
+      });
+
+      if (this._primerAge > 20) {
+        ctx.globalAlpha = pop * (0.65 + Math.sin(this._age * 0.12) * 0.35);
+        ctx.fillStyle = '#7CFF9B';
+        ctx.font = '900 17px "Nunito", system-ui';
+        ctx.fillText('Tap anywhere to start', 0, ch / 2 - 26);
+      }
+      ctx.restore();
+    }
+
+    /** Greedy word wrap, so a how-to line never runs off its card. */
+    _wrap(ctx, text, maxWidth) {
+      const words = String(text).split(' ');
+      const lines = [];
+      let line = '';
+      for (const w of words) {
+        const next = line ? `${line} ${w}` : w;
+        if (ctx.measureText(next).width > maxWidth && line) { lines.push(line); line = w; }
+        else line = next;
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    /** The boss falling is the one moment that earns the full celebration. */
+    _drawVictory(ctx, L) {
+      const t = 1 - this._defeatFrames / 120;
+      ctx.save();
+      ctx.globalAlpha = Math.min(0.55, t * 1.2);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, L.W, L.H);
+      ctx.globalAlpha = 1;
+
+      if (!this._confetti) {
+        this._confetti = Array.from({ length: root.LOW_FX ? 24 : 70 }, () => ({
+          x: Math.random() * L.W, y: -Math.random() * L.H,
+          vy: 2 + Math.random() * 3.4, vx: (Math.random() - 0.5) * 2,
+          w: 5 + Math.random() * 8, h: 4 + Math.random() * 6,
+          rot: Math.random() * Math.PI, rotV: (Math.random() - 0.5) * 0.2,
+          c: ['#FFD700', '#FF4081', '#00E5FF', '#76FF03', '#FF9800', '#fff'][Math.floor(Math.random() * 6)],
+        }));
+      }
+      for (const c of this._confetti) {
+        c.y += c.vy; c.x += c.vx; c.rot += c.rotV;
+        if (c.y > L.H + 20) { c.y = -20; c.x = Math.random() * L.W; }
+        ctx.save();
+        ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+        ctx.fillStyle = c.c;
+        ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h);
+        ctx.restore();
+      }
+
+      const pop = Math.min(1, t * 4);
+      ctx.translate(L.W / 2, L.H * 0.42);
+      ctx.scale(0.6 + pop * 0.4, 0.6 + pop * 0.4);
+      ctx.textAlign = 'center';
+      ctx.font = '900 46px "Nunito", system-ui';
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.strokeText('BOSS DOWN!', 0, 0);
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText('BOSS DOWN!', 0, 0);
+      ctx.font = '900 20px "Nunito", system-ui';
+      ctx.fillStyle = '#EAF2FF';
+      ctx.fillText(`Best streak x${this._bestStreak}  ·  ${this.getAccuracyPercent()}% accurate`, 0, 40);
+      ctx.restore();
     }
 
     _drawPause(ctx, L) {

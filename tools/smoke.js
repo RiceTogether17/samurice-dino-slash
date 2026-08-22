@@ -104,6 +104,18 @@ function check(name, ok, detail = '') {
   // Combat is the point of the rebuild, so check it actually fights: a round
   // exists, striking the right target damages the boss, and a wrong strike
   // draws a coaching line instead of the answer.
+  // A first-time player meets a new mechanic behind a primer card that
+  // explains its verb. Check it appears, then dismiss it the way a tap would.
+  check('a new mechanic is taught before it is played', await page.evaluate(
+    () => _slashGameInstance.battle.state === 'primer'),
+    await page.evaluate(() => _slashGameInstance.battle._pattern?.howTo || 'no primer'));
+
+  await page.evaluate(() => {
+    const be = _slashGameInstance.battle;
+    be._primerAge = 999;
+    be._dismissPrimer();
+  });
+
   check('a duel round is live', await page.evaluate(() => {
     const be = _slashGameInstance.battle;
     return be.state === 'duel' && !!be._round && !!be._pattern;
@@ -114,7 +126,9 @@ function check(name, ok, detail = '') {
     const before = be.bossHp;
     let guard = 0;
     // Play the current round correctly until it completes.
-    while (be.state === 'duel' && guard++ < 40) {
+    while (guard++ < 60) {
+      if (be.state === 'primer') { be._primerAge = 999; be._dismissPrimer(); continue; }
+      if (be.state !== 'duel') break;
       const targets = be._pattern.targets(be._round);
       if (!targets.length) { be.update(1 / 60); continue; }
       let acted = false;
@@ -131,6 +145,7 @@ function check(name, ok, detail = '') {
 
   const coached = await page.evaluate(() => {
     const be = _slashGameInstance.battle;
+    if (be.state === 'primer') { be._primerAge = 999; be._dismissPrimer(); }
     // Force a Sound Strike round and hit a rune that is knowably wrong.
     // Probing targets by calling resolve() would not do: resolve mutates the
     // round, so a probe that happened to be correct would consume it.
