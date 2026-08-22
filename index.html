@@ -70,6 +70,15 @@
             <input type="range" id="vol-sfx" min="0" max="100" value="100">
         </label>
         <button class="mc-mute-toggle" id="mc-mute-toggle">🔊 Sound On</button>
+
+        <h4 class="mc-settings-title">✨ Graphics</h4>
+        <div class="mc-quality-row" role="radiogroup" aria-label="Graphics quality">
+            <button class="mc-quality-btn" data-quality="auto"   role="radio" aria-checked="true">Auto</button>
+            <button class="mc-quality-btn" data-quality="low"    role="radio" aria-checked="false">Fast</button>
+            <button class="mc-quality-btn" data-quality="medium" role="radio" aria-checked="false">Balanced</button>
+            <button class="mc-quality-btn" data-quality="high"   role="radio" aria-checked="false">Pretty</button>
+        </div>
+        <p class="mc-quality-hint" id="mc-quality-hint">Auto — adjusts to your device</p>
     </div>
 
     <!-- ── Hero area: mascot + title only ── -->
@@ -294,6 +303,7 @@
        7. game.js – Dino Dash (untouched)
 ═══════════════════════════════════════════════════════════════ -->
 <!-- Core systems — must load before the engines that use them -->
+<script src="js/core/quality.js"></script>
 <script src="js/core/spriteCache.js"></script>
 <script src="js/core/renderPatch.js"></script>
 <script src="js/phonicsData.js"></script>
@@ -388,7 +398,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       return window._sharedAudio;
     };
-    const syncUI = () => {
+    let syncUI = () => {
       const a = audio(); if (!a) return;
       const v = a.getVolumes();
       document.getElementById('vol-master').value = Math.round(v.master * 100);
@@ -420,6 +430,33 @@ document.addEventListener('DOMContentLoaded', function() {
     bind('vol-music', 'setMusicVolume');
     bind('vol-sfx', 'setSfxVolume');
     muteT?.addEventListener('click', () => { audio()?.toggleMute(); syncUI(); });
+
+    // ── Graphics quality ───────────────────────────────────────
+    // 'Auto' lets core/quality.js raise and lower effects with measured
+    // frame cost; the other three pin a tier and stop adaptation.
+    const qButtons = [...panel.querySelectorAll('.mc-quality-btn')];
+    const qHint    = document.getElementById('mc-quality-hint');
+    const LABELS   = { low: 'Fast', medium: 'Balanced', high: 'Pretty' };
+    const syncQuality = () => {
+      const Q = window.Quality; if (!Q) return;
+      const chosen = Q.adaptive ? 'auto' : Q.tier;
+      qButtons.forEach(b => {
+        const on = b.dataset.quality === chosen;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-checked', String(on));
+      });
+      qHint.textContent = Q.adaptive
+        ? `Auto — currently ${LABELS[Q.tier]}`
+        : `${LABELS[Q.tier]} — fixed`;
+    };
+    qButtons.forEach(b => b.addEventListener('click', () => {
+      window.Quality?.prefer(b.dataset.quality);
+      audio()?.sfxClick?.();
+      syncQuality();
+    }));
+    window.Quality?.onChange(syncQuality);
+    const _origSync = syncUI;
+    syncUI = function () { _origSync(); syncQuality(); };
   })();
 
   // Mode chooser

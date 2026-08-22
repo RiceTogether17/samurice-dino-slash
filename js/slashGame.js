@@ -171,8 +171,9 @@ const SLASH_SPRITE_SHEETS = {
 // PERFORMANCE
 // ─────────────────────────────────────────────────────────────
 // shadowBlur is the single most expensive canvas state on mobile GPUs.
-// Patch the prototype once so LOW_FX mode silently disables every glow
-// in the app, and normal mode caps blur radius — no per-site edits.
+// Patch the prototype once so the active quality tier caps glow radius for the
+// whole app — shadowBlur is one of the most expensive things Canvas2D can do,
+// and this avoids editing the ~120 call sites that set it.
 (function () {
   if (window.__shadowPatched) return;
   window.__shadowPatched = true;
@@ -183,13 +184,14 @@ const SLASH_SPRITE_SHEETS = {
     Object.defineProperty(proto, 'shadowBlur', {
       configurable: true,
       get: desc.get,
-      set(v) { desc.set.call(this, window.LOW_FX ? 0 : Math.min(v, 16)); },
+      set(v) {
+        const cap = window.Quality ? window.Quality.flags.shadowBlurMax
+                                   : (window.LOW_FX ? 0 : 16);
+        desc.set.call(this, Math.min(v, cap));
+      },
     });
   } catch (_) { /* leave shadows untouched if the platform disallows this */ }
 })();
-// Sticky low-effects mode: once a device proves slow it stays in the
-// fast path on future visits instead of stuttering for 2s every boot.
-window.LOW_FX = localStorage.getItem('samurice_lowfx') === '1';
 
 // ─────────────────────────────────────────────────────────────
 // SLASH GAME
@@ -199,9 +201,18 @@ class SlashGame {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext('2d');
     this.overlay = document.getElementById(overlayId);
-    // DPR above 2 quadruples fill cost for no visible gain on phones;
-    // LOW_FX devices render at 1× and let the browser upscale.
-    this._dpr = window.LOW_FX ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+    // DPR above 2 quadruples fill cost for no visible gain on phones, and
+    // lower tiers render below native and let the browser upscale.
+    this._dpr = Math.min(window.devicePixelRatio || 1,
+                         window.Quality ? window.Quality.flags.maxDpr : 2);
+    // Re-resolution when the tier changes, so a device that speeds up or slows
+    // down mid-session gets the sharpness or the headroom straight away.
+    if (window.Quality) {
+      window.Quality.onChange(() => {
+        this._dpr = Math.min(window.devicePixelRatio || 1, window.Quality.flags.maxDpr);
+        if (this._resizeCanvas) this._resizeCanvas();
+      });
+    }
     this._setupCanvas();
     // Global modules
     // One AudioManager for the whole app (shared with Dino Dash):
@@ -1144,23 +1155,16 @@ class SlashGame {
     this._fpsSamples.push(1 / frameDtSec);
     if (this._fpsSamples.length > 30) this._fpsSamples.shift();
     this._age++;
-    // Adaptive quality: if a gameplay state sustains under ~40 FPS, drop
-    // to low-effects mode (no glows, 1× resolution) and remember it so
-    // the device never stutters through the discovery period again.
-    if (!window.LOW_FX && isGameplay && this._fpsSamples.length >= 30 && (this._age % 60 === 0)) {
-      const avg = this._fpsSamples.reduce((a, b) => a + b, 0) / this._fpsSamples.length;
-      if (avg < 40) {
-        window.LOW_FX = true;
-        try { localStorage.setItem('samurice_lowfx', '1'); } catch (_) {}
-        this._dpr = 1;
-        if (this._resizeCanvas) this._resizeCanvas();
-      }
-    }
+    // Adaptive quality is driven by how long this frame's own work takes,
+    // measured around the state switch below. Wall-clock frame *interval* is
+    // the wrong signal: it also moves with vsync, throttling and page
+    // visibility, none of which the renderer can do anything about.
     // Block all states until sprites + sheets + audio preload are ready.
     if (!this._spritesReady || !this._sheetsReady || !this._audioReady) { this._drawLoading(); return; }
     // Tick achievement popup
     this._tickAchievementPopup();
     this._syncShellMusic();
+    const workStart = isGameplay ? performance.now() : 0;
     switch (this.state) {
       case 'onboarding': this._updateOnboarding(); break; // PHASE 6
       case 'title': this._updateTitle(); break;
@@ -1183,6 +1187,7 @@ class SlashGame {
       case 'leaderboard': this._updateLeaderboard(); break;
       case 'dashboard':   this._drawDashboard(); break;  // Phase 9
     }
+    if (workStart && window.Quality) window.Quality.sample(performance.now() - workStart);
     // Achievement popup on top of everything
     this._drawAchievementPopup();
     if (this._debugOverlay) this._drawDebugOverlay();
