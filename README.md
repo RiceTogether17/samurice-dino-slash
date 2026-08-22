@@ -68,6 +68,7 @@ Tooling is dev-only; the shipped game has no dependencies.
 ```bash
 npm install
 npm test              # unit tests (node --test)
+npm run smoke         # end-to-end playthrough in headless Chromium
 npm run lint          # eslint
 npm run profile       # measure frame cost in headless Chromium
 npm run perf:check    # the performance budget CI enforces
