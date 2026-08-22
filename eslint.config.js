@@ -35,7 +35,7 @@ module.exports = [
         AudioManager: 'readonly', RunnerEngine: 'readonly',
         SlashGame: 'readonly', CombatEngine: 'readonly',
         CombatPatterns: 'readonly', Coach: 'readonly',
-        SpriteCache: 'readonly', Quality: 'readonly', ArrayOps: 'readonly',
+        SpriteCache: 'readonly', Quality: 'readonly', ArrayOps: 'readonly', UI: 'readonly',
         haptic: 'readonly', Tutorial: 'readonly',
         ACHIEVEMENTS: 'readonly', SHOP_ITEMS: 'readonly',
         EndlessParticle: 'readonly', EndlessRunnerEngine: 'readonly',
@@ -71,6 +71,7 @@ module.exports = [
         setTimeout: 'readonly', clearTimeout: 'readonly', globalThis: 'readonly',
         // Available inside page.evaluate callbacks, which run in the browser.
         window: 'readonly', document: 'readonly', performance: 'readonly',
+        getComputedStyle: 'readonly',
         CanvasRenderingContext2D: 'readonly', _slashGameInstance: 'readonly',
       },
     },

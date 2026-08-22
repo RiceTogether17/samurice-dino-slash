@@ -615,8 +615,8 @@
       ctx.fillStyle = this.stage.groundColor || '#2E7D32';
       ctx.fillRect(0, L.floorY, L.W, 6);
 
-      this._drawFighter(ctx, L.riku, this.sprites['riku-idle'], this._rikuShake, false);
-      this._drawFighter(ctx, L.boss, this.sprites[this._resolveBossSpriteKey()], this._bossShake, true);
+      this._drawFighter(ctx, L.riku, this.sprites['riku-idle'], this._rikuShake);
+      this._drawFighter(ctx, L.boss, this.sprites[this._resolveBossSpriteKey()], this._bossShake);
 
       if (this._flash > 0) {
         ctx.fillStyle = `rgba(255,255,255,${this._flash})`;
@@ -624,7 +624,14 @@
       }
     }
 
-    _drawFighter(ctx, spot, sprite, shake, flip) {
+    /**
+     * Boss art is never mirrored here. The sprites were generated facing
+     * inconsistent directions, so a flip at draw time is wrong for one group
+     * or the other whichever way it is set — that is how the boss ended up
+     * facing away from the fight. tools/normalise-facing.js fixes the data so
+     * every boss already faces the player, and this stays a plain blit.
+     */
+    _drawFighter(ctx, spot, sprite, shake) {
       const sx = shake > 0 && !root.REDUCED_MOTION ? (Math.random() - 0.5) * shake : 0;
       const bob = Math.sin(this._age * 0.045) * spot.size * 0.02;
       ctx.save();
@@ -636,7 +643,6 @@
       if (sprite && sprite.complete && sprite.naturalWidth > 0) {
         const h = spot.size;
         const w = h * (sprite.naturalWidth / sprite.naturalHeight);
-        if (flip) ctx.scale(-1, 1);
         ctx.drawImage(sprite, -w / 2, -h + bob, w, h);
       }
       ctx.restore();

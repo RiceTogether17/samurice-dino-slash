@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────
 'use strict';
 
-const CACHE_VERSION = 'samurice-v18';
+const CACHE_VERSION = 'samurice-v19';
 const CACHE_NAME    = `${CACHE_VERSION}-static`;
 
 // Assets that should be pre-cached at install time (critical path).
@@ -17,6 +17,7 @@ const PRECACHE_URLS = [
   './index.html',
   './css/style.css',
   './js/core/arrays.js',
+  './js/core/ui.js',
   './js/core/quality.js',
   './js/core/spriteCache.js',
   './js/core/renderPatch.js',

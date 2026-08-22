@@ -243,7 +243,10 @@ class SlashGame {
     this._fpsSamples = [];
     this._debugOverlay = false;
     // State
-    this.state = 'title'; // title | mode-select | menu | stage-select | world-map | runner | transition | battle | stage-win | stage-lose | endless-runner | endless-battle | endless-gameover | shop | daily | achievements | leaderboard
+    // Opens straight on the mode picker: index.html's title screen is the
+    // game's title screen, and a second canvas one behind it was a redundant
+    // tap on the way in.
+    this.state = 'mode-select'; // mode-select | menu | stage-select | world-map | runner | transition | battle | stage-win | stage-lose | endless-runner | endless-battle | endless-gameover | shop | daily | achievements | leaderboard
     this.stageId = 1;
     this._age = 0;
     this._transFrames = 0;
@@ -569,9 +572,6 @@ class SlashGame {
         }
         if (e.key === 'Escape' || e.key === 'm' || e.key === 'M') this.state = 'world-map';
       }
-      if (this.state === 'title' && (e.key === 'Enter' || e.key === ' ')) {
-        this.state = 'mode-select';
-      }
       if (this.state === 'menu' && (e.key === 'Enter' || e.key === ' ')) {
         this.state = 'world-map';
       }
@@ -603,7 +603,7 @@ class SlashGame {
   }
   _handleCanvasClick(mx, my) {
     // Soft UI tap sound on menu-style screens (gameplay has its own SFX)
-    const MENU_STATES = new Set(['title','mode-select','menu','stage-select','world-map',
+    const MENU_STATES = new Set(['mode-select','menu','stage-select','world-map',
                                  'shop','daily','achievements','leaderboard','stage-win','stage-lose']);
     if (MENU_STATES.has(this.state)) this.audio?.sfxClick?.();
     // PHASE 6: onboarding tutorial click routing
@@ -655,10 +655,6 @@ class SlashGame {
         this.audio.stopMusic(); this.state = 'world-map'; return;
       }
       return;
-    }
-    // Title screen: any click advances
-    if (this.state === 'title') {
-      this.state = 'mode-select'; this._stateEntryFade = 1.0; return;
     }
     // Mode select: handled by _clickModeSelect
     if (this.state === 'mode-select') {
@@ -1122,7 +1118,7 @@ class SlashGame {
   // screens manage their own stage music (startMusic in _startRunner).
   _syncShellMusic() {
     if (!this.audio || this.audio.isMuted) return;
-    const SHELL = new Set(['title','mode-select','menu','stage-select','world-map',
+    const SHELL = new Set(['mode-select','menu','stage-select','world-map',
                            'shop','daily','achievements','leaderboard','dashboard',
                            'stage-win','endless-gameover']);
     if (this._jingleUntil && performance.now() < this._jingleUntil) return;
@@ -1167,7 +1163,6 @@ class SlashGame {
     const workStart = isGameplay ? performance.now() : 0;
     switch (this.state) {
       case 'onboarding': this._updateOnboarding(); break; // PHASE 6
-      case 'title': this._updateTitle(); break;
       case 'mode-select': this._updateModeSelect(); break;
       case 'menu': this._updateMenu(); break;
       case 'stage-select': this._updateStageSelect(); break;
@@ -1459,27 +1454,28 @@ class SlashGame {
     const ctx = this.ctx;
     const W = this.W; const H = this.H;
     ctx.clearRect(0, 0, W, H);
-    // Background
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#0d1b0a');
-    grad.addColorStop(1, '#1a3a12');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
     const world = PHONICS_DATA.WORLDS[this._worldSel] || PHONICS_DATA.WORLDS[0];
+    // Each world's stage list sits on that world's own painted scene, so the
+    // screen tells you where you are before you have read a word of it.
+    // The background key lives on the stage data, not a guessable pattern
+    // ('stage-1-rice-paddy', not 'stage-1').
+    const firstStage = PHONICS_DATA.stageList[world.startId - 1];
+    UI.scene(ctx, this.sprites[firstStage && firstStage.bg],
+             W, H, this, `stageselect-${world.id}`);
     const ids   = world.stageIds;
     if (this._menuSel >= ids.length) this._menuSel = ids.length - 1;
-    // Header — world name + the skill it teaches
-    ctx.font = `bold ${Math.min(21, W * 0.052)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFD700';
+    // Header — world name, the skill it teaches, and the rice count
+    UI.heading(ctx, `World ${world.id} · ${world.name}`, W, 12,
+               { size: Math.min(21, W * 0.05) });
+    ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(`${world.icon} World ${world.id}: ${world.name}`, W / 2, 14);
-    ctx.font = `bold ${Math.min(12, W * 0.030)}px "Nunito", system-ui`;
-    ctx.fillStyle = world.accentColor;
-    ctx.fillText(`📚 ${world.skill}`, W / 2, 40);
-    ctx.font = '11px system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText(`🍚 ${this.progress.getRicePoints()} rice points · tap a stage to play`, W / 2, 58);
+    ctx.font = `800 ${Math.min(12, W * 0.030)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.gold;
+    ctx.fillText(world.skill, W / 2, 48);
+    ctx.restore();
+    // No rice chip here: the Worlds button already occupies this corner, and
+    // the count is on the previous screen.
     // Stage cards (2 columns)
     const cols = W > 480 ? 2 : 1;
     const rows = Math.ceil(ids.length / cols);
@@ -1501,10 +1497,11 @@ class SlashGame {
       const sel = this._menuSel === i;
       // Card background
       ctx.fillStyle = unlocked
-        ? (sel ? 'rgba(255,215,0,0.18)' : 'rgba(255,255,255,0.07)')
-        : 'rgba(0,0,0,0.35)';
+        ? (sel ? UI.THEME.panelHot : UI.THEME.panel)
+        : 'rgba(14,9,13,0.72)';
       ctx.beginPath(); ctx.roundRect(x, y, cw, ch, 14); ctx.fill();
-      ctx.strokeStyle = sel ? '#FFD700' : (unlocked ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)');
+      ctx.strokeStyle = sel ? UI.THEME.gold
+                      : (unlocked ? UI.THEME.stroke : 'rgba(255,255,255,0.10)');
       ctx.lineWidth = sel ? 2.5 : 1;
       ctx.stroke();
       if (!unlocked) {
@@ -1512,13 +1509,13 @@ class SlashGame {
         const prereq = PHONICS_DATA.getStagePrereq?.(stageId);
         ctx.font = `${Math.min(26, cw * 0.28)}px serif`;
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
         ctx.fillText('🔒', x + cw / 2, y + ch / 2 - 18);
-        ctx.font = 'bold 11px system-ui';
-        ctx.fillStyle = 'rgba(255,255,255,0.34)';
+        ctx.font = `800 11px ${UI.THEME.font}`;
+        ctx.fillStyle = UI.THEME.locked;
         ctx.fillText(`Stage ${world.id}-${i + 1} — Locked`, x + cw / 2, y + ch / 2 + 10);
-        ctx.font = '10px system-ui';
-        ctx.fillStyle = 'rgba(255,255,255,0.26)';
+        ctx.font = `700 10px ${UI.THEME.font}`;
+        ctx.fillStyle = 'rgba(247,241,228,0.42)';
         const gate = prereq ? `Clear ${prereq.world}-${prereq.local}: ${prereq.pattern}` : `Clear Stage ${prereqId}`;
         ctx.fillText(gate, x + cw / 2, y + ch / 2 + 28);
         continue;
@@ -1579,7 +1576,7 @@ class SlashGame {
     const relaxed = localStorage.getItem('samurice_relaxed') === '1';
     const btnW = Math.min(130, W * 0.30);
     const btnH = 26;
-    const btnX = W - btnW - 10;
+    const btnX = W - btnW - 116;   // clear of the fullscreen + close buttons
     const btnY = 10;
     this._relaxedToggleRect = { x: btnX, y: btnY, w: btnW, h: btnH };
     // Button background
@@ -2775,123 +2772,6 @@ class SlashGame {
   // Achievements, Leaderboard, Achievement Popups
   // ══════════════════════════════════════════════════════════════
   // ── TITLE SCREEN ─────────────────────────────────────────────
-  _updateTitle() { this._drawTitle(); }
-  _drawTitle() {
-    const ctx = this.ctx, W = this.W, H = this.H, t = this._age;
-    ctx.clearRect(0, 0, W, H);
-    // Animated gradient background
-    const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, `hsl(${210 + Math.sin(t*0.01)*10},65%,${55 + Math.sin(t*0.008)*8}%)`);
-    sky.addColorStop(0.5, `hsl(${35 + Math.sin(t*0.012)*10},75%,${60 + Math.sin(t*0.01)*5}%)`);
-    sky.addColorStop(1, `hsl(${130 + Math.sin(t*0.015)*10},60%,${35 + Math.sin(t*0.009)*5}%)`);
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-    // Stars
-    for (let i = 0; i < 20; i++) {
-      const sx = ((i * 137 + t * 0.05) % 1) * W;
-      const sy = ((i * 89 + 0.1) % 0.5) * H;
-      const sa = 0.5 + 0.5 * Math.sin(t * 0.08 + i * 1.3);
-      ctx.globalAlpha = sa * 0.8;
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(sx, sy, 1.5, 0, Math.PI*2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    // Ground strip
-    ctx.fillStyle = '#3d9a3a';
-    ctx.fillRect(0, H * 0.78, W, H * 0.22);
-    ctx.fillStyle = '#55c850';
-    ctx.fillRect(0, H * 0.78, W, 8);
-    // Animated dinos running in background
-    const dinoEmojis = ['🦖','🦕','🦴','🍚','🌾'];
-    for (let d = 0; d < 5; d++) {
-      const dx = ((t * (1.0 + d*0.35) + d * W/5) % (W + 100)) - 100;
-      ctx.font = `${H*0.11}px serif`;
-      ctx.textBaseline = 'middle';
-      ctx.fillText(dinoEmojis[d % dinoEmojis.length], dx, H * 0.84 + Math.sin(t * 0.04 + d) * 6);
-    }
-    // ── Title logo ────────────────────────────────────────────
-    const titleY = H * 0.08;
-    const titleSize = Math.min(W * 0.11, 52);
-    // Shimmer effect
-    ctx.save();
-    const shimmer = ctx.createLinearGradient(0, titleY, W, titleY + 80);
-    shimmer.addColorStop(0, '#FFD700');
-    shimmer.addColorStop(0.4, '#FFF8DC');
-    shimmer.addColorStop(((t * 0.015) % 1), '#ffffff');
-    shimmer.addColorStop(Math.min(1, ((t * 0.015) % 1) + 0.15), '#FFD700');
-    shimmer.addColorStop(1, '#FF8C00');
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    const bounce = Math.sin(t * 0.04) * 4;
-    // Shadow
-    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
-    // ⚔️ SAMURICE
-    ctx.font = `bold ${titleSize * 1.15}px Arial Black, 'Comic Sans MS', sans-serif`;
-    ctx.fillStyle = shimmer;
-    ctx.strokeStyle = '#7f3000'; ctx.lineWidth = Math.max(3, titleSize * 0.15);
-    ctx.strokeText('⚔️ SAMURICE', W/2, titleY + bounce);
-    ctx.fillText('⚔️ SAMURICE', W/2, titleY + bounce);
-    // DINO SLASH
-    ctx.font = `bold ${titleSize}px Arial Black, 'Comic Sans MS', sans-serif`;
-    ctx.fillStyle = '#FF6B35';
-    ctx.strokeStyle = '#7f1500';
-    ctx.strokeText('DINO SLASH 🦖', W/2, titleY + titleSize * 1.4 + bounce);
-    ctx.fillText('DINO SLASH 🦖', W/2, titleY + titleSize * 1.4 + bounce);
-    ctx.restore();
-    // Subtitle: Phonics Power!
-    ctx.textAlign = 'center'; ctx.font = `bold ${Math.min(20, W*0.045)}px Arial, sans-serif`;
-    ctx.fillStyle = '#4ECDC4';
-    ctx.fillText('LEARN TO READ · SLASH DINOS · SAVE THE RICE PADDY!', W/2, titleY + titleSize * 2.6 + bounce);
-    // ── Riku character (procedural) ─────────────────────────────
-    const rikuX = W * 0.5, rikuY = H * 0.43;
-    const rikuBounce = Math.sin(t * 0.06) * 10;
-    const rikuSize = Math.min(W * 0.48, 280);
-    const titleRiku = this.sprites['riku-idle'] || this.sprites['riku-run'];
-    if (titleRiku && titleRiku.complete && titleRiku.naturalWidth > 0) {
-      const ar = titleRiku.naturalWidth / titleRiku.naturalHeight;
-      const drawH = rikuSize;
-      const drawW = drawH * ar;
-      ctx.drawImage(titleRiku, rikuX - drawW / 2, rikuY + rikuBounce - drawH / 2, drawW, drawH);
-    } else {
-      this._drawRikuIdle(ctx, rikuX, rikuY + rikuBounce, rikuSize, t);
-    }
-    // ── "TAP TO PLAY" blinking prompt ─────────────────────────
-    const blinkAlpha = 0.5 + 0.5 * Math.sin(t * 0.08);
-    ctx.globalAlpha = blinkAlpha;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const tapSize = Math.min(36, W * 0.08);
-    ctx.font = `bold ${tapSize}px Arial Black, sans-serif`;
-    ctx.fillStyle = '#FFD700';
-    ctx.strokeStyle = '#5a2000'; ctx.lineWidth = 6;
-    ctx.strokeText('TAP TO PLAY!', W/2, H * 0.74);
-    ctx.fillText('TAP TO PLAY!', W/2, H * 0.74);
-    ctx.globalAlpha = 1;
-    // ── Rice grains / login streak info bottom ────────────────
-    const g = this.progress.getRiceGrains();
-    const streak = this.progress.getLoginStreak();
-    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-    ctx.font = `bold ${Math.min(20,W*0.048)}px Arial, sans-serif`;
-    ctx.fillStyle = '#FFD700';
-    ctx.fillText(`🌾 ${g}`, 14, H - 10);
-    if (streak > 1) {
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#FF8C00';
-      ctx.fillText(`🔥 ${streak} day streak!`, W - 12, H - 10);
-    }
-    // ── New achievement badge ──────────────────────────────────
-    const newAch = this.progress.getNewAchievements();
-    if (newAch.length > 0) {
-      ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-      ctx.fillStyle = '#FF4444';
-      ctx.beginPath(); ctx.arc(W - 20, 20, 10, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Arial, sans-serif';
-      ctx.fillText(newAch.length, W - 20, 14);
-    }
-    // Login reward prompt
-    if (this.progress.canClaimLoginReward() && !this._loginRewardShown) {
-      this._loginRewardShown = true;
-      const reward = this.progress.claimLoginReward();
-      this._queueAchievementPopup({ emoji:'🎁', name:`Day ${streak} Reward!`, desc:`+${reward} Rice Grains!` });
-    }
-  }
   _drawRikuIdle(ctx, cx, cy, size, t) {
     const W = size * 0.7, H = size;
     ctx.save();
@@ -2936,79 +2816,62 @@ class SlashGame {
   _drawModeSelect() {
     const ctx = this.ctx, W = this.W, H = this.H, t = this._age;
     ctx.clearRect(0, 0, W, H);
-    // Background
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#0a1e3e'); bg.addColorStop(1, '#1a3a1a');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-    // Header
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(28, W*0.065)}px Arial Black, sans-serif`;
-    ctx.fillStyle = '#FFD700';
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
-    ctx.strokeText('CHOOSE YOUR ADVENTURE', W/2, 20);
-    ctx.fillText('CHOOSE YOUR ADVENTURE', W/2, 20);
-    // Currency display
-    ctx.textAlign = 'right'; ctx.font = `bold 16px Arial, sans-serif`;
-    ctx.fillStyle = '#FFD700'; ctx.fillText(`🌾 ${this.progress.getRiceGrains()}`, W - 12, 22);
-    // Mode buttons
-    const modes = [
-      { label:'🏃 ENDLESS RUN', sub:'How far can you go?', col:'#FF6B35', action:'endless', hot:true },
-      { label:'🗺️ CAMPAIGN', sub:`${PHONICS_DATA.worldCount || 6} worlds · ${PHONICS_DATA.stageCount || 30} stages`, col:'#4ECDC4', action:'campaign' },
-      { label:'📅 DAILY', sub:this.progress.getDailyCompleted() ? '✅ Done today!' : 'Fresh challenge!', col:'#FFD700', action:'daily' },
-      { label:'🏪 SHOP', sub:'Spend your rice grains', col:'#FF80FF', action:'shop' },
-      { label:'🏆 BEST SCORES', sub:'Your family record book', col:'#FF8C00', action:'leaderboard' },
-      { label:'🥇 ACHIEVEMENTS', sub:`${this.progress.data.achievements.length}/${ACHIEVEMENTS.length} unlocked`, col:'#00CCFF', action:'achievements' },
-      { label:'📊 PROGRESS', sub:'Parent / teacher view', col:'#69F0AE', action:'dashboard' },  // Phase 9
-      { label:'❓ HOW TO PLAY', sub:'Watch the tutorial again', col:'#B39DDB', action:'tutorial' },
+    // Same painted-and-scrimmed treatment as the title screen, so pressing
+    // PLAY does not drop the player from a painted scene into a flat gradient.
+    UI.scene(ctx, this.sprites['arena-3'] || this.sprites['stage-3'], W, H, this, 'modeselect');
+
+    const afterHeading = UI.heading(ctx, 'CHOOSE YOUR ADVENTURE', W, 16);
+    // Left, not right: the fullscreen and close buttons are DOM elements
+    // floating over the top-right of the canvas and would cover it.
+    UI.chip(ctx, `${this.progress.getRiceGrains()} rice`, 12, 14);
+
+    // Campaign is what the game is; everything else is a side door. It gets
+    // the one primary card, and the rest share a neutral treatment rather
+    // than eight competing colours.
+    const daily = this.progress.getDailyCompleted();
+    const primary = {
+      label: 'Campaign', sub: `${PHONICS_DATA.WORLDS.length} worlds · ${PHONICS_DATA.stageList.length} stages`,
+      action: 'campaign', primary: true,
+    };
+    const rest = [
+      { label: 'Endless Run', sub: 'How far can you go?', action: 'endless' },
+      { label: 'Daily Challenge', sub: daily ? 'Done today' : 'Fresh challenge',
+        action: 'daily', pulse: daily ? 0 : 0.5 + 0.5 * Math.sin(t * 0.09) },
+      { label: 'Shop', sub: 'Spend your rice', action: 'shop' },
+      { label: 'Best Scores', sub: 'Family record book', action: 'leaderboard' },
+      { label: 'Achievements', sub: `${this.progress.data.achievements.length} of ${ACHIEVEMENTS.length}`,
+        action: 'achievements' },
+      { label: 'Progress', sub: 'Parent / teacher view', action: 'dashboard' },
+      { label: 'How to Play', sub: 'Watch the tutorial', action: 'tutorial' },
     ];
-    const btnH = Math.min(62, (H - 120) / (modes.length + 0.5));
-    const btnW = Math.min(W - 40, 400);
-    const startX = (W - btnW) / 2;
-    let startY = 70;
+
     this._modeSelectRects = [];
-    for (const m of modes) {
-      const isHot = m.hot && !this.progress.getDailyCompleted();
-      // Button background
-      const grad = ctx.createLinearGradient(startX, startY, startX + btnW, startY + btnH);
-      grad.addColorStop(0, m.col + 'aa');
-      grad.addColorStop(1, m.col + '44');
-      ctx.fillStyle = grad;
-      ctx.strokeStyle = m.col;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      const r = 12;
-      ctx.roundRect(startX, startY, btnW, btnH, r);
-      ctx.fill(); ctx.stroke();
-      // Pulse on hot item
-      if (isHot) {
-        ctx.strokeStyle = m.col;
-        ctx.lineWidth = 2 + Math.sin(t * 0.1) * 1.5;
-        ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 0.1);
-        ctx.beginPath(); ctx.roundRect(startX - 3, startY - 3, btnW + 6, btnH + 6, r + 3); ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-      // Label
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.min(18, W*0.044)}px Arial Black, sans-serif`;
-      ctx.fillStyle = '#fff';
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 3;
-      ctx.strokeText(m.label, startX + 16, startY + btnH * 0.38);
-      ctx.fillText(m.label, startX + 16, startY + btnH * 0.38);
-      ctx.font = `${Math.min(13, W*0.032)}px Arial, sans-serif`;
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.fillText(m.sub, startX + 16, startY + btnH * 0.7);
-      // Chevron
-      ctx.textAlign = 'right'; ctx.font = `bold 18px Arial, sans-serif`;
-      ctx.fillStyle = m.col; ctx.fillText('▶', startX + btnW - 14, startY + btnH * 0.5);
-      this._modeSelectRects.push({ x:startX, y:startY, w:btnW, h:btnH, action:m.action });
-      startY += btnH + 8;
-    }
-    // Back button
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.font = `bold 14px Arial, sans-serif`;
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.fillText('← BACK', W/2, H - 8);
-    this._modeSelectRects.push({ x:W/2-50, y:H-30, w:100, h:25, action:'back' });
+    const colW = Math.min((W - 48) / 2, 260);
+    const gridW = colW * 2 + 12;
+    const x0 = (W - gridW) / 2;
+
+    const heroH = Math.min(64, H * 0.14);
+    const heroRect = { x: x0, y: afterHeading + 6, w: gridW, h: heroH };
+    UI.card(ctx, heroRect, { ...primary, labelSize: 20, subSize: 12 });
+    this._modeSelectRects.push({ ...heroRect, action: primary.action });
+
+    const rows = Math.ceil(rest.length / 2);
+    const gridTop = heroRect.y + heroH + 10;
+    const avail = H - gridTop - 44;
+    const cellH = Math.max(38, Math.min(52, (avail - (rows - 1) * 8) / rows));
+
+    rest.forEach((m, i) => {
+      const r = {
+        x: x0 + (i % 2) * (colW + 12),
+        y: gridTop + Math.floor(i / 2) * (cellH + 8),
+        w: colW, h: cellH,
+      };
+      UI.card(ctx, r, { ...m, labelSize: 14, subSize: 10.5 });
+      this._modeSelectRects.push({ ...r, action: m.action });
+    });
+
+    const back = UI.ghost(ctx, 'Back', W / 2, H - 34);
+    this._modeSelectRects.push({ ...back, action: 'back' });
   }
   _clickModeSelect(mx, my) {
     const rects = this._modeSelectRects || [];
@@ -3022,7 +2885,7 @@ class SlashGame {
         if (r.action === 'achievements') { this.state = 'achievements'; this._stateEntryFade = 1.0; }
         if (r.action === 'dashboard')    { this.state = 'dashboard'; this._dashScroll = 0; this._stateEntryFade = 1.0; }  // Phase 9
         if (r.action === 'tutorial')     { this._startOnboarding(() => { this.state = 'mode-select'; this._stateEntryFade = 1.0; }); }
-        if (r.action === 'back') { this.state = 'title'; this._stateEntryFade = 1.0; }
+        if (r.action === 'back') { exitSlash(); }
         return;
       }
     }

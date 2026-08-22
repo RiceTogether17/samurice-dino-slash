@@ -68,7 +68,15 @@ function check(name, ok, detail = '') {
   check('assets finish loading', true);
 
   check('core modules present', await page.evaluate(
-    () => !!(window.SpriteCache && window.Quality && window.ArrayOps)));
+    () => !!(window.SpriteCache && window.Quality && window.ArrayOps && window.UI)));
+
+  // Exactly one screen may be visible. An id selector setting `display` on a
+  // screen outranks `.screen { display: none }`, which once left the title
+  // screen painted on top of the running game.
+  const visible = await page.evaluate(() => [...document.querySelectorAll('.screen')]
+    .filter(el => getComputedStyle(el).display !== 'none')
+    .map(el => el.id));
+  check('exactly one screen is visible', visible.length === 1, visible.join(', '));
   check('texture cache installed', await page.evaluate(
     () => !!CanvasRenderingContext2D.prototype.drawImage.__spriteCached));
 

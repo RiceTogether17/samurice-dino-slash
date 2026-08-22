@@ -45,6 +45,25 @@ function serve(root) {
     await page.addInitScript(() => { window.__DISABLE_SPRITE_CACHE = true; });
   }
   await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load' });
+  // DOM screens (the mode chooser and its panels) are captured without ever
+  // entering the canvas game.
+  const domScreen = get('--screen', null);
+  if (domScreen) {
+    if (domScreen !== 'modeChooser') {
+      await page.evaluate(id => {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id)?.classList.add('active');
+      }, domScreen);
+    }
+    await page.waitForTimeout(1200);
+    const out = path.join(outDir, `${label}.png`);
+    await page.screenshot({ path: out });
+    console.log(out);
+    await browser.close();
+    server.close();
+    return;
+  }
+
   await page.evaluate(() => window.launchSlashGame());
   await page.waitForFunction(
     () => typeof _slashGameInstance !== 'undefined' && _slashGameInstance
