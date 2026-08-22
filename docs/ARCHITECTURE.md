@@ -154,15 +154,29 @@ drift — the mode picker used to be eight saturated pills in eight different
 colours with no hierarchy, and stage select was dark green cards on a dark
 green field.
 
+### Game feel
+
+Impacts go through one path per engine (`_hit` in combat, `_doPlayerHit` in
+the runner) and scale their feedback to the size of the blow: hit-stop, a
+white flash and squash on the struck sprite, knockback, screen shake, and a
+damage number that punches in, holds while it is read, then leaves. Health
+bars drain toward the new value so the amount lost is visible as movement.
+
+The rule behind all of it: **anything that fades from frame zero is invisible.**
+Both the combat floaters and the runner's particles used to, and both were
+unreadable for it. Hold, then fade.
+
 Two traps worth knowing:
 
 - **Never set `display` on a screen's id selector.** `.screen { display: none }`
   is what hides inactive screens, and an id outranks it — doing this left the
   title screen painted on top of the running game. Put layout in
   `#id.active` instead. `tools/smoke.js` asserts exactly one screen is visible.
-- **The top-right of the canvas is not yours.** The fullscreen and close
-  buttons are DOM elements floating over it; canvas HUD needs to keep about
-  116 px clear on that side.
+- **Neither top corner of the canvas is yours.** The pause button (left) and
+  the fullscreen and close buttons (right) are DOM elements floating over it.
+  Anything the HUD draws under them is invisible — this is how the runner's
+  hearts ended up hidden behind the pause button. Keep 62 px clear on the left
+  and 116 px on the right.
 
 ## Performance work
 

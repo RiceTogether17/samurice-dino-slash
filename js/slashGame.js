@@ -268,7 +268,7 @@ class SlashGame {
     // One cache slot per screen: UI.scene keys its cache but hangs it on the
     // holder, so screens sharing a holder would evict each other every frame.
     this._sceneHolders = { modeSelect: {}, stageSelect: {}, shop: {},
-                           achievements: {}, leaderboard: {} };
+                           achievements: {}, leaderboard: {}, win: {} };
     this._menuSel = 0;   // selected stage within the open world (stage-select)
     this._worldSel = 0;  // selected world (world-map)
     this._bindMenuInput();
@@ -2448,13 +2448,8 @@ class SlashGame {
     this._stageWinAge = (this._stageWinAge || 0) + 1;
     const t = this._stageWinAge;
     ctx.clearRect(0, 0, W, H);
-    // Golden sky
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#1a4a0f');
-    grad.addColorStop(0.5, '#3d8c2a');
-    grad.addColorStop(1, '#8BC34A');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
+    UI.scene(ctx, this.sprites['victory-golden-harvest'], W, H,
+             this._sceneHolders.win, 'stagewin', 0.85);
     // Confetti — colored rect particles + emoji sprinkles
     if (this._confetti) {
       for (const p of this._confetti) {
@@ -2487,22 +2482,29 @@ class SlashGame {
     const py = pyTarget - (1 - panelEase) * (pyTarget + ph * 0.5);
     ctx.save();
     ctx.globalAlpha = panelEase;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillStyle = 'rgba(18,12,20,0.93)';
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 22); ctx.fill();
-    ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.strokeStyle = UI.THEME.goldDim; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.restore();
 
     ctx.save();
     ctx.globalAlpha = panelEase;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(28, W * 0.062)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFD700';
-    ctx.shadowColor = '#FF8C00'; ctx.shadowBlur = 14;
-    ctx.fillText('🎉 VICTORY!', W / 2, py + 20);
+    ctx.font = `900 ${Math.min(32, W * 0.068)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.rice;
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 10;
+    ctx.fillText('VICTORY', W / 2, py + 18);
     ctx.shadowBlur = 0;
-    ctx.font = `bold 16px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#fff';
-    ctx.fillText(`Stage ${this.stageId}: ${stage.name}`, W / 2, py + 66);
+    const rw = Math.min(190, pw * 0.55);
+    const rule = ctx.createLinearGradient(W / 2 - rw / 2, 0, W / 2 + rw / 2, 0);
+    rule.addColorStop(0, 'rgba(242,193,78,0)');
+    rule.addColorStop(0.5, UI.THEME.gold);
+    rule.addColorStop(1, 'rgba(242,193,78,0)');
+    ctx.fillStyle = rule;
+    ctx.fillRect(W / 2 - rw / 2, py + 56, rw, 2);
+    ctx.font = `800 15px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.fillText(`Stage ${this.stageId} · ${stage.name}`, W / 2, py + 66);
     ctx.restore();
 
     // Stars fly in one-by-one (staggered, scale bounce)
@@ -2748,23 +2750,21 @@ class SlashGame {
       // Primary = vivid green with glow; secondary = muted slate
       if (isPrimary) {
         const g = ctx.createLinearGradient(btn.x, btn.y, btn.x, btn.y + btn.h);
-        g.addColorStop(0, '#43A047');
-        g.addColorStop(1, '#2E7D32');
+        g.addColorStop(0, '#D8433A');
+        g.addColorStop(1, UI.THEME.lacquerDk);
         ctx.fillStyle = g;
-        ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10); ctx.fill();
-        ctx.strokeStyle = '#76FF03'; ctx.lineWidth = 2;
-        ctx.shadowColor = '#00FF88'; ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 13); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,226,168,0.55)'; ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.shadowBlur = 0;
       } else {
-        ctx.fillStyle = 'rgba(80,90,100,0.75)';
-        ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10); ctx.fill();
-        ctx.strokeStyle = 'rgba(180,190,200,0.4)'; ctx.lineWidth = 1.5;
+        ctx.fillStyle = 'rgba(28,18,26,0.88)';
+        ctx.beginPath(); ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 13); ctx.fill();
+        ctx.strokeStyle = UI.THEME.stroke; ctx.lineWidth = 1;
         ctx.stroke();
       }
       // Label
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.min(18, btn.w * 0.09)}px "Nunito", "Comic Sans MS", system-ui`;
+      ctx.fillStyle = isPrimary ? '#FFF8E9' : UI.THEME.rice;
+      ctx.font = `${isPrimary ? 900 : 800} ${Math.min(18, btn.w * 0.09)}px ${UI.THEME.font}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + btn.h / 2);
