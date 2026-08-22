@@ -46,6 +46,7 @@ function parseArgs(argv) {
     else if (a === '--state') out.state = argv[++i];
     else if (a === '--max-source-mp') out.maxSourceMP = Number(argv[++i]);
     else if (a === '--max-p95') out.maxP95 = Number(argv[++i]);
+    else if (a === '--no-cache') out.noCache = true;
   }
   return out;
 }
@@ -91,6 +92,10 @@ async function main() {
     args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio'],
   });
   const page = await browser.newPage({ viewport: { width: 900, height: 520 } });
+  if (opts.noCache) {
+    // A/B control: run the same build with the scaled-texture cache disabled.
+    await page.addInitScript(() => { window.__DISABLE_SPRITE_CACHE = true; });
+  }
 
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
@@ -175,11 +180,10 @@ async function main() {
 
   });
 
-  // Hold a movement key so the runner actually scrolls and spawns entities.
-  await page.evaluate(() => {
-    const g = _slashGameInstance;
-    if (g.runner) g.runner._runnerCountdownAge = 999;
-  });
+  // Skip the 3-2-1 intro. The counter lives on the game, not the runner —
+  // setting it on the runner silently left the countdown running, during which
+  // the loop draws but never updates, so a sample would be mostly intro frames.
+  await page.evaluate(() => { _slashGameInstance._runnerCountdownAge = -1; });
   await page.keyboard.down('ArrowRight');
 
   // Discard warm-up frames, then sample.

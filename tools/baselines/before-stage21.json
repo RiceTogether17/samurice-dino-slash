@@ -4,38 +4,39 @@
   "cpuThrottle": 1,
   "frameCostMs": {
     "frames": 300,
-    "mean": 2.251,
-    "p50": 2.8,
-    "p95": 4.2,
-    "p99": 5.3,
-    "max": 7.7,
+    "mean": 1.249,
+    "p50": 0.5,
+    "p95": 4,
+    "p99": 4.9,
+    "max": 5.5,
     "overBudget": 0
   },
   "drawMs": {
     "frames": 300,
-    "mean": 2.221,
-    "p50": 2.8,
-    "p95": 4.1,
-    "p99": 4.7,
-    "max": 7.6,
+    "mean": 1.189,
+    "p50": 0.5,
+    "p95": 4,
+    "p99": 4.6,
+    "max": 5.4,
     "overBudget": 0
   },
   "updateMs": {
-    "frames": 118,
-    "mean": 0.078,
-    "p50": 0.1,
+    "frames": 301,
+    "mean": 0.059,
+    "p50": 0,
     "p95": 0.2,
-    "p99": 1.2,
+    "p99": 0.6,
     "max": 1.4,
     "overBudget": 0
   },
   "blit": {
-    "drawImageCallsPerFrame": 68.4,
-    "sourceMPPerFrame": 85.09,
-    "heavyDownscalesPerFrame": 61.6
+    "drawImageCallsPerFrame": 31.5,
+    "sourceMPPerFrame": 35.71,
+    "heavyDownscalesPerFrame": 28.3
   },
+  "cache": null,
   "heap": {
-    "usedMB": 5.4
+    "usedMB": 4.7
   },
   "quality": {
     "LOW_FX": false,

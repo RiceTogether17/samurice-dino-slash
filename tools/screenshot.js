@@ -54,7 +54,8 @@ function serve(root) {
   if (state === 'runner') {
     await page.evaluate(s => {
       const g = _slashGameInstance;
-      g.stageId = s; g._startRunner(); g.runner._runnerCountdownAge = 999;
+      g.stageId = s; g._startRunner();
+      g._runnerCountdownAge = -1;   // skip the 3-2-1 intro (lives on the game)
     }, stage);
     await page.keyboard.down('ArrowRight');
     await page.waitForTimeout(2500);
@@ -68,7 +69,7 @@ function serve(root) {
       const g = _slashGameInstance;
       g.stageId = s;
       g._startRunner();
-      g.runner._runnerCountdownAge = 999;
+      g._runnerCountdownAge = -1;
       g.runner.coins.forEach(c => { c.collected = true; });
       g.runner.done = true;
       g.runner.outcome = 'flag';

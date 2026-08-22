@@ -3264,14 +3264,36 @@ class RunnerEngine {
       ctx.restore();
     }
 
-    // ── Stage label (bottom-left)
-    ctx.font      = 'bold 16px "Nunito", "Comic Sans MS", system-ui';
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.textAlign = 'left';
-    const stageLabel = this.stage.world
-      ? `${this.stage.worldIcon || ''} ${this.stage.world}-${this.stage.local}: ${this.stage.name}`
-      : `Stage ${this.stage.id}: ${this.stage.name}`;
-    ctx.fillText(stageLabel.trim(), 12, this.H - R_GROUND_H - 12);
+    // ── Stage label (bottom-left) ─────────────────────────────
+    // This is an orientation cue, not a permanent fixture. It used to sit in
+    // the play area for the whole level as unbacked white text over painted
+    // artwork — hard to read, and regularly overlapping the enemies and coins
+    // the player is trying to look at. It now gets a chip for contrast and
+    // retires once it has been read.
+    const LABEL_HOLD = 240;   // ~4 s of actual play
+    const LABEL_FADE = 45;
+    const labelAlpha = this._age < LABEL_HOLD
+      ? 1
+      : Math.max(0, 1 - (this._age - LABEL_HOLD) / LABEL_FADE);
+    if (labelAlpha > 0.01) {
+      const stageLabel = (this.stage.world
+        ? `${this.stage.worldIcon || ''} ${this.stage.world}-${this.stage.local}: ${this.stage.name}`
+        : `Stage ${this.stage.id}: ${this.stage.name}`).trim();
+      ctx.save();
+      ctx.globalAlpha = labelAlpha;
+      ctx.font      = 'bold 16px "Nunito", "Comic Sans MS", system-ui';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      const ty = this.H - R_GROUND_H - 12;
+      const tw = ctx.measureText(stageLabel).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.beginPath();
+      ctx.roundRect(6, ty - 17, tw + 14, 24, 12);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fillText(stageLabel, 13, ty);
+      ctx.restore();
+    }
 
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign    = 'left';

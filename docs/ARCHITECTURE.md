@@ -43,11 +43,12 @@ factory. New shared infrastructure belongs here.
 
 ### `spriteCache.js` and `renderPatch.js`
 
-The art is authored at 1024x1536 but drawn at 24-120 px. Canvas2D has no mipmap
-chain, so a shrinking `drawImage` re-reads the entire source bitmap. Measured on
-the runner, that was ~91 megapixels of texture resampled per frame — about
-5.5 gigapixels/second at 60 FPS, far past a mid-range phone's budget, and the
-main reason the game stuttered.
+The art was authored at 1024x1536 but drawn at 24-120 px. Canvas2D has no
+mipmap chain, so a shrinking `drawImage` re-reads the entire source bitmap.
+Measured on the runner before this work, that was 31-36 megapixels of texture
+resampled per frame — around 2 gigapixels/second at 60 FPS, past what a
+mid-range phone can sustain, and the main reason the game stuttered. It is now
+under 1 MP/frame; see `tools/baselines/`.
 
 `spriteCache` scales each texture once into an offscreen canvas at a quantised
 size and blits that afterwards. `renderPatch` installs it over
@@ -79,6 +80,9 @@ Two numbers matter, both from `tools/profile.js`:
 
 - **source megapixels per frame** — how much texture the GPU reads. Hardware
   independent, so it means the same thing on a laptop and on CI. Budget: 5.
+  Note that wall-clock draw time on a *desktop* can move the other way on
+  light stages, where the cache's bookkeeping costs more than the texture
+  reads it saves. That trade is deliberate: desktop has slack, phones do not.
 - **frame cost p95** — how long the engine's own update+draw takes. Budget:
   8 ms, roughly half a 60 FPS frame, since compositing, GC, audio and input
   need the rest.
