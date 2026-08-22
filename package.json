@@ -1,13 +1,15 @@
 {
   "name": "samurice-dino-slash",
   "version": "2.0.0",
-  "description": "Phonics action-platformer — Riku the Samurice fights dinosaurs by blending words.",
+  "description": "Phonics action-platformer \u2014 Riku the Samurice fights dinosaurs by blending words.",
   "scripts": {
-    "test": "node --test tests/",
+    "test": "node --test \"tests/**/*.test.js\"",
     "lint": "eslint js tools tests",
     "profile": "node tools/profile.js",
     "screenshot": "node tools/screenshot.js",
-    "optimize-assets": "node tools/optimize-assets.js"
+    "optimize-assets": "node tools/optimize-assets.js",
+    "perf:check": "node tools/profile.js --stage 21 --frames 300 --max-source-mp 5 --max-p95 8",
+    "audio:manifest": "node tools/build-audio-manifest.js"
   },
   "repository": {
     "type": "git",
@@ -19,6 +21,7 @@
   },
   "homepage": "https://github.com/RiceTogether17/samurice-dino-slash#readme",
   "devDependencies": {
+    "eslint": "^9.39.5",
     "playwright": "^1.62.1",
     "sharp": "^0.35.3"
   },

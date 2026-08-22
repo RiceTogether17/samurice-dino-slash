@@ -66,12 +66,13 @@ const LETTER_SOUNDS_TTS = {
 // HOW TO ADD YOUR AUDIO FILES (see full guide at bottom):
 //   assets/audio/phonemes/<phoneme>.mp3   e.g. "sh.mp3", "ai.mp3"
 //   assets/audio/words/<word>.mp3         e.g. "ship.mp3"
-//   assets/audio/sfx/coin.mp3
-//   assets/audio/sfx/boost.mp3
-//   assets/audio/sfx/slash.mp3
-//   assets/audio/sfx/boss-hit.mp3
-//   assets/audio/sfx/victory.mp3
-//   assets/audio/sfx/riku-hurt.mp3
+//   assets/audio/sfx/<name>   — see _sfxFileMap below for the exact
+//                                filenames and extensions actually loaded
+//
+// After adding or removing any file here, re-run:
+//   node tools/build-audio-manifest.js
+// The manager only requests what the manifest lists, so a file that is not
+// in it is silently replaced by speech synthesis rather than fetched.
 // ============================================================
 
 class AudioManager {

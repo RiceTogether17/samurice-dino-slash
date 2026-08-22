@@ -1,0 +1,51 @@
+# ──────────────────────────────────────────────────────────────
+# CI — lint, tests, and a performance budget.
+#
+# The performance job exists because this game's defining bug was a
+# rendering regression that nothing would have caught: the art was drawn at a
+# fraction of its authored size, so every frame resampled ~91 megapixels of
+# texture. It cost no test failure and no error in the console — only a game
+# that felt bad on a phone. The budget below turns that class of regression
+# into a red build.
+# ──────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Lint & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+
+  performance:
+    name: Frame budget
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Stage 1 frame budget
+        run: node tools/profile.js --stage 1 --frames 300 --max-source-mp 5 --max-p95 8
+      - name: Stage 21 frame budget
+        # A late, entity-heavy stage — the one that used to hurt most.
+        run: node tools/profile.js --stage 21 --frames 300 --max-source-mp 5 --max-p95 8

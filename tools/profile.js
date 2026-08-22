@@ -13,6 +13,10 @@
  *   node tools/profile.js --frames 600    # longer sample
  *   node tools/profile.js --cpu 4         # emulate a 4x-slower CPU
  *   node tools/profile.js --json out.json # machine-readable output
+ *
+ * Regression gate (used by CI):
+ *   node tools/profile.js --max-source-mp 5 --max-p95 6
+ * exits non-zero if the frame is doing more work than the budget allows.
  */
 'use strict';
 
@@ -31,7 +35,8 @@ const MIME = {
 };
 
 function parseArgs(argv) {
-  const out = { stage: 1, frames: 420, cpu: 1, json: null, state: 'runner' };
+  const out = { stage: 1, frames: 420, cpu: 1, json: null, state: 'runner',
+                maxSourceMP: null, maxP95: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--stage') out.stage = Number(argv[++i]);
@@ -39,6 +44,8 @@ function parseArgs(argv) {
     else if (a === '--cpu') out.cpu = Number(argv[++i]);
     else if (a === '--json') out.json = argv[++i];
     else if (a === '--state') out.state = argv[++i];
+    else if (a === '--max-source-mp') out.maxSourceMP = Number(argv[++i]);
+    else if (a === '--max-p95') out.maxP95 = Number(argv[++i]);
   }
   return out;
 }
@@ -222,6 +229,21 @@ async function main() {
 
   await browser.close();
   server.close();
+
+  // Budget check. The texture figure is the one that matters most: it is
+  // hardware-independent, so it holds its meaning on a CI runner, whereas
+  // wall-clock timings there are noisy.
+  const failures = [];
+  if (opts.maxSourceMP != null && blit.sourceMPPerFrame > opts.maxSourceMP) {
+    failures.push(`source megapixels/frame ${blit.sourceMPPerFrame} > ${opts.maxSourceMP}`);
+  }
+  if (opts.maxP95 != null && result.frameCostMs.p95 > opts.maxP95) {
+    failures.push(`frame cost p95 ${result.frameCostMs.p95} ms > ${opts.maxP95} ms`);
+  }
+  if (failures.length) {
+    console.error('\nPerformance budget exceeded:\n  ' + failures.join('\n  '));
+    process.exitCode = 1;
+  }
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
