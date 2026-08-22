@@ -62,10 +62,10 @@ const SHAKE_MAG       = 8;
 const PARTICLE_COUNT  = 22;
 
 const SKINS = [
-  { name: 'Velociraptor', file: 'assets/dinosaurs/velociraptor.png'  },
-  { name: 'Stego',        file: 'assets/dinosaurs/stegosaurus.png'  },
-  { name: 'Triceratops',  file: 'assets/dinosaurs/triceratops.png'  },
-  { name: 'T-Rex Boss',   file: 'assets/dinosaurs/trex.png'         },
+  { name: 'Velociraptor', file: 'assets/dinosaurs/velociraptor.webp'  },
+  { name: 'Stego',        file: 'assets/dinosaurs/stegosaurus.webp'  },
+  { name: 'Triceratops',  file: 'assets/dinosaurs/triceratops.webp'  },
+  { name: 'T-Rex Boss',   file: 'assets/dinosaurs/trex.webp'         },
 ];
 
 // ── SEEDED RANDOM (for Daily Challenge) ─────────────────────
