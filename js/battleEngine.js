@@ -1994,6 +1994,7 @@ class BattleEngine {
     this._drawBoss(ctx);
     this._drawRiku(ctx);
     this._drawHPBars(ctx);
+    this._drawStageTitle(ctx);
 
     // Phase 7: slash trails drawn behind particles (tile → boss arcs)
     this._slashTrails.forEach(t => t.draw(ctx));
@@ -2217,11 +2218,6 @@ class BattleEngine {
       ctx.fillRect(0, this.H * 0.55, this.W, 30);
     }
 
-    ctx.font      = `bold 14px system-ui`;
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.textAlign = 'center';
-    const foe = this.stage.bossName || 'Boss';
-    ctx.fillText(`${this.stage.name}  ⚔️  ${foe}`, this.W / 2, 26);
   }
 
   _floorY() { return Math.round(this.H * 0.58); }
@@ -2249,7 +2245,11 @@ class BattleEngine {
   _resolveBossSpriteKey() {
     const stageSprite = this.sprites[this.stage.bossFile];
     const src = stageSprite && typeof stageSprite.src === 'string' ? stageSprite.src : '';
-    const match = src.match(/\/([A-Za-z0-9_-]+)\.png(?:$|[?#])/);
+    // Match any image extension. Hard-coding .png here silently disabled every
+    // phase-specific boss pose the moment the art moved to WebP: the species
+    // failed to parse, so -attack and -hurt swaps stopped resolving and the
+    // boss stood in its idle frame through the entire fight.
+    const match = src.match(/\/([A-Za-z0-9_-]+)\.[A-Za-z0-9]+(?:$|[?#])/);
     const rawBase = match ? match[1] : '';
     const species = rawBase.replace(/-(attack|hurt)$/, '');
 
@@ -2506,14 +2506,26 @@ class BattleEngine {
     ctx.restore();
   }
 
-  _drawHPBars(ctx) {
-    // Keep clear of the floating shell buttons: pause (top-left, ~56px)
-    // and fullscreen + close (top-right, ~110px) sit over the canvas.
+  /**
+   * One source of truth for the top-bar geometry.
+   *
+   * The floating shell buttons — pause at top-left, fullscreen and close at
+   * top-right — are DOM elements sitting over the canvas, so anything drawn
+   * up here has to be told where they are.
+   */
+  _hudLayout() {
     const marginL = 64;
     const marginR = 116;
-    const barW   = Math.min(this.W * 0.42, 200, (this.W - marginL - marginR - 24) / 2);
-    const barH   = 22;
-    const barY   = 42;
+    return {
+      marginL, marginR,
+      barW: Math.min(this.W * 0.42, 200, (this.W - marginL - marginR - 24) / 2),
+      barH: 22,
+      barY: 42,
+    };
+  }
+
+  _drawHPBars(ctx) {
+    const { marginL, marginR, barW, barH, barY } = this._hudLayout();
 
     ctx.save();
     ctx.shadowBlur = 0;
@@ -2551,6 +2563,54 @@ class BattleEngine {
     drawBar(this.W - marginR - barW, bossPct, '#FF7043', '#B71C1C',
       `${this.stage.bossName}  ${Math.ceil(this.bossHp)}/${this.bossMaxHp}  🦖`, true);
 
+    ctx.restore();
+  }
+
+  /**
+   * Stage and boss name, drawn in the gap between the two health bars.
+   *
+   * This used to be centred across the full canvas at 35% opacity, which put
+   * it underneath the health-bar labels and the corner buttons — clipped at
+   * both ends and barely legible against a bright sky. It now gets the space
+   * that is actually free, a chip for contrast, and is shortened rather than
+   * allowed to run under the furniture.
+   */
+  _drawStageTitle(ctx) {
+    const { marginL, marginR, barW } = this._hudLayout();
+    const left  = marginL + barW + 14;
+    const right = this.W - marginR - barW - 14;
+    const avail = right - left;
+    // On a narrow screen the bars meet in the middle; drop the title rather
+    // than overlap them.
+    if (avail < 90) return;
+
+    const centre = (left + right) / 2;
+    const foe = this.stage.bossName || 'Boss';
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 13px "Nunito", system-ui';
+
+    // Fall back to the stage name, not the boss name: the boss is already
+    // spelled out in the health bar immediately to the right, so repeating it
+    // here would spend the only free space on the one thing already on screen.
+    let text = `${this.stage.name}  ⚔️  ${foe}`;
+    if (ctx.measureText(text).width > avail) text = this.stage.name || foe;
+    if (ctx.measureText(text).width > avail) {                     // still long
+      while (text.length > 4 && ctx.measureText(text + '…').width > avail) {
+        text = text.slice(0, -1);
+      }
+      text += '…';
+    }
+
+    const w = ctx.measureText(text).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.beginPath();
+    ctx.roundRect(centre - w / 2 - 10, 12, w + 20, 24, 12);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillText(text, centre, 25);
     ctx.restore();
   }
 
