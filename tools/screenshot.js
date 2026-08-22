@@ -76,7 +76,40 @@ function serve(root) {
     }, stage);
     await page.waitForFunction(() => _slashGameInstance.state === 'battle',
       null, { timeout: 20000 });
-    await page.waitForTimeout(2500);
+    // Combat picks a pattern at random from the stage's activities; force one
+    // so each mechanic can be reviewed on demand rather than by re-rolling.
+    const forced = get('--pattern', null);
+    if (forced) {
+      await page.evaluate(id => {
+        const be = _slashGameInstance.battle;
+        const pattern = window.CombatPatterns.ALL.find(p => p.id === id);
+        const stage = be.stage;
+        const word = (stage.words || []).find(w =>
+          pattern.canBuild(w, { words: stage.words, stage, phase: 1,
+                                which: pattern.skills[0] }));
+        if (!word) throw new Error(`no word in this stage supports ${id}`);
+        be._pattern = pattern;
+        be._round = pattern.build(word, { words: stage.words, stage, phase: 1,
+                                          which: pattern.skills[0] });
+        be._attemptInRound = 0;
+        be.state = 'duel';
+        be._say(pattern.instruction(be._round), 'neutral', 8000);
+      }, forced);
+    }
+    if (get('--victory', null)) {
+      await page.evaluate(() => {
+        const be = _slashGameInstance.battle;
+        if (be.state === 'primer') { be._primerAge = 999; be._dismissPrimer(); }
+        be.bossHp = 0; be._win();
+      });
+      await page.waitForTimeout(Number(get('--victory-ms', 700)));
+    } else if (get('--skip-primer', null)) {
+      await page.evaluate(() => {
+        const be = _slashGameInstance.battle;
+        if (be.state === 'primer') { be._primerAge = 999; be._dismissPrimer(); }
+      });
+    }
+    await page.waitForTimeout(get('--victory', null) ? 0 : 2500);
   } else {
     await page.evaluate(st => { _slashGameInstance.state = st; }, state);
     await page.waitForTimeout(1200);

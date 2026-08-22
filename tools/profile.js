@@ -148,9 +148,23 @@ async function main() {
   await page.evaluate(({ stage, state }) => {
     const g = _slashGameInstance;
     g.stageId = stage;
-    if (state === 'runner') g._startRunner();
-    else g.state = state;
+    if (state === 'runner') { g._startRunner(); return; }
+    if (state === 'battle') {
+      // Reach the fight through the real handoff so the arena is set up the
+      // way play sets it up, not by poking the state machine.
+      g._startRunner();
+      g._runnerCountdownAge = -1;
+      g.runner.coins.forEach(c => { c.collected = true; });
+      g.runner.done = true;
+      g.runner.outcome = 'flag';
+      return;
+    }
+    g.state = state;
   }, opts);
+  if (opts.state === 'battle') {
+    await page.waitForFunction(() => _slashGameInstance.state === 'battle',
+      null, { timeout: 25000 });
+  }
 
   // Instrument the engine's real update+draw. Timing the rAF callback instead
   // would be dominated by the loop's frame-pacing early-return, which does no
@@ -160,7 +174,7 @@ async function main() {
     window.__drawCosts = [];
     window.__updateCosts = [];
     const g = _slashGameInstance;
-    const target = g.runner || g.battle;
+    const target = g.battle || g.runner;
     if (!target) return;
     const proto = Object.getPrototypeOf(target);
     const wrap = (name, bucket) => {

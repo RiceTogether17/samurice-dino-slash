@@ -2943,3 +2943,56 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
   opacity: 0.9;
   text-align: center;
 }
+
+/* ── Combat control strip ─────────────────────────────────────
+   The fight itself is on the canvas. These two stay real DOM buttons
+   because they are the controls a struggling reader reaches for, and the
+   coach's words sit in a live region so a screen reader announces them. */
+.battle-overlay .cb-strip {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  padding: 6px 10px 0;
+}
+.battle-overlay .cb-btn {
+  flex: 0 1 150px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(180deg, #3E6BD8, #24408C);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+  transition: transform 0.08s;
+}
+.battle-overlay .cb-btn:active { transform: translateY(2px); box-shadow: none; }
+.battle-overlay .cb-hint { background: linear-gradient(180deg, #C8922E, #8A5E14); }
+.battle-overlay .cb-btn:focus-visible { outline: 3px solid #ffd7a8; outline-offset: 2px; }
+
+.battle-overlay .cb-coach {
+  margin: 8px auto 0;
+  max-width: 46ch;
+  min-height: 2.6em;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: rgba(6, 10, 26, 0.72);
+  color: #EAF2FF;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+/* The tone says what kind of message it is without relying on colour alone —
+   the wording already differs; this just reinforces it. */
+.battle-overlay .cb-coach[data-tone='coach']   { background: rgba(90, 60, 8, 0.85); }
+.battle-overlay .cb-coach[data-tone='reteach'] { background: rgba(96, 24, 24, 0.85); }
+.battle-overlay .cb-coach[data-tone='praise']  { background: rgba(20, 76, 32, 0.85); }
+.battle-overlay .cb-coach[data-tone='warn']    { background: rgba(104, 40, 8, 0.9); }
+
+@media (max-width: 480px) {
+  .battle-overlay .cb-btn { font-size: 0.85rem; padding: 9px 10px; }
+  .battle-overlay .cb-coach { font-size: 0.85rem; max-width: 92%; }
+}

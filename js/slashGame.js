@@ -988,7 +988,7 @@ class SlashGame {
     this.overlay.innerHTML = '';
     this._showPauseBtn();
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
-    this.battle = new BattleEngine(
+    this.battle = new CombatEngine(
       this.canvas, this.overlay, stage, collectedPhonemes,
       this.sprites, this.audio, this.progress, this.W, this.H,
     );
@@ -2244,7 +2244,19 @@ class SlashGame {
   // ── BATTLE UPDATE ────────────────────────────────────────────
   _updateBattle() {
     if (!this.battle) return;
-    this.battle.update();
+    // Combat is real-time now, so it needs the same fixed-step treatment the
+    // runner has: sounds close on the player at a rate that must not depend
+    // on how many frames the device managed to draw.
+    const STEP = 1 / 60;
+    const dt = this._frameDtSec || STEP;
+    this._battleAccum = Math.min((this._battleAccum || 0) + dt, STEP * 3);
+    let steps = 0;
+    while (this._battleAccum >= STEP && steps < 2) {
+      this.battle.update(STEP);
+      this._battleAccum -= STEP;
+      steps++;
+    }
+    if (steps === 0) { this.battle.update(dt); this._battleAccum = 0; }
     this.battle.draw();
     if (this.audio && this.battle?.bossMaxHp) {
       const intensity = 1 - (this.battle.bossHp / this.battle.bossMaxHp);
@@ -2327,9 +2339,11 @@ class SlashGame {
 
     // Stats — each row counts up from 0 to final value
     const rows = [
+      // `unit` is a prefix, `suffix` a trailing one: "×5" reads correctly with
+      // the symbol in front, "82%" does not.
       { emoji: '📖', label: 'Words Blended',  val: stats.wordsBlended ?? 0, color: '#76FF03', unit: '' },
       { emoji: '🔥', label: 'Best Streak',    val: stats.bestStreak   ?? 0, color: '#FF9800', unit: '×' },
-      { emoji: '🎯', label: 'Accuracy',        val: stats.accuracy     ?? 0, color: '#00E5FF', unit: '%' },
+      { emoji: '🎯', label: 'Accuracy',        val: stats.accuracy     ?? 0, color: '#00E5FF', unit: '', suffix: '%' },
       { emoji: '🍚', label: 'Rice Earned',     val: stats.riceEarned   ?? 0, color: '#FFD700', unit: '' },
     ];
 
@@ -2364,7 +2378,7 @@ class SlashGame {
       ctx.font = `900 ${Math.min(22, W * 0.048)}px "Nunito", "Comic Sans MS", system-ui`;
       ctx.fillStyle = row.color;
       ctx.shadowColor = row.color; ctx.shadowBlur = 8;
-      ctx.fillText(`${row.unit}${displayVal}${row.unit === '%' ? '' : row.unit === '×' ? '' : ''}`, 0, 0);
+      ctx.fillText(`${row.unit || ''}${displayVal}${row.suffix || ''}`, 0, 0);
       ctx.restore();
 
       ctx.restore();

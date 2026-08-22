@@ -98,14 +98,74 @@ function check(name, ok, detail = '') {
   await page.waitForFunction(() => _slashGameInstance.state === 'battle',
     null, { timeout: 20000 });
   check('battle starts', true);
-  check('boss phase art resolves', await page.evaluate(() => {
+  check('boss art resolves', await page.evaluate(
+    () => !!_slashGameInstance.battle._resolveBossSpriteKey()));
+
+  // Combat is the point of the rebuild, so check it actually fights: a round
+  // exists, striking the right target damages the boss, and a wrong strike
+  // draws a coaching line instead of the answer.
+  // A first-time player meets a new mechanic behind a primer card that
+  // explains its verb. Check it appears, then dismiss it the way a tap would.
+  check('a new mechanic is taught before it is played', await page.evaluate(
+    () => _slashGameInstance.battle.state === 'primer'),
+    await page.evaluate(() => _slashGameInstance.battle._pattern?.howTo || 'no primer'));
+
+  await page.evaluate(() => {
     const be = _slashGameInstance.battle;
-    const idle = be._resolveBossSpriteKey();
-    be.state = 'boss-attack';
-    const attack = be._resolveBossSpriteKey();
-    be.state = 'idle';
-    return !!idle && !!attack;
-  }));
+    be._primerAge = 999;
+    be._dismissPrimer();
+  });
+
+  check('a duel round is live', await page.evaluate(() => {
+    const be = _slashGameInstance.battle;
+    return be.state === 'duel' && !!be._round && !!be._pattern;
+  }), await page.evaluate(() => _slashGameInstance.battle._pattern?.id || 'none'));
+
+  const fight = await page.evaluate(() => {
+    const be = _slashGameInstance.battle;
+    const before = be.bossHp;
+    let guard = 0;
+    // Play the current round correctly until it completes.
+    while (guard++ < 60) {
+      if (be.state === 'primer') { be._primerAge = 999; be._dismissPrimer(); continue; }
+      if (be.state !== 'duel') break;
+      const targets = be._pattern.targets(be._round);
+      if (!targets.length) { be.update(1 / 60); continue; }
+      let acted = false;
+      for (const t of targets) {
+        const r = be._pattern.resolve(be._round, t.id);
+        if (r && r.correct) { be._apply(r); acted = true; break; }
+      }
+      if (!acted) break;
+    }
+    return { before, after: be.bossHp, streak: be._streak, score: be.score };
+  });
+  check('correct play damages the boss', fight.after < fight.before,
+    `${fight.before} -> ${fight.after}`);
+
+  const coached = await page.evaluate(() => {
+    const be = _slashGameInstance.battle;
+    if (be.state === 'primer') { be._primerAge = 999; be._dismissPrimer(); }
+    // Force a Sound Strike round and hit a rune that is knowably wrong.
+    // Probing targets by calling resolve() would not do: resolve mutates the
+    // round, so a probe that happened to be correct would consume it.
+    const pattern = window.CombatPatterns.soundStrike;
+    const stage = be.stage;
+    const word = (stage.words || []).find(w => (w.phonemes || []).length >= 3);
+    if (!word) return null;
+    be._pattern = pattern;
+    be._round = pattern.build(word, { words: stage.words, stage, phase: 1, which: 'first' });
+    be._attemptInRound = 0;
+    be.state = 'duel';
+    const wrong = be._round.runes.find(r => r.idx !== be._round.answerIdx);
+    const res = pattern.resolve(be._round, wrong.id);
+    be._apply(res);
+    return { text: be._feedback.text, tone: be._feedback.tone,
+             revealsAnswer: be._feedback.text.includes(word.phonemes[be._round.answerIdx]) };
+  });
+  check('a first miss coaches instead of failing the child',
+    !!coached && coached.tone === 'coach',
+    coached ? `"${coached.text}"` : 'no miss produced');
 
   // Battle -> win. Zeroing bossHp is not enough: the engine only checks it
   // when damage is applied, so drive the defeat through the same entry point
