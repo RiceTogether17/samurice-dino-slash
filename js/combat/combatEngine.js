@@ -80,6 +80,21 @@
       this._banner = null;
       this._specialFx = 0;
       this._nextRoundAt = 0;
+      // Impact feedback. A hit used to be a 14-frame wobble and a small
+      // number that faded before you could read it — you could lose health
+      // without ever seeing why. Every hit now stops the world for a moment,
+      // flashes the sprite, knocks it back, and leaves a number up long
+      // enough to read.
+      this._freeze = 0;          // hit-stop frames
+      this._bossFlash = 0;
+      this._rikuFlash = 0;
+      this._bossKnock = 0;
+      this._rikuKnock = 0;
+      this._tintCache = new Map();
+      // Health bars drain toward the real value rather than snapping, so the
+      // amount just lost is visible as a trailing ghost.
+      this._bossHpShown = this.bossHp;
+      this._rikuHpShown = this.rikuHp;
 
       // Sounds gathered in the runner charge the special attack, so the
       // platforming half of the stage feeds the fighting half.
@@ -332,14 +347,9 @@
       if (this._charge < this._chargeMax || this.state !== 'duel') return false;
       this._charge = 0;
       const dmg = Math.round(this.bossMaxHp * 0.16) + this._streak * 6;
-      this.bossHp = Math.max(0, this.bossHp - dmg);
       this.score += dmg * 4;
       this._specialFx = 40;
-      this._bossShake = 26;
-      this._flash = 0.6;
-      const L = this._layout();
-      this._floaters.push({ text: `-${dmg}`, x: L.boss.x, y: L.boss.y - L.boss.size * 0.7,
-                            age: 0, life: 70, tone: 'dmg' });
+      this._hit('boss', dmg, { crit: true });
       this._showBanner('RICE STORM!', '#FF7043');
       this.audio?.sfxStarPower?.();
       this.audio?.sfxBossHit?.();
@@ -352,6 +362,55 @@
       const L = this._layout();
       return Math.abs(x - L.riku.x) < L.riku.size * 0.5 &&
              y > L.riku.y - L.riku.size && y < L.riku.y + 10;
+    }
+
+    /**
+     * Every hit in the fight goes through here.
+     *
+     * Centralised on purpose: damage was previously applied in five places,
+     * three of which forgot to show a number at all, so the player could lose
+     * health with no visible cause. Feedback scales with the size of the hit —
+     * a chip is a nudge, a Rice Storm stops the screen.
+     *
+     * @param {'boss'|'riku'} who
+     * @param {number} amount
+     */
+    _hit(who, amount, opts = {}) {
+      const L = this._layout();
+      const big = amount / (who === 'boss' ? this.bossMaxHp : this.rikuMaxHp);
+      const weight = Math.min(1, big * 4 + (opts.crit ? 0.5 : 0));
+
+      if (who === 'boss') {
+        this.bossHp = Math.max(0, this.bossHp - amount);
+        this._bossFlash = 1;
+        this._bossKnock = 10 + weight * 22;
+        this._bossShake = 12 + weight * 20;
+      } else {
+        this.rikuHp = Math.max(0, this.rikuHp - amount);
+        this._rikuFlash = 1;
+        this._rikuKnock = -(8 + weight * 16);
+        this._rikuShake = 12 + weight * 16;
+      }
+
+      // Hit-stop: the frames where nothing moves are what make an impact
+      // feel like it landed. Kept short so play never feels sluggish.
+      this._freeze = Math.max(this._freeze, Math.round(3 + weight * 7));
+      this._flash = Math.max(this._flash, 0.18 + weight * 0.35);
+
+      const spot = who === 'boss' ? L.boss : L.riku;
+      this._floaters.push({
+        text: `-${amount}`,
+        x: spot.x + (who === 'boss' ? -10 : 10),
+        y: spot.y - spot.size * 0.72,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: -2.4 - weight,
+        age: 0,
+        // Long enough to actually read: about a second and a half.
+        life: 92,
+        tone: who === 'boss' ? 'dmg' : 'hurt',
+        crit: !!opts.crit,
+      });
+      if (!root.REDUCED_MOTION) this._burst({ x: spot.x, y: spot.y - spot.size * 0.5 });
     }
 
     _showBanner(text, color) {
@@ -424,7 +483,6 @@
       this._attemptInRound++;
       this._wordMisses.set(word.word, (this._wordMisses.get(word.word) || 0) + 1);
       this.audio?.sfxWrongBlend?.();
-      this._rikuShake = 10;
 
       const reply = root.Coach.respond({
         attempt: this._attemptInRound,
@@ -439,7 +497,7 @@
       if (reply.stage === 'reteach') {
         // The second miss costs health and ends the round with the answer
         // shown, rather than letting a child grind a single word forever.
-        this.rikuHp = Math.max(0, this.rikuHp - CHIP_DAMAGE);
+        this._hit('riku', CHIP_DAMAGE);
         this.progress?.recordBlend?.(this.stage.id, word.word, false, false, word.phonemes || []);
         if (this._pattern.reveal) this._pattern.reveal(this._round);
         this._endRound(false);
@@ -455,14 +513,10 @@
       // three lucky answers into an instant win.
       const dmg = Math.max(1, Math.round(base * (0.75 + 0.25 * combo) * (clean ? 1.15 : 0.75)));
 
-      this.bossHp = Math.max(0, this.bossHp - dmg);
       this.score += dmg * 3 + (clean ? 40 : 10);
       this._correctBlends++;
-      this._bossShake = 14;
-      this._flash = 0.35;
       this.audio?.sfxBossHit?.();
-      this._floaters.push({ text: `-${dmg}`, x: this._layout().boss.x, y: this._layout().boss.y - 40,
-                            age: 0, life: 60, tone: 'dmg' });
+      this._hit('boss', dmg, { crit: clean && this._streak >= 3 });
 
       if (clean) {
         const was = this._charge;
@@ -508,10 +562,20 @@
     // ── Per-frame ────────────────────────────────────────────
     update(dt = 1 / 60) {
       if (this._paused || this.done) return;
+      // Hit-stop. Nothing advances for a few frames after an impact — this is
+      // what separates "the number changed" from "that landed".
+      if (this._freeze > 0) { this._freeze--; return; }
       this._age++;
       if (this._bossShake > 0) this._bossShake--;
       if (this._rikuShake > 0) this._rikuShake--;
       if (this._flash > 0) this._flash = Math.max(0, this._flash - 0.03);
+      this._bossFlash = Math.max(0, this._bossFlash - 0.07);
+      this._rikuFlash = Math.max(0, this._rikuFlash - 0.07);
+      this._bossKnock *= 0.86;
+      this._rikuKnock *= 0.86;
+      // Health bars chase the real value so the loss is legible as movement.
+      this._bossHpShown += (this.bossHp - this._bossHpShown) * 0.10;
+      this._rikuHpShown += (this.rikuHp - this._rikuHpShown) * 0.10;
 
       for (let i = this._slashFx.length - 1; i >= 0; i--) {
         if (++this._slashFx[i].age > this._slashFx[i].life) this._slashFx.splice(i, 1);
@@ -556,9 +620,8 @@
       // A rune that reaches the player is a hit taken — the only way the
       // clock can hurt you, and only when relaxed mode is off.
       if (events.breached) {
-        this.rikuHp = Math.max(0, this.rikuHp - CHIP_DAMAGE);
+        this._hit('riku', CHIP_DAMAGE);
         this._streak = 0;
-        this._rikuShake = 12;
         this.audio?.sfxHurt?.();
         this._say('It got through. Watch the order.', 'coach', 2200);
         this._checkLose();
@@ -615,8 +678,10 @@
       ctx.fillStyle = this.stage.groundColor || '#2E7D32';
       ctx.fillRect(0, L.floorY, L.W, 6);
 
-      this._drawFighter(ctx, L.riku, this.sprites['riku-idle'], this._rikuShake);
-      this._drawFighter(ctx, L.boss, this.sprites[this._resolveBossSpriteKey()], this._bossShake);
+      this._drawFighter(ctx, L.riku, this.sprites['riku-idle'],
+                        this._rikuShake, this._rikuFlash, this._rikuKnock);
+      this._drawFighter(ctx, L.boss, this.sprites[this._resolveBossSpriteKey()],
+                        this._bossShake, this._bossFlash, this._bossKnock);
 
       if (this._flash > 0) {
         ctx.fillStyle = `rgba(255,255,255,${this._flash})`;
@@ -631,11 +696,11 @@
      * facing away from the fight. tools/normalise-facing.js fixes the data so
      * every boss already faces the player, and this stays a plain blit.
      */
-    _drawFighter(ctx, spot, sprite, shake) {
+    _drawFighter(ctx, spot, sprite, shake, flash = 0, knock = 0) {
       const sx = shake > 0 && !root.REDUCED_MOTION ? (Math.random() - 0.5) * shake : 0;
       const bob = Math.sin(this._age * 0.045) * spot.size * 0.02;
       ctx.save();
-      ctx.translate(spot.x + sx, spot.y);
+      ctx.translate(spot.x + sx + knock, spot.y);
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
       ctx.beginPath();
       ctx.ellipse(0, 2, spot.size * 0.30, 9, 0, 0, Math.PI * 2);
@@ -643,7 +708,17 @@
       if (sprite && sprite.complete && sprite.naturalWidth > 0) {
         const h = spot.size;
         const w = h * (sprite.naturalWidth / sprite.naturalHeight);
-        ctx.drawImage(sprite, -w / 2, -h + bob, w, h);
+        // A squash on impact reads as force before the eye finds the number.
+        const squash = 1 + flash * 0.12;
+        ctx.drawImage(sprite, -w * squash / 2, -h + bob + h * (1 - 1 / squash), w * squash, h / squash);
+        if (flash > 0.02) {
+          const tint = this._tinted(sprite);
+          if (tint) {
+            ctx.globalAlpha = flash * 0.72;
+            ctx.drawImage(tint, -w * squash / 2, -h + bob + h * (1 - 1 / squash), w * squash, h / squash);
+            ctx.globalAlpha = 1;
+          }
+        }
       }
       ctx.restore();
     }
@@ -756,42 +831,124 @@
       ctx.restore();
     }
 
+    /**
+     * Damage numbers.
+     *
+     * The shape of the animation is the whole point: punch in oversized,
+     * settle, hold still while it is read, then leave. The previous version
+     * faded linearly from frame zero, so the number was already half gone by
+     * the time the eye found it.
+     */
     _drawFloaters(ctx) {
       for (const f of this._floaters) {
+        const t = f.age / f.life;
+        let scale;
+        if (f.age < 6) scale = 0.4 + (f.age / 6) * 1.05;        // punch in
+        else if (f.age < 14) scale = 1.45 - ((f.age - 6) / 8) * 0.45;  // settle
+        else scale = 1.0;
+        const alpha = t < 0.72 ? 1 : 1 - (t - 0.72) / 0.28;      // hold, then go
+
+        const size = (f.crit ? 40 : 30) * scale;
         ctx.save();
-        ctx.globalAlpha = Math.max(0, 1 - f.age / f.life);
-        ctx.font = '900 26px "Nunito", system-ui';
+        ctx.globalAlpha = Math.max(0, alpha);
+        // Keep the number on screen. Fighters stand near the edges, so a
+        // number anchored to one — "CRITICAL" especially — ran off it.
+        ctx.font = `900 ${size}px "Nunito", system-ui`;
+        const half = Math.max(ctx.measureText(f.text).width,
+                              f.crit ? ctx.measureText('CRITICAL').width * 0.42 * 2.4 : 0) / 2;
+        const x = Math.min(Math.max(f.x, half + 10), this.W - half - 10);
+        ctx.translate(x, Math.max(f.y, size * 0.8 + 66));
         ctx.textAlign = 'center';
-        ctx.fillStyle = f.tone === 'dmg' ? '#FFD54F' : '#fff';
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-        ctx.lineWidth = 4;
-        ctx.strokeText(f.text, f.x, f.y);
-        ctx.fillText(f.text, f.x, f.y);
+        ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round';
+        // Heavy outline so a number stays readable over any painted arena.
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.lineWidth = size * 0.22;
+        ctx.strokeText(f.text, 0, 0);
+        const grad = ctx.createLinearGradient(0, -size / 2, 0, size / 2);
+        if (f.tone === 'hurt') {
+          grad.addColorStop(0, '#FFB4A8'); grad.addColorStop(1, '#E53935');
+        } else if (f.crit) {
+          grad.addColorStop(0, '#FFF6C2'); grad.addColorStop(1, '#FF8F00');
+        } else {
+          grad.addColorStop(0, '#FFF3C4'); grad.addColorStop(1, '#FFB300');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillText(f.text, 0, 0);
+        if (f.crit && f.age < 40) {
+          ctx.font = `900 ${size * 0.42}px "Nunito", system-ui`;
+          ctx.strokeText('CRITICAL', 0, size * 0.72);
+          ctx.fillStyle = '#FFD54F';
+          ctx.fillText('CRITICAL', 0, size * 0.72);
+        }
         ctx.restore();
       }
+    }
+
+    /**
+     * A white-tinted copy of a sprite, cached per source, used for the hit
+     * flash. Re-tinting every frame would mean a full-sprite composite per
+     * hit frame; this pays for it once.
+     */
+    _tinted(sprite) {
+      const key = sprite.src || sprite;
+      let c = this._tintCache.get(key);
+      if (c) return c;
+      const w = sprite.naturalWidth, h = sprite.naturalHeight;
+      if (!w || !h) return null;
+      const cap = 320;                       // the flash never needs full res
+      const s = Math.min(1, cap / Math.max(w, h));
+      c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * s));
+      c.height = Math.max(1, Math.round(h * s));
+      const g = c.getContext('2d');
+      g.drawImage(sprite, 0, 0, c.width, c.height);
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, c.width, c.height);
+      this._tintCache.set(key, c);
+      return c;
     }
 
     _drawHud(ctx, L) {
       const marginL = 64, marginR = 116;
       const barW = Math.min(L.W * 0.42, 200, (L.W - marginL - marginR - 24) / 2);
-      const bar = (x, pct, c1, c2, label, right) => {
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.beginPath(); ctx.roundRect(x - 2, 40, barW + 4, 22, 13); ctx.fill();
+      /**
+       * `ghost` is the value the bar is still draining from. The white band
+       * between it and the real value is exactly the damage just taken, held
+       * on screen for about a second — the clearest read there is on "how
+       * much did that cost me".
+       */
+      const bar = (x, pct, ghost, c1, c2, label, right) => {
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.beginPath(); ctx.roundRect(x - 3, 39, barW + 6, 24, 13); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.beginPath(); ctx.roundRect(x, 42, barW, 18, 9); ctx.fill();
+
+        if (ghost > pct + 0.001) {
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.beginPath(); ctx.roundRect(x, 42, barW * ghost, 18, 9); ctx.fill();
+        }
         if (pct > 0) {
-          const g = ctx.createLinearGradient(x, 42, x, 62);
+          const g = ctx.createLinearGradient(x, 42, x, 60);
           g.addColorStop(0, c1); g.addColorStop(1, c2);
           ctx.fillStyle = g;
           ctx.beginPath(); ctx.roundRect(x, 42, barW * pct, 18, 9); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.28)';
+          ctx.beginPath(); ctx.roundRect(x + 2, 44, Math.max(0, barW * pct - 4), 6, 3); ctx.fill();
         }
-        ctx.font = 'bold 11px "Nunito", system-ui';
+        ctx.font = '800 11px "Nunito", system-ui';
         ctx.fillStyle = '#fff';
         ctx.textAlign = right ? 'right' : 'left';
-        ctx.fillText(label, right ? x + barW : x, 34);
+        ctx.fillText(label, right ? x + barW : x, 33);
       };
       const rp = Math.max(0, this.rikuHp / this.rikuMaxHp);
-      bar(marginL, rp, rp > 0.5 ? '#6DD56B' : '#FF5252', '#2E7D32',
+      const bp = Math.max(0, this.bossHp / this.bossMaxHp);
+      bar(marginL, rp, Math.max(0, this._rikuHpShown / this.rikuMaxHp),
+          rp > 0.5 ? '#6DD56B' : rp > 0.25 ? '#FFCA28' : '#FF5252', '#2E7D32',
           `RIKU ${Math.ceil(this.rikuHp)}`, false);
-      bar(L.W - marginR - barW, Math.max(0, this.bossHp / this.bossMaxHp), '#FF7043', '#B71C1C',
+      bar(L.W - marginR - barW, bp, Math.max(0, this._bossHpShown / this.bossMaxHp),
+          '#FF7043', '#B71C1C',
           `${this.stage.bossName || 'Boss'} ${Math.ceil(this.bossHp)}`, true);
 
       // Combo meter — the reason to keep a run of correct sounds going.
@@ -933,23 +1090,53 @@
     }
 
     _drawPause(ctx, L) {
-      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      const cx = L.W / 2, cy = L.H / 2;
+      ctx.save();
+      ctx.fillStyle = 'rgba(6,4,10,0.74)';
       ctx.fillRect(0, 0, L.W, L.H);
+
+      const pw = Math.min(320, L.W * 0.76), ph = 196;
+      const px = cx - pw / 2, py = cy - ph / 2;
+      ctx.fillStyle = 'rgba(18,12,20,0.94)';
+      ctx.strokeStyle = root.UI.THEME.goldDim;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 18); ctx.fill(); ctx.stroke();
+
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#fff';
-      ctx.font = '900 34px "Nunito", system-ui';
-      ctx.fillText('Paused', L.W / 2, L.H / 2 - 24);
-      const bw = 190, bh = 44;
-      this._pauseResumeBtnRect = { x: L.W / 2 - bw / 2, y: L.H / 2, w: bw, h: bh };
-      this._pauseQuitBtnRect   = { x: L.W / 2 - bw / 2, y: L.H / 2 + 56, w: bw, h: bh };
-      for (const [r, t, c] of [[this._pauseResumeBtnRect, 'Resume', '#43A047'],
-                               [this._pauseQuitBtnRect, 'Quit to map', '#546E7A']]) {
-        ctx.fillStyle = c;
-        ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12); ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 17px "Nunito", system-ui';
-        ctx.fillText(t, r.x + r.w / 2, r.y + 28);
-      }
+      ctx.textBaseline = 'middle';
+      ctx.font = `900 ${Math.round(Math.min(30, pw * 0.11))}px ${root.UI.THEME.font}`;
+      ctx.fillStyle = root.UI.THEME.rice;
+      ctx.fillText('Paused', cx, py + 36);
+
+      const rw = Math.min(160, pw * 0.55);
+      const grad = ctx.createLinearGradient(cx - rw / 2, 0, cx + rw / 2, 0);
+      grad.addColorStop(0, 'rgba(242,193,78,0)');
+      grad.addColorStop(0.5, root.UI.THEME.gold);
+      grad.addColorStop(1, 'rgba(242,193,78,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(cx - rw / 2, py + 58, rw, 2);
+
+      const btnW = pw - 44, btnH = 46;
+      const resumeY = py + 74;
+      const g2 = ctx.createLinearGradient(0, resumeY, 0, resumeY + btnH);
+      g2.addColorStop(0, '#D8433A'); g2.addColorStop(1, root.UI.THEME.lacquerDk);
+      ctx.fillStyle = g2;
+      ctx.strokeStyle = 'rgba(255,226,168,0.55)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(px + 22, resumeY, btnW, btnH, 13); ctx.fill(); ctx.stroke();
+      ctx.font = `900 ${Math.round(Math.min(19, pw * 0.068))}px ${root.UI.THEME.font}`;
+      ctx.fillStyle = '#FFF8E9';
+      ctx.fillText('Resume', cx, resumeY + btnH / 2);
+      this._pauseResumeBtnRect = { x: px + 22, y: resumeY, w: btnW, h: btnH };
+
+      const quitY = resumeY + btnH + 12;
+      ctx.fillStyle = 'rgba(28,18,26,0.85)';
+      ctx.strokeStyle = root.UI.THEME.stroke; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(px + 22, quitY, btnW, btnH - 6, 13); ctx.fill(); ctx.stroke();
+      ctx.font = `800 ${Math.round(Math.min(15, pw * 0.055))}px ${root.UI.THEME.font}`;
+      ctx.fillStyle = root.UI.THEME.muted;
+      ctx.fillText('Quit to map', cx, quitY + (btnH - 6) / 2);
+      this._pauseQuitBtnRect = { x: px + 22, y: quitY, w: btnW, h: btnH - 6 };
+      ctx.restore();
     }
 
     // ── Messaging ────────────────────────────────────────────

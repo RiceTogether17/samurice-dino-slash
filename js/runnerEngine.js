@@ -1832,39 +1832,46 @@ class CheckpointFlag {
 // PARTICLE SYSTEM (coins, stomps, boost)
 // ─────────────────────────────────────────────────────────────
 class RunnerParticle {
-  constructor(x, y, text, color = '#FFD700', vy = -3, vx = 0) {
+  constructor(x, y, text, color = '#FFD700', vy = -3, vx = 0, size = 18) {
     this.x     = x;
     this.y     = y;
     this.text  = text;
     this.color = color;
+    this.size  = size;
     this.vy    = vy + (Math.random() - 0.5) * 2;
     this.vx    = vx + (Math.random() - 0.5) * 3;
-    this.life  = 1;
+    this.age   = 0;
+    this.maxAge = 44;
     this.scale = 0.5;
   }
   update(dt = 1 / 60) {
     this.x    += this.vx;
     this.y    += this.vy;
     this.vy   += 0.12;
-    this.life -= 0.025;
+    this.age++;
     this.scale = Math.min(1.3, this.scale + 0.08);
   }
   draw(ctx) {
+    // Hold, then fade. Fading from frame zero — what this did before — meant
+    // the text was already half transparent by the time the eye found it.
+    const t = this.age / this.maxAge;
+    const alpha = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
     ctx.save();
-    ctx.globalAlpha = Math.max(0, this.life);
+    ctx.globalAlpha = Math.max(0, alpha);
     ctx.translate(this.x, this.y);
     ctx.scale(this.scale, this.scale);
-    ctx.font        = 'bold 18px "Nunito", "Comic Sans MS", system-ui';
+    ctx.font        = `900 ${this.size}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth   = 3;
+    ctx.lineJoin    = 'round';
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.lineWidth   = this.size * 0.22;
     ctx.strokeText(this.text, 0, 0);
     ctx.fillStyle   = this.color;
     ctx.fillText(this.text, 0, 0);
     ctx.restore();
   }
-  isDead() { return this.life <= 0; }
+  isDead() { return this.age >= this.maxAge; }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2166,6 +2173,8 @@ class RunnerEngine {
     this._stompCombo = 0;
     this._stompComboTimer = 0;
     this._screenShake = 0;   // frames of screen shake remaining
+    this._hitStop = 0;       // frames frozen after an impact
+    this._hurtFlash = 0;     // red vignette pulse when the player is hit
 
     // Parallax layers
     this._bgOffset1 = 0;
@@ -2261,10 +2270,14 @@ class RunnerEngine {
   update(dt = 1 / 60) {
     if (this.done) return;
     if (this._paused) return;
+    // Hit-stop: a few frozen frames after an impact, the same technique the
+    // boss fight uses. It is what makes a hit register as a hit.
+    if (this._hitStop > 0) { this._hitStop--; return; }
     this._age++;
 
     // Screen shake decay
     if (this._screenShake > 0) this._screenShake--;
+    if (this._hurtFlash > 0) this._hurtFlash = Math.max(0, this._hurtFlash - 0.045);
     // Stomp combo timer — reset fires exactly once when timer expires (set to -1 after)
     if (this._stompComboTimer > 0) this._stompComboTimer--;
     else if (this._stompComboTimer === 0) { this._stompCombo = 0; this._stompComboTimer = -1; }
@@ -2601,14 +2614,23 @@ class RunnerEngine {
   }
 
   // ── Player takes a hit ────────────────────────────────────────
+  // Given the same weight as a hit in the boss fight: a taken hit is the most
+  // important thing that can happen in a run, and it used to pass in a twelve
+  // frame wobble and a small drifting emoji.
   _doPlayerHit() {
     if (this.player._starTimer > 0) return; // star power: immune
     const took = this.player.takeDamage(this.audio);
     if (took) {
-      this._screenShake = 12;
+      this._screenShake = 22;
       this._stompCombo  = 0;
+      // Hit-stop, then a bump backwards — the Mario convention. Kept small so
+      // it cannot fling the player into a pit they were nowhere near.
+      this._hitStop = 8;
+      this.player.vx = -4.5;
+      this.player.vy = Math.min(this.player.vy, -5);
+      this._hurtFlash = 1;
       this.particles.push(new RunnerParticle(
-        this.player.screenX, this.player.y, '-❤️', '#e53935', -4));
+        this.player.screenX, this.player.y - 10, '-1 \u2764', '#FF5252', -3.4, 0, 30));
     }
   }
 
@@ -2853,6 +2875,17 @@ class RunnerEngine {
     // Per-world ambient particles (petals, snow, embers…)
     this._updateAmbient();
     this._drawAmbient(ctx);
+
+    // Damage vignette: a red pulse from the edges, so a hit is visible even
+    // when the player's eyes are on the far side of the screen.
+    if (this._hurtFlash > 0.01 && !window.REDUCED_MOTION) {
+      const g = ctx.createRadialGradient(this.W / 2, this.H / 2, this.H * 0.28,
+                                         this.W / 2, this.H / 2, this.H * 0.78);
+      g.addColorStop(0, 'rgba(229,57,53,0)');
+      g.addColorStop(1, `rgba(229,57,53,${0.62 * this._hurtFlash})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, this.W, this.H);
+    }
 
     // Soft vignette focuses attention on the action (full-canvas alpha
     // fill — skipped on devices already struggling)
@@ -3117,23 +3150,30 @@ class RunnerEngine {
     ctx.save();
     ctx.textBaseline = 'top';
 
+    // The pause button (top-left) and the fullscreen + close buttons
+    // (top-right) are DOM elements floating over the canvas. Anything drawn
+    // under them is invisible — which is where the player's hearts were
+    // sitting, and the coin count.
+    const SAFE_L = 62;
+    const SAFE_R = this.W - 116;
+
     // ── Top HUD bar ─────────────────────────────────────────────
     ctx.fillStyle = 'rgba(0,0,0,0.52)';
     ctx.beginPath(); ctx.roundRect(6, 6, this.W - 12, 52, 14); ctx.fill();
 
-    // ── HP hearts (top-left) — up to 5 hearts
+    // ── HP hearts — up to 5 hearts
     const maxHp = Math.max(3, p.hp);
     ctx.font = '24px serif';
     for (let i = 0; i < Math.max(3, maxHp); i++) {
       ctx.globalAlpha = i < p.hp ? 1 : 0.18;
-      ctx.fillText('❤️', 12 + i * 28, 13);
+      ctx.fillText('❤️', SAFE_L + i * 28, 13);
     }
     ctx.globalAlpha = 1;
 
     // Active power-up icon next to HP
     if (p.powerUp) {
       const questIcon = this.stage.quest?.runnerType === p.powerUp ? this.sprites[this.stage.quest.iconKey] : null;
-      const iconX = 12 + Math.max(3, maxHp) * 28 + 4;
+      const iconX = SAFE_L + Math.max(3, maxHp) * 28 + 4;
       if (questIcon && questIcon.complete && questIcon.naturalWidth > 0) {
         if (p._starTimer > 0) {
           const hue = (this._age * 10) % 360;
@@ -3163,13 +3203,13 @@ class RunnerEngine {
     if (p.shieldActive) {
       ctx.font = '20px serif';
       ctx.globalAlpha = 0.7 + 0.3 * Math.sin(this._age * 0.2);
-      ctx.fillText('🛡️', 12 + Math.max(3, maxHp) * 28 + 4, 16);
+      ctx.fillText('🛡️', SAFE_L + Math.max(3, maxHp) * 28 + 4, 16);
       ctx.globalAlpha = 1;
     }
 
     // Equipped sword badge next to the hearts
     if (this._swordSprite && this._swordSprite.complete && this._swordSprite.naturalWidth > 0) {
-      ctx.drawImage(this._swordSprite, 12 + Math.max(3, maxHp) * 28 + 30, 8, 28, 28);
+      ctx.drawImage(this._swordSprite, SAFE_L + Math.max(3, maxHp) * 28 + 30, 8, 28, 28);
     }
 
     // ── Timer (top-center) — hidden entirely in Relaxed Mode
@@ -3211,11 +3251,11 @@ class RunnerEngine {
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'right';
     ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 3;
-    ctx.fillText(`🪙 ${collected}/${total}`, this.W - 12, 14);
+    ctx.fillText(`🪙 ${collected}/${total}`, SAFE_R, 14);
     // Lives remaining
     ctx.font      = '14px "Nunito", "Comic Sans MS", system-ui';
     ctx.fillStyle = '#fff';
-    ctx.fillText(`✕${this.lives} 🍙`, this.W - 12, 34);
+    ctx.fillText(`✕${this.lives} 🍙`, SAFE_R, 34);
     ctx.shadowBlur  = 0;
     ctx.restore();
 
@@ -3310,46 +3350,57 @@ class RunnerEngine {
   }
 
   _drawPauseOverlay(ctx) {
+    // Same panel language as the menus: ink card, gold rule, one primary
+    // action in lacquer. The old version was a gold-outlined box with a green
+    // and a red button and read as a different game.
     const cx = this.W / 2;
     const cy = this.H / 2;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillStyle = 'rgba(6,4,10,0.74)';
     ctx.fillRect(0, 0, this.W, this.H);
-    // Panel
-    const pw = Math.min(300, this.W * 0.72);
-    const ph = 188;
+
+    const pw = Math.min(320, this.W * 0.76);
+    const ph = 196;
     const px = cx - pw / 2, py = cy - ph / 2;
-    ctx.fillStyle   = 'rgba(10,10,30,0.92)';
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth   = 2.5;
+    ctx.fillStyle = 'rgba(18,12,20,0.94)';
+    ctx.strokeStyle = UI.THEME.goldDim;
+    ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 18); ctx.fill(); ctx.stroke();
-    // Title
-    ctx.textAlign    = 'center';
+
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font         = `bold ${Math.round(this.W * 0.068)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle    = '#FFD700';
-    ctx.shadowColor  = '#FF6F00'; ctx.shadowBlur = 14;
-    ctx.fillText('⏸ PAUSED', cx, py + 34);
-    ctx.shadowBlur   = 0;
-    // ── Resume button ────────────────────────────────────────
-    const btnW = pw - 40, btnH = 44;
-    const resumeY = py + 66;
-    ctx.fillStyle = 'rgba(50,180,80,0.85)';
-    ctx.strokeStyle = '#7CFC9A'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(px + 20, resumeY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-    ctx.font = `bold ${Math.round(this.W * 0.042)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#fff';
-    ctx.fillText('▶ RESUME', cx, resumeY + btnH / 2);
-    this._pauseResumeBtnRect = { x: px + 20, y: resumeY, w: btnW, h: btnH };
-    // ── Quit button ──────────────────────────────────────────
+    ctx.font = `900 ${Math.round(Math.min(30, pw * 0.11))}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.rice;
+    ctx.fillText('Paused', cx, py + 36);
+
+    const rw = Math.min(160, pw * 0.55);
+    const grad = ctx.createLinearGradient(cx - rw / 2, 0, cx + rw / 2, 0);
+    grad.addColorStop(0, 'rgba(242,193,78,0)');
+    grad.addColorStop(0.5, UI.THEME.gold);
+    grad.addColorStop(1, 'rgba(242,193,78,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - rw / 2, py + 58, rw, 2);
+
+    const btnW = pw - 44, btnH = 46;
+    const resumeY = py + 74;
+    const g2 = ctx.createLinearGradient(0, resumeY, 0, resumeY + btnH);
+    g2.addColorStop(0, '#D8433A'); g2.addColorStop(1, UI.THEME.lacquerDk);
+    ctx.fillStyle = g2;
+    ctx.strokeStyle = 'rgba(255,226,168,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(px + 22, resumeY, btnW, btnH, 13); ctx.fill(); ctx.stroke();
+    ctx.font = `900 ${Math.round(Math.min(19, pw * 0.068))}px ${UI.THEME.font}`;
+    ctx.fillStyle = '#FFF8E9';
+    ctx.fillText('Resume', cx, resumeY + btnH / 2);
+    this._pauseResumeBtnRect = { x: px + 22, y: resumeY, w: btnW, h: btnH };
+
     const quitY = resumeY + btnH + 12;
-    ctx.fillStyle = 'rgba(180,50,20,0.75)';
-    ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(px + 20, quitY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-    ctx.font = `bold ${Math.round(this.W * 0.038)}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFD9D0';
-    ctx.fillText('🗺 Quit to Map', cx, quitY + btnH / 2);
-    this._pauseQuitBtnRect = { x: px + 20, y: quitY, w: btnW, h: btnH };
+    ctx.fillStyle = 'rgba(28,18,26,0.85)';
+    ctx.strokeStyle = UI.THEME.stroke; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(px + 22, quitY, btnW, btnH - 6, 13); ctx.fill(); ctx.stroke();
+    ctx.font = `800 ${Math.round(Math.min(15, pw * 0.055))}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.fillText('Quit to map', cx, quitY + (btnH - 6) / 2);
+    this._pauseQuitBtnRect = { x: px + 22, y: quitY, w: btnW, h: btnH - 6 };
     ctx.restore();
   }
 
