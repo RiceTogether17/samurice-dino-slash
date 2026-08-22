@@ -988,7 +988,7 @@ class SlashGame {
     this.overlay.innerHTML = '';
     this._showPauseBtn();
     const stage = PHONICS_DATA.stageList[this.stageId - 1];
-    this.battle = new BattleEngine(
+    this.battle = new CombatEngine(
       this.canvas, this.overlay, stage, collectedPhonemes,
       this.sprites, this.audio, this.progress, this.W, this.H,
     );
@@ -2244,7 +2244,19 @@ class SlashGame {
   // ── BATTLE UPDATE ────────────────────────────────────────────
   _updateBattle() {
     if (!this.battle) return;
-    this.battle.update();
+    // Combat is real-time now, so it needs the same fixed-step treatment the
+    // runner has: sounds close on the player at a rate that must not depend
+    // on how many frames the device managed to draw.
+    const STEP = 1 / 60;
+    const dt = this._frameDtSec || STEP;
+    this._battleAccum = Math.min((this._battleAccum || 0) + dt, STEP * 3);
+    let steps = 0;
+    while (this._battleAccum >= STEP && steps < 2) {
+      this.battle.update(STEP);
+      this._battleAccum -= STEP;
+      steps++;
+    }
+    if (steps === 0) { this.battle.update(dt); this._battleAccum = 0; }
     this.battle.draw();
     if (this.audio && this.battle?.bossMaxHp) {
       const intensity = 1 - (this.battle.bossHp / this.battle.bossMaxHp);

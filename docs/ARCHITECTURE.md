@@ -21,7 +21,10 @@ js/phonicsData.js        the curriculum: 6 worlds x 5 stages
 js/progressTracker.js    save data, achievements, shop
 js/audioManager.js       Web Audio + speech synthesis
 js/runnerEngine.js       the auto-runner phase
-js/battleEngine.js       the word-blending boss phase
+js/endlessBattle.js      the quick word challenge inside Dino Dash
+js/combat/coach.js       what to say when an answer is wrong
+js/combat/patterns.js    one play mechanic per phonics skill
+js/combat/combatEngine.js the boss fight
 js/tutorial.js           first-play onboarding
 js/slashGame.js          state machine, menus, world map
 js/game.js               entry points and mode chooser
@@ -73,6 +76,56 @@ Quality drops fast and recovers slowly, and each downgrade lengthens the clean
 streak the next upgrade needs, so a borderline device settles instead of
 flapping. Players can pin a tier in the settings popover, which stops
 adaptation. `window.LOW_FX` remains as a derived alias for older engine code.
+
+## Combat: why the boss fight was rebuilt
+
+The old `js/battleEngine.js` offered nine "mini-games" — segmenting, rhyming,
+counting sounds, spotting a first or last sound. Every one of them ended up
+building the same object: `{ answer, options }`. Whatever the skill, the
+child's physical action was identical: read a prompt, tap one of four buttons,
+see a tick.
+
+The sibling project PhonicsQuest was audited for exactly this and the finding
+generalises: *many different educational modes, but too few truly different
+play patterns.* Samurice had it worse, because it sells itself as an action
+game. The runner was a real platformer; the battle was a quiz wearing a
+dinosaur costume, and the two halves shared nothing but a background.
+
+So the phonics is now the fighting. `js/combat/` splits into three pieces:
+
+- **`patterns.js`** — one *verb* per skill family, not one screen per skill:
+
+  | Pattern | Verb | Skills |
+  |---|---|---|
+  | Blade Rush | slash the sounds in blend order before they reach you | oral-blend |
+  | Sound Cleave | cut a solid word apart at its sound boundaries | segment-it, sound-count |
+  | Sound Strike | pick the sound in a named position out of a turning ring | first, last, middle, letter-sound |
+  | Echo Duel | deflect the rhymes, let the others pass | rhyme |
+  | Flash Guard | the word is shown then hidden; strike the shield that had it | sight-word |
+
+  Echo Duel is the clearest evidence this is a real change rather than a
+  re-skin: **doing nothing is a required, correct response there.** No
+  arrangement of a button grid produces that.
+
+- **`combatEngine.js`** — the arena, health, the combo economy, input and
+  round flow. It knows nothing about phonics; a pattern knows nothing about
+  damage. Patterns implement a small contract (`canBuild`, `build`, `targets`,
+  `hitTest`, `resolve`, `update`, `draw`) so the engine can drive any of them.
+
+- **`coach.js`** — the reply to a wrong answer, modelled on PhonicsQuest's
+  teaching ladder. First miss gives a cue and something to listen for and
+  **withholds the answer**; second miss names the slip, gives the rule, then
+  the answer; a correct answer gets one line of *why* it worked. Diagnosis
+  runs off the phoneme data rather than hand-authored notes, so it covers the
+  whole curriculum instead of the handful of words somebody wrote notes for.
+
+Two properties are enforced by `tests/patterns.test.js` and worth keeping:
+every word in all 30 stages must build a round and be playable to completion
+(a round that cannot finish is a soft-lock), and relaxed mode — the default
+for new readers — must never let the clock take a round away.
+
+Adding a skill means adding a pattern and an entry in `BY_SKILL`. If a new
+activity has no mechanic, the tests fail rather than silently falling back.
 
 ## Performance work
 

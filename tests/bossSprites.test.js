@@ -3,7 +3,9 @@
  * The boss's attack and hurt poses are resolved by parsing its sprite URL.
  * That parse was pinned to ".png" and broke silently when the art moved to
  * WebP — no error, just a boss frozen in its idle frame for a whole fight.
- * These tests pin the behaviour to the format-agnostic rule.
+ * These tests pin the behaviour to the format-agnostic rule. The parse moved
+ * to combat/combatEngine.js when the boss fight was rebuilt; the trap it
+ * guards against did not move, so the tests came with it.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -11,9 +13,9 @@ const fs = require('fs');
 const path = require('path');
 const { ROOT } = require('./helpers/loadScript.js');
 
-const source = fs.readFileSync(path.join(ROOT, 'js/battleEngine.js'), 'utf8');
+const source = fs.readFileSync(path.join(ROOT, 'js/combat/combatEngine.js'), 'utf8');
 const RE = new RegExp(
-  source.match(/const match = src\.match\((\/.*?\/)\);/s)[1].slice(1, -1));
+  source.match(/const m = src\.match\((\/.*?\/)\);/s)[1].slice(1, -1));
 
 const species = url => {
   const m = url.match(RE);

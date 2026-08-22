@@ -36,19 +36,29 @@ sequenced by the science-of-reading progression so children master every phonics
 | 5 · Mountain Terraces | ⛰️ | Sight Words & Word Families |
 | 6 · Volcanic Peak | 🌋 | Multisyllabic Words & Mastery |
 
-Each stage = an auto-runner (collect phoneme coins = **segmenting**) + a battle that mixes
-**blending** with mini-games tuned per stage:
+Each stage = an auto-runner (collect phoneme coins = **segmenting**) + a **boss
+fight where the phonics *is* the fighting**. Sounds arrive on the field as runes
+and you act on them directly — each skill has its own mechanic, not a shared
+grid of buttons:
 
-- 🕵️ **Sound Detective** — isolate the first / last / middle / missing sound (phonemic awareness)
-- 🔡 **Letter Sounds** — hear a sound, tap the letter that makes it
-- 🎵 **Rhyme Time** — pick the word that rhymes
-- 🧩 **Segment It** — choose how a word breaks into sounds
-- 👁️ **Sight Words** — read tricky high-frequency words on sight
+| Mechanic | What you do | Trains |
+|---|---|---|
+| ⚔️ **Blade Rush** | Slash the sounds in blend order before they reach you | Oral blending |
+| 🪓 **Sound Cleave** | Cut a solid word apart at its sound boundaries | Segmenting, sound counting |
+| 🎯 **Sound Strike** | Strike the sound in a named position out of a turning ring | First / last / middle sounds |
+| 🛡️ **Echo Duel** | Deflect the words that rhyme — **let the others fly past** | Rhyme |
+| ⚡ **Flash Guard** | The word flashes, then hides; strike the shield that carried it | Sight words |
+
+Echo Duel is the one to try first: letting a non-rhyme through is how you
+answer it, so *not acting* is a real move.
 
 **Teaching design (teach → then test):**
 
-- 🎓 **Skill Coach** — the first time each mini-game skill appears in a battle, the game
-  models it in plain language and reads an example aloud *before* asking the child.
+- 🎓 **A coach, not an answer key** — get something wrong and the first reply is
+  a cue and something to listen for, with the answer withheld. Only on a second
+  miss does the game name the slip, give the rule and show the answer. Get it
+  right and it tells you *why* it worked, not just "correct".
+- 😌 **Relaxed Mode** holds the sounds still, so thinking time is never punished.
 - 👁️ **Sight words stay whole** — in the runner, irregular sight words (the, was, said…)
   are collected as one whole-word coin instead of being sounded out letter-by-letter.
 - 😊 **Relaxed Mode on by default** for new readers (no timer pressure); the timer can be

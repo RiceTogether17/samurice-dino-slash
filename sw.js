@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────
 'use strict';
 
-const CACHE_VERSION = 'samurice-v16';
+const CACHE_VERSION = 'samurice-v18';
 const CACHE_NAME    = `${CACHE_VERSION}-static`;
 
 // Assets that should be pre-cached at install time (critical path).
@@ -24,7 +24,10 @@ const PRECACHE_URLS = [
   './js/progressTracker.js',
   './js/audioManager.js',
   './js/runnerEngine.js',
-  './js/battleEngine.js',
+  './js/endlessBattle.js',
+  './js/combat/coach.js',
+  './js/combat/patterns.js',
+  './js/combat/combatEngine.js',
   './js/tutorial.js',
   './js/slashGame.js',
   './js/game.js',

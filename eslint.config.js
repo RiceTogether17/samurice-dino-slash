@@ -33,7 +33,8 @@ module.exports = [
         // Cross-file globals: every script shares one scope by design.
         PHONICS_DATA: 'readonly', ProgressTracker: 'readonly',
         AudioManager: 'readonly', RunnerEngine: 'readonly',
-        BattleEngine: 'readonly', SlashGame: 'readonly',
+        SlashGame: 'readonly', CombatEngine: 'readonly',
+        CombatPatterns: 'readonly', Coach: 'readonly',
         SpriteCache: 'readonly', Quality: 'readonly', ArrayOps: 'readonly',
         haptic: 'readonly', Tutorial: 'readonly',
         ACHIEVEMENTS: 'readonly', SHOP_ITEMS: 'readonly',
