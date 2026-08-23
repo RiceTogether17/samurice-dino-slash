@@ -24,7 +24,8 @@ const srv=http.createServer((q,r)=>{const f=path.join(ROOT,decodeURIComponent(q.
     ['first-blend','words-50','slip-recover','daily-streak3'].forEach(a=>{try{t.unlock(a);}catch(e){}});
     const L=window.Review.shared(); L.reset();
     PHONICS_DATA.stageList.slice(0,6).forEach(s=>s.words.slice(0,4).forEach(w=>L.introduce(w.word,s.id)));
-    for(let i=0;i<10;i++){ const w=PHONICS_DATA.stageList[0].words[i%5]; if(w) L.grade(w.word,true,{stage:1}); }
+    for(let i=0;i<10;i++){ const w=PHONICS_DATA.stageList[0].words[i%5]; if(w) L.grade(w.word, i%4!==0, {stage:1}); }
+    ['was','said','they'].forEach(w=>{ L.grade(w,false,{stage:5}); L.grade(w,false,{stage:5}); });
   });
   await p.evaluate(()=>window.launchSlashGame());
   await p.waitForFunction(()=>typeof _slashGameInstance!=='undefined'&&_slashGameInstance&&_slashGameInstance._spritesReady&&_slashGameInstance._sheetsReady,null,{timeout:60000});
@@ -55,8 +56,13 @@ const srv=http.createServer((q,r)=>{const f=path.join(ROOT,decodeURIComponent(q.
   await shot('recordbook-empty', ()=>{ _slashGameInstance.progress.data.runLog=[]; _slashGameInstance._sceneHolders.leaderboard={}; _slashGameInstance.state='leaderboard'; });
   // DOM parent dashboard
   await p.evaluate(()=>{ _slashGameInstance && (_slashGameInstance.state='mode-select'); });
-  await p.evaluate(()=>{ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('progressScreen')?.classList.add('active'); window._parentDashboard?.render?.(); });
-  await p.waitForTimeout(1200); await p.screenshot({path:'shots/sw-parentdash.png', fullPage:true});
+  await p.evaluate(()=>{ window._parentDashboard.show(); });
+  await p.waitForTimeout(1200);
+  for (const [n,y] of [['top',0],['mid',560],['mid2',1120],['bottom',99999]]) {
+    await p.evaluate(v=>document.querySelector('.pd-body').scrollTo(0,v), y);
+    await p.waitForTimeout(350);
+    await p.screenshot({path:`shots/sw-pd-${n}.png`});
+  }
   console.log('errors', JSON.stringify(errs.slice(0,6)));
   await b.close(); srv.close();
 })();

@@ -111,6 +111,21 @@
       return { box: e.b, dueDay: e.d, seen: e.n, missed: e.m, stage: e.s };
     }
 
+    /**
+     * Every word on the ladder with its state, for reporting. Weakest first
+     * — most misses, then lowest box — so a caller that truncates the list
+     * keeps the words worth talking about.
+     */
+    allWords() {
+      const out = [];
+      for (const word in this._data.words) {
+        const e = this._data.words[word];
+        out.push({ word, box: e.b, dueDay: e.d, seen: e.n, missed: e.m, stage: e.s });
+      }
+      out.sort((a, b) => (b.missed - a.missed) || (a.box - b.box) || (a.word < b.word ? -1 : 1));
+      return out;
+    }
+
     /** Every word whose rest has elapsed, most overdue first, then weakest. */
     dueWords(now) {
       const today = this._today(now);

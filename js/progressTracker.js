@@ -381,6 +381,22 @@ class ProgressTracker {
       this.data.stages[stageId] = s;
     }
 
+    // Attempts per phoneme, across every stage.
+    //
+    // The weak-phoneme score below only moves when something goes wrong, so
+    // a sound that has never been practised and a sound that has been
+    // mastered both score zero. The parent dashboard was reading that as
+    // "mastered" and colouring letters green that the child had never once
+    // been asked about. Counting attempts is what tells those two apart.
+    if (!this.data.phonemeStats) this.data.phonemeStats = {};
+    (phonemes || []).forEach((ph) => {
+      const k = String(ph || '').toLowerCase();
+      if (!k) return;
+      const e = this.data.phonemeStats[k] || (this.data.phonemeStats[k] = { n: 0, wrong: 0 });
+      e.n++;
+      if (!success) e.wrong++;
+    });
+
     // Track weak phonemes for adaptive battle word selection.
     if (stageId) {
       const key = String(stageId);
@@ -405,6 +421,12 @@ class ProgressTracker {
   }
 
   recordPerfectBlends(count) { if (count >= 10) this.unlock('perfect-10'); }
+
+  /**
+   * How often each sound has actually come up, and how often it was missed.
+   * `{ ph: { n, wrong } }`. A sound with no entry has never been asked.
+   */
+  getPhonemeStats() { return { ...(this.data.phonemeStats || {}) }; }
 
   getWeakPhonemes(stageId) {
     const key = String(stageId || '');

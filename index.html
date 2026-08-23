@@ -227,6 +227,17 @@
       </div>
     </section>
 
+    <!-- ── Reading (the review ladder) ──
+         Above stage progress on purpose: stars and rice say the child
+         played, this says whether they are reading. -->
+    <section class="pd-section">
+      <h3 class="pd-section-title">📖 Reading</h3>
+      <p class="pd-section-hint">
+        Every word is asked again after a gap that grows as it sticks.
+      </p>
+      <div id="pd-review"></div>
+    </section>
+
     <!-- ── Stage Progress ── -->
     <section class="pd-section">
       <h3 class="pd-section-title">📚 Stage Progress</h3>
@@ -235,13 +246,25 @@
 
     <!-- ── Phoneme Mastery Heatmap ── -->
     <section class="pd-section">
-      <h3 class="pd-section-title">🔠 Phoneme Mastery Map</h3>
+      <h3 class="pd-section-title">🔠 Sound Map</h3>
       <p class="pd-section-hint">
-        <span class="pd-ph-green pd-legend">Green</span> = mastered ·
-        <span class="pd-ph-yellow pd-legend">Yellow</span> = practising ·
-        <span class="pd-ph-red pd-legend">Red</span> = needs work
+        <span class="pd-ph-red pd-legend">Needs work</span> ·
+        <span class="pd-ph-yellow pd-legend">Practising</span> ·
+        <span class="pd-ph-new pd-legend">Not yet</span> ·
+        <span class="pd-ph-green pd-legend">Solid</span>
+        — hover a sound for its record.
       </p>
       <div id="pd-heatmap" class="pd-heatmap"></div>
+    </section>
+
+    <!-- ── Who is playing ── -->
+    <section class="pd-section pd-class-section">
+      <h3 class="pd-section-title">🎮 Who is playing</h3>
+      <p class="pd-section-hint">Names the rows in the Dino Dash record book. Optional.</p>
+      <div class="pd-class-row">
+        <input id="pd-player-name" class="pd-class-input" type="text"
+               maxlength="14" placeholder="Player name…" autocomplete="off">
+      </div>
     </section>
 
     <!-- ── Classroom Code ── -->

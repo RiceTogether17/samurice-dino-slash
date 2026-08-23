@@ -74,13 +74,21 @@ class ParentDashboard {
     // Global stats row
     document.getElementById('pd-words-blended').textContent = t.getTotalWordsBlended();
     document.getElementById('pd-best-combo').textContent    = t.getBestCombo();
-    document.getElementById('pd-daily-streak').textContent  = t.getDailyStreak() + ' 🔥';
+    document.getElementById('pd-daily-streak').textContent  = t.getDailyStreak();
     document.getElementById('pd-rice-grains').textContent   = t.getRiceGrains();
     document.getElementById('pd-endless-dist').textContent  = t.getEndlessBestDist() + 'm';
 
+    this._renderReview();
     this._renderStages();
     this._renderHeatmap();
     this._renderClassroom();
+    this._renderPlayerName();
+  }
+
+  /** Who is playing — used to name rows in the Dino Dash record book. */
+  _renderPlayerName() {
+    const input = document.getElementById('pd-player-name');
+    if (input) input.value = this._tracker.getPlayerName();
   }
 
   // ── Stage progress cards ─────────────────────────────────
@@ -126,50 +134,130 @@ class ParentDashboard {
   }
 
   // ── Phoneme mastery heatmap ───────────────────────────────
+  /**
+   * The sound map.
+   *
+   * This used to colour a sound green — "mastered" — whenever its weak
+   * score was zero, and the weak score only moves when something goes
+   * wrong. So every sound the child had never once been asked about was
+   * reported to their parent as mastered. It now reads attempt counts
+   * (progressTracker.getPhonemeStats) and will not claim mastery without
+   * evidence for it.
+   */
   _renderHeatmap() {
     const container = document.getElementById('pd-heatmap');
     if (!container) return;
     container.innerHTML = '';
 
-    // Aggregate weak scores across all stages
-    const scores = {};
-    for (let i = 1; i <= (PHONICS_DATA.stageCount || 6); i++) {
-      const weak = this._tracker.getWeakPhonemes(i);
-      for (const [ph, s] of Object.entries(weak)) {
-        scores[ph] = (scores[ph] || 0) + s;
-      }
-    }
-
-    // Collect all unique phonemes from the word data
+    const stats = this._tracker.getPhonemeStats();
     const all = new Set();
     PHONICS_DATA.stageList.forEach(stage =>
-      stage.words.forEach(w => w.phonemes.forEach(ph => all.add(ph)))
+      stage.words.forEach(w => (w.phonemes || []).forEach(ph => all.add(String(ph).toLowerCase())))
     );
-
     if (all.size === 0) {
-      container.innerHTML = '<p class="pd-no-data">Play some stages to see your phonics map!</p>';
+      container.innerHTML = '<p class="pd-no-data">Play some stages to see the sound map.</p>';
       return;
     }
 
-    // Sort weakest first so trouble spots appear at the top
-    const sorted = [...all].sort((a, b) => (scores[b] || 0) - (scores[a] || 0));
+    /** Four honest states, in the order a parent wants to see them. */
+    const classify = (ph) => {
+      const e = stats[ph];
+      if (!e || e.n === 0) return { cls: 'pd-ph-new', rank: 2, note: 'not practised yet' };
+      const wrongRate = e.wrong / e.n;
+      if (wrongRate >= 0.35) return { cls: 'pd-ph-red', rank: 0,
+        note: `missed ${e.wrong} of ${e.n}` };
+      if (wrongRate > 0 || e.n < 3) return { cls: 'pd-ph-yellow', rank: 1,
+        note: `${e.n - e.wrong} of ${e.n} right` };
+      return { cls: 'pd-ph-green', rank: 3, note: `${e.n} for ${e.n}` };
+    };
 
-    sorted.forEach(ph => {
-      const s  = scores[ph] || 0;
-      let cls  = 'pd-ph-green';  // mastered
-      if (s >= 6)      cls = 'pd-ph-red';    // needs a lot of work
-      else if (s >= 2) cls = 'pd-ph-yellow'; // some practice needed
+    // Trouble first, then in-progress, then solid — the order a parent
+    // reads for "what should we do next".
+    const classified = [...all].map(ph => ({ ph, ...classify(ph) }));
+    const practised = classified
+      .filter(c => c.rank !== 2)
+      .sort((a, b) => a.rank - b.rank || (a.ph < b.ph ? -1 : 1));
+    const untouched = classified.filter(c => c.rank === 2);
 
+    // The campaign teaches several hundred units across six worlds, so
+    // rendering every one of them buried the handful that need attention
+    // under a wall of grey. Only what has actually been played is shown;
+    // the rest is a count.
+    if (!practised.length) {
+      container.innerHTML = '<p class="pd-no-data">No sounds practised yet — ' +
+                            'they appear here as they come up in play.</p>';
+      return;
+    }
+    for (const item of practised) {
       const cell = document.createElement('div');
-      cell.className = `pd-phoneme-cell ${cls}`;
-      cell.textContent = ph;
-      cell.title = s === 0
-        ? `"${ph}" — mastered!`
-        : s >= 6
-          ? `"${ph}" — needs practice`
-          : `"${ph}" — almost there`;
+      cell.className = `pd-phoneme-cell ${item.cls}`;
+      cell.textContent = item.ph;
+      cell.title = `"${item.ph}" — ${item.note}`;
       container.appendChild(cell);
-    });
+    }
+    if (untouched.length) {
+      const note = document.createElement('p');
+      note.className = 'pd-no-data pd-map-rest';
+      note.textContent =
+        `${untouched.length} more sounds are still ahead in the campaign.`;
+      container.appendChild(note);
+    }
+  }
+
+  /**
+   * What the review ladder knows.
+   *
+   * This is the most useful thing on the screen and it did not exist: how
+   * many words the child is actively learning, how many have stuck, and
+   * which ones keep slipping. Stars and rice tell a parent the child
+   * played. This tells them whether they are reading.
+   */
+  _renderReview() {
+    const wrap = document.getElementById('pd-review');
+    if (!wrap) return;
+    const ladder = window.Review?.shared?.();
+    if (!ladder) { wrap.innerHTML = ''; return; }
+
+    const stats = ladder.stats();
+    if (stats.total === 0) {
+      wrap.innerHTML = '<p class="pd-no-data">No words on the review ladder yet — ' +
+                       'they are added as they are played.</p>';
+      return;
+    }
+
+    const tiles = [
+      ['Learning', stats.learning, 'pd-rv-learning', 'seen recently, not stuck yet'],
+      ['Getting there', stats.reviewing, 'pd-rv-mid', 'coming back at longer gaps'],
+      ['Known', stats.mastered, 'pd-rv-known', 'right every time for weeks'],
+    ];
+
+    // Words that keep slipping, worst first. Named, because "3 words need
+    // work" is not something a parent can act on and "was, said, they" is.
+    const shaky = ladder.allWords().filter(w => w.missed > 0);
+
+    wrap.innerHTML = `
+      <div class="pd-review-tiles">
+        ${tiles.map(([label, n, cls, note]) => `
+          <div class="pd-rv-tile ${cls}">
+            <span class="pd-rv-num">${n}</span>
+            <span class="pd-rv-label">${label}</span>
+            <span class="pd-rv-note">${note}</span>
+          </div>`).join('')}
+      </div>
+      <p class="pd-review-line">
+        ${stats.due > 0
+          ? `<strong>${stats.due}</strong> word${stats.due === 1 ? '' : 's'} due for review today.`
+          : 'Nothing due today — everything is resting.'}
+        ${stats.doneToday > 0 ? ` ${stats.doneToday} practised so far today.` : ''}
+      </p>
+      ${shaky.length ? `
+        <p class="pd-review-sub">Words to read together:</p>
+        <div class="pd-shaky">
+          ${shaky.slice(0, 12).map(w =>
+            `<span class="pd-shaky-word" title="missed ${w.missed} time${w.missed === 1 ? '' : 's'}">${w.word}</span>`
+          ).join('')}
+        </div>` : ''}
+    `;
   }
 
   // ── Classroom Code panel ─────────────────────────────────
@@ -203,9 +291,25 @@ class ParentDashboard {
       `Daily Streak:   ${t.getDailyStreak()} days 🔥`,
       `Rice Grains:    ${t.getRiceGrains()} 🌾`,
       `Endless Record: ${t.getEndlessBestDist()}m`,
-      '',
-      '📚 Stage Scores:',
     ];
+
+    // The review ladder is the part of this report that is actually about
+    // reading, so it goes above the stage scores.
+    const ladder = window.Review?.shared?.();
+    if (ladder) {
+      const rv = ladder.stats();
+      lines.push('', '📖 Reading (spaced review):',
+        `  Learning:      ${rv.learning}`,
+        `  Getting there: ${rv.reviewing}`,
+        `  Known:         ${rv.mastered}`,
+        `  Due today:     ${rv.due}`);
+      const shaky = ladder.allWords().filter(w => w.missed > 0).slice(0, 10);
+      if (shaky.length) {
+        lines.push(`  Worth reading together: ${shaky.map(w => w.word).join(', ')}`);
+      }
+    }
+
+    lines.push('', '📚 Stage Scores:');
 
     for (let i = 1; i <= (PHONICS_DATA.stageCount || 6); i++) {
       const d = t.getStage(i);
@@ -255,6 +359,9 @@ class ParentDashboard {
     document.getElementById('launchProgressBtn')?.addEventListener('click', () => this.show());
     document.getElementById('pd-class-input')?.addEventListener('keydown', e => {
       if (e.key === 'Enter') this._createClass();
+    });
+    document.getElementById('pd-player-name')?.addEventListener('change', e => {
+      this._tracker.setPlayerName(e.target.value);
     });
   }
 }
