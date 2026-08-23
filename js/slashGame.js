@@ -277,7 +277,7 @@ class SlashGame {
     // holder, so screens sharing a holder would evict each other every frame.
     this._sceneHolders = { modeSelect: {}, stageSelect: {}, shop: {},
                            achievements: {}, leaderboard: {}, win: {},
-                           reviewDone: {}, endlessOver: {} };
+                           reviewDone: {}, endlessOver: {}, daily: {} };
     this._menuSel = 0;   // selected stage within the open world (stage-select)
     this._worldSel = 0;  // selected world (world-map)
     this._bindMenuInput();
@@ -3899,88 +3899,101 @@ class SlashGame {
   }
   _drawDaily() {
     const ctx = this.ctx, W = this.W, H = this.H, t = this._age;
-    ctx.clearRect(0, 0, W, H);
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#0d2040'); bg.addColorStop(1, '#1a3a1a');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    // Header
-    ctx.font = `bold ${Math.min(24,W*0.058)}px Arial Black, sans-serif`;
-    ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
-    ctx.strokeText('📅 DAILY CHALLENGE', W/2, 12);
-    ctx.fillText('📅 DAILY CHALLENGE', W/2, 12);
     const set = this._dailySet;
+    ctx.clearRect(0, 0, W, H);
+    UI.scene(ctx, this.sprites['arena-2'], W, H, this._sceneHolders.daily, 'daily', 1.5);
     if (!set) { this.state = 'mode-select'; return; }
-    // Theme
-    ctx.font = `bold ${Math.min(18,W*0.044)}px Arial, sans-serif`;
-    ctx.fillStyle = '#4ECDC4';
-    ctx.fillText(`${set.emoji || '📖'} Today: ${set.theme}`, W/2, 46);
+
+    const afterHeading = UI.heading(ctx, 'DAILY CHALLENGE', W, 12);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `800 ${Math.min(14, W * 0.034)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.fillText(`${set.emoji || '📖'} Today: ${set.theme}`, W / 2, afterHeading + 4);
+
+    let y = afterHeading + 26;
     if (this._dailyGolden) {
-      const gp = 0.7 + 0.3 * Math.sin(t * 0.1);
-      ctx.font = `bold ${Math.min(14,W*0.034)}px Arial, sans-serif`;
-      ctx.fillStyle = `rgba(255,215,0,${gp})`;
-      ctx.fillText('✨ GOLDEN DAY — double rice! ✨', W/2, 66);
+      const gp = 0.65 + 0.35 * Math.sin(t * 0.09);
+      ctx.font = `800 ${Math.min(12.5, W * 0.03)}px ${UI.THEME.font}`;
+      ctx.fillStyle = `rgba(242,193,78,${gp})`;
+      ctx.fillText('✨ Golden day — double rice ✨', W / 2, y);
+      y += 20;
     }
-    // Progress bar
-    const prog = this.progress.getDailyCompleted() ? this._dailyWords.length
-                 : Math.min(this._dailyBlended, this._dailyWords.length);
-    const pct = this._dailyWords.length > 0 ? prog / this._dailyWords.length : 0;
-    const barW = W * 0.75, barH = 18, barX = (W - barW)/2, barY = this._dailyGolden ? 88 : 75;
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, barH/2); ctx.fill();
-    const fillGrad = ctx.createLinearGradient(barX, 0, barX + barW * pct, 0);
-    fillGrad.addColorStop(0, '#00FF88'); fillGrad.addColorStop(1, '#FFD700');
-    ctx.fillStyle = fillGrad;
-    ctx.beginPath(); ctx.roundRect(barX, barY, barW * pct, barH, barH/2); ctx.fill();
-    ctx.font = `bold 13px Arial, sans-serif`; ctx.fillStyle = '#fff';
-    ctx.fillText(`${prog}/${this._dailyWords.length}`, W/2, barY + barH/2);
-    // Words list
-    const listY = 108;
-    const wordH = Math.min(40, (H * 0.48) / this._dailyWords.length);
+
+    // Progress
+    const prog = this.progress.getDailyCompleted() ? this._dailyWords.length : this._dailyBlended;
+    const pct = this._dailyWords.length ? prog / this._dailyWords.length : 0;
+    const barW = Math.min(W * 0.7, 320), barH = 12, barX = (W - barW) / 2;
+    ctx.fillStyle = 'rgba(10,6,12,0.62)';
+    ctx.strokeStyle = UI.THEME.stroke; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(barX, y, barW, barH, barH / 2); ctx.fill(); ctx.stroke();
+    if (pct > 0) {
+      const fill = ctx.createLinearGradient(barX, 0, barX + barW * pct, 0);
+      fill.addColorStop(0, '#7CFF9B'); fill.addColorStop(1, UI.THEME.gold);
+      ctx.fillStyle = fill;
+      ctx.beginPath(); ctx.roundRect(barX, y, Math.max(barH, barW * pct), barH, barH / 2); ctx.fill();
+    }
+    ctx.font = `800 10px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${prog} / ${this._dailyWords.length}`, W / 2, y + barH / 2 + 0.5);
+    y += barH + 12;
+
+    // Word list. Two columns when the set is long, so a six-word day does
+    // not push the action button off the bottom on a short screen.
+    const cols = this._dailyWords.length > 4 ? 2 : 1;
+    const rows = Math.ceil(this._dailyWords.length / cols);
+    const listW = Math.min(W - 40, 440);
+    const colW = (listW - (cols - 1) * 8) / cols;
+    const x0 = (W - listW) / 2;
+    const wordH = Math.max(28, Math.min(38, (H * 0.34) / rows));
     this._dailyWords.forEach((w, i) => {
-      const wy = listY + i * wordH;
+      const col = i % cols, row = Math.floor(i / cols);
+      const wx = x0 + col * (colW + 8);
+      const wy = y + row * (wordH + 5);
       const done = i < this._dailyBlended || this.progress.getDailyCompleted();
       const current = i === this._dailyIdx && !done;
-      ctx.fillStyle = done ? 'rgba(0,255,136,0.15)' : current ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.05)';
-      ctx.strokeStyle = done ? '#00FF88' : current ? '#FFD700' : '#333';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.roundRect(W*0.08, wy, W*0.84, wordH - 3, 8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = done ? 'rgba(124,255,155,0.13)'
+                    : current ? UI.THEME.panelHot : UI.THEME.panel;
+      ctx.strokeStyle = done ? 'rgba(124,255,155,0.5)'
+                      : current ? UI.THEME.gold : UI.THEME.stroke;
+      ctx.lineWidth = current ? 2 : 1;
+      ctx.beginPath(); ctx.roundRect(wx, wy, colW, wordH, 10); ctx.fill(); ctx.stroke();
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.min(16,W*0.038)}px Arial Black, sans-serif`;
-      ctx.fillStyle = done ? '#00FF88' : current ? '#FFD700' : '#888';
-      ctx.fillText(`${done ? '✅' : current ? '▶' : '○'} ${w.word?.toUpperCase() || '?'}`, W*0.12, wy + wordH/2);
+      ctx.font = `900 ${Math.min(15, W * 0.035)}px ${UI.THEME.font}`;
+      ctx.fillStyle = done ? '#A9F5BE' : current ? UI.THEME.gold : UI.THEME.locked;
+      ctx.fillText(`${done ? '✓' : current ? '▶' : '·'}  ${(w.word || '?').toUpperCase()}`,
+                   wx + 12, wy + wordH / 2);
       ctx.textAlign = 'right';
-      ctx.font = `${Math.min(14,W*0.034)}px serif`;
-      ctx.fillText(w.hint || '?', W*0.9, wy + wordH/2);
+      ctx.font = `${Math.min(15, W * 0.035)}px serif`;
+      ctx.globalAlpha = done ? 1 : 0.75;
+      ctx.fillText(w.hint || '', wx + colW - 12, wy + wordH / 2);
+      ctx.globalAlpha = 1;
     });
-    // Action button
-    const completed = this.progress.getDailyCompleted() || this._dailyBlended >= this._dailyWords.length;
-    const btnY = H * 0.79, btnW = Math.min(W*0.6, 240), btnH = 48;
-    const btnX = (W - btnW) / 2;
-    if (completed) {
-      ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#FF8C00'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.min(18,W*0.044)}px Arial Black, sans-serif`;
-      ctx.fillStyle = '#000'; ctx.fillText('🏆 COMPLETED! Claim Reward', btnX + btnW/2, btnY + btnH/2);
-    } else {
-      ctx.fillStyle = '#FF6B35'; ctx.strokeStyle = '#FF4400'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.min(18,W*0.044)}px Arial Black, sans-serif`;
-      ctx.fillStyle = '#fff';
-      ctx.fillText(this._dailyIdx < this._dailyWords.length ? '⚔️ BLEND NEXT WORD' : '✅ All Done!', btnX + btnW/2, btnY + btnH/2);
-    }
-    this._dailyActionRect = { x:btnX, y:btnY, w:btnW, h:btnH, completed };
-    // Streak display
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.font = `bold 14px Arial, sans-serif`;
-    ctx.fillStyle = '#FF8C00';
-    ctx.fillText(`🔥 ${this.progress.getDailyStreak()} day streak · 🌾 Reward: ${150 + this.progress.getDailyStreak()*25}`, W/2, btnY - 8);
-    // Back
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    y += rows * (wordH + 5) + 8;
+
+    // Reward line, then the action — in that order, so the button is not
+    // sitting on top of its own caption the way it used to.
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `700 ${Math.min(12, W * 0.029)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.fillText(
+      `${this.progress.getDailyStreak()} day streak · reward ${150 + this.progress.getDailyStreak() * 25} rice`,
+      W / 2, y);
+    y += 20;
+
+    const completed = this.progress.getDailyCompleted()
+                   || this._dailyBlended >= this._dailyWords.length;
+    const btnW = Math.min(W * 0.62, 250), btnH = Math.min(46, H * 0.1);
+    const btnRect = { x: (W - btnW) / 2, y: Math.min(y, H - 64 - btnH - 8), w: btnW, h: btnH };
+    UI.card(ctx, btnRect, {
+      label: completed ? 'Claim your reward'
+           : this._dailyIdx < this._dailyWords.length ? 'Blend the next word' : 'All done',
+      primary: true, labelSize: 15, chevron: !completed,
+    });
+    this._dailyActionRect = { ...btnRect, completed };
+
     this._drawBigBack(ctx, W, H);
-    this._dailyBackRect = { x:W/2-80, y:H-52, w:160, h:46 };
+    this._dailyBackRect = { x: W / 2 - 80, y: H - 52, w: 160, h: 46 };
   }
   _clickDaily(mx, my) {
     if (this._dailyBackRect) {
