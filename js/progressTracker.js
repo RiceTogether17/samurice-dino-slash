@@ -192,42 +192,37 @@ class ProgressTracker {
     }
   }
 
+  /**
+   * A missed day never breaks a streak, and it costs nothing to be
+   * forgiven.
+   *
+   * The game used to sell a "Streak Shield" for 75 rice — protection
+   * against a loss, which is only worth buying if the child is afraid of
+   * the loss. That is loss aversion pointed at a five-year-old, and the
+   * item had no value beyond the anxiety it relieved. The grace is now
+   * automatic: skip a day and the streak carries on, with no button to
+   * find and no currency to spend.
+   *
+   * Two missed days in a row still resets it. The streak has to mean
+   * something or it is just a counter, and one free day is enough to cover
+   * the reason a small child misses a day — which is almost never a
+   * decision they made.
+   */
   _checkLoginStreak() {
     const today = this._dateStr();
-    if (this.data.lastLoginDate !== today) {
-      const yesterday = this._dateStr(-1);
-      if (this.data.lastLoginDate === yesterday) {
-        this.data.loginStreak = this.data.loginStreak + 1;
-      } else if (this._consumeStreakShield()) {
-        // A Streak Shield was armed — the missed day is forgiven.
-        this.data.loginStreak = this.data.loginStreak + 1;
-      } else {
-        this.data.loginStreak = 1;
-      }
-      this.data.lastLoginDate = today;
-      this.data.loginRewardClaimed = false;
-      this._save();
-    }
-  }
+    if (this.data.lastLoginDate === today) return;
 
-  // The engagement engine sells a "Streak Shield" (rice cost) that is
-  // supposed to protect the streak across one missed day. Honor it here:
-  // if a shield is armed and at most ~2 days were missed, consume it and
-  // report the streak as protected.
-  _consumeStreakShield() {
-    try {
-      const raw = localStorage.getItem('samurice_engage_v2');
-      if (!raw) return false;
-      const eng = JSON.parse(raw);
-      if (!eng.shieldActive) return false;
-      const last = this.data.lastLoginDate;
-      if (!last) return false;
-      const missedDays = Math.floor((Date.now() - new Date(last).getTime()) / 86400000);
-      if (missedDays > 3) return false; // shield covers a short lapse only
-      eng.shieldActive = false;         // one-time use
-      localStorage.setItem('samurice_engage_v2', JSON.stringify(eng));
-      return true;
-    } catch { return false; }
+    const previous = this.data.lastLoginDate;
+    if (!previous) {
+      this.data.loginStreak = 1;
+    } else if (previous === this._dateStr(-1) || previous === this._dateStr(-2)) {
+      this.data.loginStreak = this.data.loginStreak + 1;
+    } else {
+      this.data.loginStreak = 1;
+    }
+    this.data.lastLoginDate = today;
+    this.data.loginRewardClaimed = false;
+    this._save();
   }
 
   _dateStr(offsetDays = 0) {
@@ -549,6 +544,24 @@ class ProgressTracker {
     return { unlocked:s.unlocked, stars:s.stars, bestScore:s.bestScore,
              mastered:s.wordsMastered.length, attempts:s.attempts };
   }
+  /**
+   * The stage a returning player should drop into: the first unlocked stage
+   * they have not cleared, else the last one they unlocked.
+   *
+   * This exists so the title screen's PLAY button can be a single tap into
+   * gameplay. Measured before it: opening a shared link took 18.5 seconds and
+   * four taps across four menus before anything was playable.
+   */
+  nextStageId(totalStages) {
+    let lastUnlocked = 1;
+    for (let id = 1; id <= totalStages; id++) {
+      if (!this.isUnlocked(id)) break;
+      lastUnlocked = id;
+      if (this.getStars(id) === 0) return id;
+    }
+    return lastUnlocked;
+  }
+
   getTotalWordsBlended()  { return this.data.totalWordsBlended || 0; }
   getBestCombo()          { return this.data.bestCombo || 0; }
   reset()                 { this.data = this._fresh(); this._save(); }

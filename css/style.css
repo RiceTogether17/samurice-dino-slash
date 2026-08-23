@@ -1907,9 +1907,11 @@ body {
     margin: 2px 0 4px;
     flex-wrap: wrap;
 }
+/* Once a live countdown to midnight, now a plain statement of what is
+   ready to practise. Muted rather than amber: it is not a warning. */
 .mc-countdown {
     font-size: clamp(0.72rem, 2.1vw, 0.85rem);
-    color: rgba(255,220,100,0.9);
+    color: rgba(235,240,250,0.82);
     font-weight: bold;
     text-shadow: 0 1px 4px rgba(0,0,0,0.5);
     letter-spacing: 0.04em;
@@ -1978,7 +1980,7 @@ body {
     50%       { transform: scale(1.04); }
 }
 
-/* ── Engagement strip (jar + calendar + shield) ─────────────── */
+/* ── Engagement strip (daily gift + calendar + grace note) ─── */
 .mc-engage-strip {
     display: flex;
     align-items: flex-start;
@@ -2022,15 +2024,9 @@ body {
     40%       { transform: translateY(-8px) rotate(4deg) scale(1.06); }
     70%       { transform: translateY(-4px) rotate(-2deg) scale(1.02); }
 }
-.mc-jar-btn.jar-spin {
-    animation: jarSpin 0.8s ease-in-out forwards !important;
-}
-@keyframes jarSpin {
-    0%   { transform: rotate(0deg) scale(1); }
-    25%  { transform: rotate(-20deg) scale(1.1); }
-    50%  { transform: rotate(20deg) scale(1.15); }
-    75%  { transform: rotate(-15deg) scale(1.12); }
-    100% { transform: rotate(0deg) scale(1); }
+/* The 0.8s spin animation went with the Lucky Jar: an anticipation beat
+   before a random payout is the slot-machine reel, and the gift is a known
+   amount now, so there is nothing to build suspense about. */
 }
 .mc-jar-label {
     font-size: 0.7rem;
@@ -2143,50 +2139,19 @@ body {
     animation: burstUp 1.2s ease forwards;
 }
 
-/* ── Streak Shield ──────────────────────────────────────────── */
-.mc-shield-wrap {
+/* ── Streak grace note ──────────────────────────────────────── */
+/* Replaced the Streak Shield button. Deliberately quiet type rather than a
+   raised, tappable-looking control: there is nothing to act on. */
+.mc-grace-note {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    position: relative;
-}
-.mc-shield-btn {
-    background: linear-gradient(135deg, #1565C0, #0D47A1);
-    border: 2px solid rgba(100,180,255,0.5);
-    color: #fff;
-    font-family: inherit;
-    font-size: clamp(0.72rem, 2.2vw, 0.82rem);
-    font-weight: bold;
-    padding: 8px 12px;
-    border-radius: 14px;
-    cursor: pointer;
-    box-shadow: 0 3px 0 rgba(0,0,0,0.4);
-    transition: transform 0.1s, box-shadow 0.1s, opacity 0.2s;
-    white-space: nowrap;
-}
-.mc-shield-btn:disabled {
-    opacity: 0.55;
-    cursor: default;
-    box-shadow: none;
-}
-.mc-shield-btn.shield-active {
-    background: linear-gradient(135deg, #2E7D32, #1B5E20);
-    border-color: rgba(100,255,130,0.5);
-    opacity: 0.9;
-}
-.mc-shield-btn:not(:disabled):hover { transform: translateY(-2px); }
-.mc-shield-btn:not(:disabled):active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
-.shield-burst {
-    position: absolute;
-    top: -14px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 0.9rem;
-    font-weight: 900;
-    color: #90CAF9;
-    pointer-events: none;
-    white-space: nowrap;
-    animation: burstUp 1.2s ease forwards;
+    justify-content: center;
+    font-size: clamp(0.7rem, 2.1vw, 0.8rem);
+    font-weight: 600;
+    color: rgba(200,225,255,0.78);
+    text-align: center;
+    padding: 4px 8px;
+    white-space: normal;
 }
 
 /* ============================================================
@@ -3139,3 +3104,24 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
     background: rgba(48, 26, 34, 0.78);
 }
 #modeChooser .mc-settings-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+/* Quiet route to everything that is not "play the next stage". The primary
+   button is the whole point of the screen; this must not compete with it. */
+.mc-modes-link {
+    display: block;
+    margin: 8px auto 0;
+    padding: 5px 12px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(247, 241, 228, 0.72);
+    font-family: inherit;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+.mc-modes-link:hover { color: var(--gold); }
+.mc-modes-link:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }

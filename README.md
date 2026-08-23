@@ -64,6 +64,21 @@ answer it, so *not acting* is a real move.
 - 😊 **Relaxed Mode on by default** for new readers (no timer pressure); the timer can be
   switched on anytime from the stage-select screen for an extra challenge.
 
+**Daily Review** — the words come back. Every word a child answers is filed on
+a six-box [Leitner ladder](docs/ARCHITECTURE.md#the-review-ladder--jslearnreviewjs);
+the box decides how many days pass before it is asked again (0, 1, 2, 4, 8, 16).
+Right answers move a word up and quieten it; misses drop it back and it returns
+the same day. Review is fought as a boss fight using each word's own mechanic,
+not a worksheet.
+
+The session is deliberately finite. The day's queue is capped, so two weeks
+away does not present sixty words, and when the practice is done the game says
+so and offers "that's enough for today" as a real button. There is no
+countdown, no random-prize spin and nothing to buy to protect a streak — a
+missed day is forgiven for free. The reason to come back is that the words you
+nearly knew are due. See [Retention](docs/ARCHITECTURE.md#retention) for what
+was removed and why it must not come back.
+
 Plus shop, achievements, daily challenge, and an endless mode.
 
 **Dino Dash** — Flappy-style side mode.

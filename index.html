@@ -15,7 +15,16 @@
     <link rel="apple-touch-icon" href="assets/icons/icon-180.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap">
+    <!-- Non-blocking web font. A plain stylesheet link to a third-party host
+         blocks first paint on that host answering; on a poor connection (or
+         where fonts.googleapis.com is unreachable) the whole title screen
+         waits for it. Loading it as a non-matching media and flipping to
+         `all` on load keeps the page painting immediately, and the local
+         fallback stack in `font-family` covers the gap. -->
+    <link rel="stylesheet" media="print" onload="this.media='all'"
+          href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap">
+    <noscript><link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap"></noscript>
     <link rel="stylesheet" href="css/style.css">
     <!-- Phase 9: PWA manifest -->
     <link rel="manifest" href="manifest.json">
@@ -110,6 +119,7 @@
             <span class="mc-play-name">PLAY</span>
             <span class="mc-play-sub">Start the quest</span>
         </button>
+        <button class="mc-modes-link" id="mc-modes-link" type="button">More modes</button>
     </div>
 
     <!-- ── Secondary row: Dino Dash · Rewards · Progress ── -->
@@ -161,16 +171,16 @@
             <div id="mc-rice-counter" class="mc-rice-counter"></div>
             <div id="mc-countdown" class="mc-countdown"></div>
         </div>
-        <!-- Lucky Jar + 7-Day Calendar + Streak Shield -->
+        <!-- Daily gift + 7-day calendar + streak grace note -->
         <div class="mc-engage-strip">
             <div class="mc-jar-wrap" id="mc-jar-wrap">
                 <div class="mc-jar-btn" id="mc-jar-btn">🫙</div>
                 <div class="mc-jar-label" id="mc-jar-label">Lucky Jar</div>
             </div>
             <div class="mc-calendar" id="mc-calendar"></div>
-            <div class="mc-shield-wrap" id="mc-shield-wrap" style="display:none">
-                <button class="mc-shield-btn" id="mc-shield-btn">🛡️ Shield Streak</button>
-            </div>
+            <!-- Not a button: the streak grace is free and automatic, so
+                 there is nothing here to buy — only a rule to state. -->
+            <div class="mc-grace-note" id="mc-shield-wrap" style="display:none"></div>
         </div>
         <!-- Welcome back bonus banner -->
         <div id="mc-welcome-back" class="mc-welcome-back" style="display:none"></div>
@@ -339,6 +349,7 @@
 <script src="js/runnerEngine.js"></script>
 <script src="js/endlessBattle.js"></script>
 <!-- Combat: phonics-as-action boss fights -->
+<script src="js/learn/review.js"></script>
 <script src="js/combat/coach.js"></script>
 <script src="js/combat/patterns.js"></script>
 <script src="js/combat/combatEngine.js"></script>
@@ -412,7 +423,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const dot = document.getElementById('mc-rewards-dot');
     const ee  = window._engagementEngine;
     if (!dot || !ee) { setTimeout(_updateRewardsDot, 400); return; }
-    const show = ee.canSpinJar() || (window._progressTracker?.canClaimLoginReward?.());
+    const show = ee.canClaimGift() || (window._progressTracker?.canClaimLoginReward?.());
     dot.style.display = show ? 'flex' : 'none';
   }
   _updateRewardsDot();
@@ -491,7 +502,15 @@ document.addEventListener('DOMContentLoaded', function() {
   })();
 
   // Mode chooser
-  document.getElementById('launchSlashBtn')?.addEventListener('click', () => launchSlashGame());
+  // PLAY goes straight into the stage the player is up to. Everything else
+  // lives one tap away behind "More modes".
+  document.getElementById('launchSlashBtn')?.addEventListener('click',
+    () => launchSlashGame({ straightToPlay: true }));
+  document.getElementById('mc-modes-link')?.addEventListener('click', () => launchSlashGame());
+
+  // A shared ?s=<stage> link opens that stage without touching a menu.
+  const _deep = typeof _slashDeepLink === 'function' ? _slashDeepLink() : null;
+  if (_deep) launchSlashGame({ stage: _deep });
   document.getElementById('launchFlappyBtn')?.addEventListener('click', () => launchFlappyGame());
   // Slash game controls
   document.getElementById('slashExitBtn')?.addEventListener('click', () => {

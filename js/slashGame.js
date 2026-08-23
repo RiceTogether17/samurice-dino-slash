@@ -268,7 +268,8 @@ class SlashGame {
     // One cache slot per screen: UI.scene keys its cache but hangs it on the
     // holder, so screens sharing a holder would evict each other every frame.
     this._sceneHolders = { modeSelect: {}, stageSelect: {}, shop: {},
-                           achievements: {}, leaderboard: {}, win: {} };
+                           achievements: {}, leaderboard: {}, win: {},
+                           reviewDone: {} };
     this._menuSel = 0;   // selected stage within the open world (stage-select)
     this._worldSel = 0;  // selected world (world-map)
     this._bindMenuInput();
@@ -608,7 +609,8 @@ class SlashGame {
   _handleCanvasClick(mx, my) {
     // Soft UI tap sound on menu-style screens (gameplay has its own SFX)
     const MENU_STATES = new Set(['mode-select','menu','stage-select','world-map',
-                                 'shop','daily','achievements','leaderboard','stage-win','stage-lose']);
+                                 'shop','daily','achievements','leaderboard','stage-win','stage-lose',
+                                 'review-done']);
     if (MENU_STATES.has(this.state)) this.audio?.sfxClick?.();
     // PHASE 6: onboarding tutorial click routing
     if (this.state === 'onboarding' && this._onboardingTutorial) {
@@ -644,6 +646,19 @@ class SlashGame {
       if (rq && mx >= rq.x && mx <= rq.x+rq.w && my >= rq.y && my <= rq.y+rq.h) {
         this.endlessRunner._paused = false; this._stopEndlessRunner();
         this._hidePauseBtn(); this.audio.stopMusic(); this.state = 'mode-select'; return;
+      }
+      return;
+    }
+    if (this.state === 'review' && this.review?._paused) {
+      const rr = this.review._pauseResumeBtnRect;
+      const rq = this.review._pauseQuitBtnRect;
+      if (rr && mx >= rr.x && mx <= rr.x+rr.w && my >= rr.y && my <= rr.y+rr.h) {
+        this.review._togglePause(); return;
+      }
+      if (rq && mx >= rq.x && mx <= rq.x+rq.w && my >= rq.y && my <= rq.y+rq.h) {
+        this.review._stopBlendTimer(); this.review._paused = false; this.review = null;
+        this._hidePauseBtn(); this.overlay.classList.add('hidden'); this.overlay.innerHTML = '';
+        this.audio.stopMusic(); this.state = 'mode-select'; return;
       }
       return;
     }
@@ -684,6 +699,7 @@ class SlashGame {
     if (this.state === 'leaderboard') {
       this.state = 'mode-select'; return;
     }
+    if (this.state === 'review-done') { this._clickReviewDone(mx, my); return; }
     // Phase 9: Dashboard back button
     if (this.state === 'dashboard') {
       const r = this._dashBackRect;
@@ -787,8 +803,16 @@ class SlashGame {
   }
 
   // ── Stage launch ─────────────────────────────────────────────
-  _launchStage(id) {
-    if (!this.progress.isUnlocked(id)) return;
+  /**
+   * @param {object} [opts]
+   * @param {boolean} [opts.preview] Play a stage the player has not unlocked.
+   *   Used only by shared links, so a link lands on the stage it names instead
+   *   of dumping the recipient at the beginning. A preview awards nothing and
+   *   unlocks nothing — see _onStageWin — so progression is untouched.
+   */
+  _launchStage(id, opts = {}) {
+    this._previewStage = !!opts.preview;
+    if (!this._previewStage && !this.progress.isUnlocked(id)) return;
     this.stageId = id;
     this._stateEntryFade = 1.0;
     this.overlay.classList.add('hidden');
@@ -995,6 +1019,210 @@ class SlashGame {
     if (this._runnerAllCoins) { this.battle.applyCoinBonus(); this._runnerAllCoins = false; }
     this.state = 'battle';
   }
+
+  // ── DAILY REVIEW ─────────────────────────────────────────────
+  // The campaign teaches a word once and moves on. This is where words come
+  // back: the review ladder decides which ones are due, and they are fought
+  // exactly the way they were first learned, so review is a boss fight and
+  // not a worksheet.
+  //
+  // The session is deliberately finite. When the queue is done the game says
+  // so and stops — see `_drawReviewDone`.
+
+  /** word string -> { word, stage } for every word the campaign can teach. */
+  _wordIndex() {
+    if (this._wordIdx) return this._wordIdx;
+    const idx = new Map();
+    for (const stage of PHONICS_DATA.stageList) {
+      for (const w of stage.words || []) {
+        const key = String(w.word || '').toLowerCase();
+        if (key && !idx.has(key)) idx.set(key, { word: w, stage });
+      }
+    }
+    this._wordIdx = idx;
+    return idx;
+  }
+
+  /** Today's due words, resolved back to playable word objects. */
+  _reviewQueue() {
+    const ladder = window.Review?.shared?.();
+    if (!ladder) return [];
+    const idx = this._wordIndex();
+    const out = [];
+    for (const key of ladder.todaysQueue()) {
+      const hit = idx.get(key);
+      if (hit) out.push(hit);
+    }
+    return out;
+  }
+
+  _startReview() {
+    const queue = this._reviewQueue();
+    if (!queue.length) { this._reviewSummary = null; this.state = 'review-done'; return; }
+
+    if (this.runner) { this.runner.destroy(); this.runner = null; }
+    this.audio.stopMusic();
+    this._stateEntryFade = 0.8;
+    this.overlay.classList.remove('hidden');
+    this.overlay.classList.add('active');
+    this.overlay.innerHTML = '';
+    this._showPauseBtn();
+
+    // The arena and the boss come from the furthest stage in the queue, so a
+    // review looks like the hardest place the child has actually been.
+    const home = queue.reduce((a, b) => (b.stage.id > a.stage.id ? b : a)).stage;
+    // Every mechanic the queue's own stages use, so a word is reviewed with
+    // the verb it was taught with.
+    const activities = [...new Set(queue.flatMap(q => q.stage.activities || []))];
+
+    const stage = {
+      ...home,
+      id: 0,                       // not a campaign stage: clears no progress
+      name: 'Daily Review',
+      bossName: `${home.bossName} (Echo)`,
+      words: queue.map(q => q.word),
+      activities: activities.length ? activities : ['oral-blend'],
+      oneShotWords: true,          // each due word once, then the fight ends
+      roundsToWin: queue.length,   // the bar is paced to land on the last word
+      bossHp: 100 + queue.length * 10,
+    };
+
+    this._reviewCount = queue.length;
+    this.review = new CombatEngine(
+      this.canvas, this.overlay, stage, [],
+      this.sprites, this.audio, this.progress, this.W, this.H,
+    );
+    this.state = 'review';
+  }
+
+  _updateReview() {
+    if (!this.review) { this.state = 'mode-select'; return; }
+    const STEP = 1 / 60;
+    const dt = this._frameDtSec || STEP;
+    this._reviewAccum = Math.min((this._reviewAccum || 0) + dt, STEP * 3);
+    let steps = 0;
+    while (this._reviewAccum >= STEP && steps < 2) {
+      this.review.update(STEP);
+      this._reviewAccum -= STEP;
+      steps++;
+    }
+    if (steps === 0) { this.review.update(dt); this._reviewAccum = 0; }
+    this.review.draw();
+    if (!this.review.done) return;
+
+    // A review has no lose condition worth the name — running out of health
+    // still means the words were practised, and the ladder already recorded
+    // every answer. Both outcomes land on the same screen.
+    this._reviewSummary = {
+      words: this._reviewCount || 0,
+      correct: this.review._correctBlends || 0,
+      ranOut: this.review.outcome !== 'victory',
+    };
+    const rice = 10 + (this.review._correctBlends || 0) * 5;
+    this.progress.addRiceGrains(rice);
+    this._reviewSummary.rice = rice;
+    this.review = null;
+    this._hidePauseBtn();
+    this.overlay.classList.add('hidden');
+    this.overlay.innerHTML = '';
+    this.audio.stopMusic();
+    this.state = 'review-done';
+    this._reviewDoneAge = 0;
+  }
+
+  /**
+   * The stopping cue.
+   *
+   * Every other end-of-session screen in the genre exists to start the next
+   * one. This one exists to say the practice is finished, and it says so
+   * plainly rather than hiding the buttons: a child who wants to keep
+   * playing still can, they just are not being told they owe the game
+   * anything more today.
+   */
+  _drawReviewDone() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    this._reviewDoneAge = (this._reviewDoneAge || 0) + 1;
+    UI.scene(ctx, this.sprites['arena-1'], W, H, this._sceneHolders.reviewDone, 'reviewdone', 1.15);
+
+    const s = this._reviewSummary;
+    const ladder = window.Review?.shared?.();
+    const stats = ladder ? ladder.stats() : null;
+
+    const afterHeading = UI.heading(ctx, s ? 'PRACTICE DONE' : 'ALL CAUGHT UP', W, 26);
+    ctx.textAlign = 'center';
+    ctx.font = `800 ${Math.min(15, W * 0.036)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.textBaseline = 'top';
+    const line = s
+      ? `${s.correct} of ${s.words} words first try`
+      : 'Nothing is due today. Your words are resting.';
+    ctx.fillText(line, W / 2, afterHeading + 10);
+
+    let y = afterHeading + 42;
+    if (stats) {
+      // Say what the ladder is holding, in words a parent reads over a
+      // shoulder and understands without a legend.
+      const rows = [
+        ['Learning', stats.learning, '#F2C14E'],
+        ['Getting there', stats.reviewing, '#7CC7FF'],
+        ['Known', stats.mastered, '#7CFF9B'],
+      ];
+      const colW = Math.min(140, (W - 48) / 3);
+      const x0 = (W - colW * 3) / 2;
+      rows.forEach(([label, n, tone], i) => {
+        const r = { x: x0 + i * colW, y, w: colW - 8, h: 56 };
+        ctx.fillStyle = UI.THEME.panel;
+        ctx.strokeStyle = UI.THEME.stroke;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = tone;
+        ctx.font = `900 ${Math.min(24, W * 0.055)}px ${UI.THEME.font}`;
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(String(n), r.x + r.w / 2, r.y + 32);
+        ctx.fillStyle = UI.THEME.muted;
+        ctx.font = `700 10.5px ${UI.THEME.font}`;
+        ctx.fillText(label, r.x + r.w / 2, r.y + 47);
+      });
+      y += 70;
+    }
+
+    if (s && s.rice) {
+      UI.chip(ctx, `+${s.rice} rice`, W / 2 - 46, y, { size: 13 });
+      y += 38;
+    }
+
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = UI.THEME.rice;
+    ctx.font = `800 ${Math.min(14, W * 0.033)}px ${UI.THEME.font}`;
+    const next = stats && stats.due > 0
+      ? 'More words are due — come back tomorrow for them.'
+      : 'Come back tomorrow and the next words will be ready.';
+    ctx.fillText(next, W / 2, y);
+    y += 26;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.font = `700 ${Math.min(12, W * 0.029)}px ${UI.THEME.font}`;
+    ctx.fillText('Practice is finished for today. Play on if you feel like it.', W / 2, y);
+
+    this._reviewDoneRects = [];
+    const bw = Math.min(220, W - 64);
+    const play = { x: (W - bw) / 2, y: Math.min(H - 84, y + 34), w: bw, h: 44 };
+    UI.card(ctx, play, { label: 'Keep playing', sub: 'Back to the adventure',
+                         primary: true, labelSize: 15, subSize: 10.5 });
+    this._reviewDoneRects.push({ ...play, action: 'modes' });
+    const stop = UI.ghost(ctx, 'That\'s enough for today', W / 2, play.y + play.h + 10);
+    this._reviewDoneRects.push({ ...stop, action: 'stop' });
+  }
+
+  _clickReviewDone(mx, my) {
+    for (const r of this._reviewDoneRects || []) {
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        if (r.action === 'stop') { exitSlash(); return; }
+        this.state = 'mode-select';
+        this._stateEntryFade = 1.0;
+        return;
+      }
+    }
+  }
   // ── STAGE WIN ────────────────────────────────────────────────
   _onStageWin() {
     this._hidePauseBtn();
@@ -1003,7 +1231,8 @@ class SlashGame {
     this._lastBattleAccuracy = this.battle?.getAccuracyPercent?.() ?? null;
     const runnerScore = this._lastRunnerScore || 0;
     const score = battleScore + runnerScore;
-    this.progress.completeStage(this.stageId, score);
+    // A previewed stage is someone else's link, not this player's progress.
+    if (!this._previewStage) this.progress.completeStage(this.stageId, score);
 
     const clearSec = this._stageStartedAt ? (Date.now() - this._stageStartedAt) / 1000 : null;
     const runnerTookHit = typeof this._lastRunnerHp === 'number' ? this._lastRunnerHp < 3 : false;
@@ -1124,12 +1353,13 @@ class SlashGame {
     if (!this.audio || this.audio.isMuted) return;
     const SHELL = new Set(['mode-select','menu','stage-select','world-map',
                            'shop','daily','achievements','leaderboard','dashboard',
-                           'stage-win','endless-gameover']);
+                           'stage-win','endless-gameover','review-done']);
     if (this._jingleUntil && performance.now() < this._jingleUntil) return;
     if (SHELL.has(this.state)) {
       if (this.audio.musicKey !== 'menu') this.audio.startMenuMusic();
     } else if (this.audio.musicKey === 'menu' &&
                (this.state === 'runner' || this.state === 'battle' ||
+                this.state === 'review' ||
                 this.state === 'endless-runner' || this.state === 'endless-battle')) {
       this.audio.stopMusic();
     }
@@ -1144,6 +1374,7 @@ class SlashGame {
     // Menus and result screens animate gently — 30 FPS there halves GPU
     // load and battery drain; gameplay states keep the full 60 FPS.
     const isGameplay = this.state === 'runner' || this.state === 'battle' ||
+                       this.state === 'review' ||
                        this.state === 'boss-defeated' || this.state === 'transition' ||
                        this.state === 'endless-runner' || this.state === 'endless-battle';
     this._targetFrameMs = isGameplay ? 1000 / 60 : 1000 / 30;
@@ -1174,6 +1405,8 @@ class SlashGame {
       case 'runner': this._updateRunner(); break;
       case 'transition': this._updateTransition(); break;
       case 'battle': this._updateBattle(); break;
+      case 'review': this._updateReview(); break;
+      case 'review-done': this._drawReviewDone(); break;
       case 'battle-results': this._drawBattleResults(); break;  // Phase 8
       case 'stage-win': this._drawStageWin(); break;
       case 'stage-lose': this._drawStageLose(); break;
@@ -2574,9 +2807,15 @@ class SlashGame {
         x: W/2 - 130, y: py + 240, w: 260, h: 46,
         action: () => this._openStoryScroll(stage),
       }] : []),
-      { label: '▶ Next Stage', primary: !hasStory,
+      { label: this._previewStage ? '▶ Start my adventure' : '▶ Next Stage',
+        primary: !hasStory,
         x: W/2 - 110, y: py + (hasStory ? 294 : 240), w: 220, h: hasStory ? 44 : 54,
         action: () => {
+          if (this._previewStage) {
+            this._previewStage = false;
+            this._launchStage(this.progress.nextStageId(PHONICS_DATA.stageList.length));
+            return;
+          }
           if (this.stageId < PHONICS_DATA.stageCount && this.progress.isUnlocked(this.stageId + 1)) {
             this.stageId++;
             // Keep the world selection in sync so returning to the map lands right.
@@ -2588,13 +2827,91 @@ class SlashGame {
           }
         }
       },
-      { label: '🗺 World Map', primary: false, x: W/2 - 80, y: py + (hasStory ? 348 : 306), w: 160, h: 40,
+      { label: '🗺 Map', primary: false,
+        x: W/2 - 168, y: py + (hasStory ? 348 : 306), w: 160, h: 40,
         action: () => { this.state = 'world-map'; this._stateEntryFade = 1.0; }
+      },
+      { label: '💬 Share', primary: false,
+        x: W/2 + 8, y: py + (hasStory ? 348 : 306), w: 160, h: 40,
+        action: () => this._shareStageWin(stage),
       },
     ];
     this._drawResultButtons(ctx);
+    this._drawShareToast(ctx, W, H);
     ctx.textBaseline = 'alphabetic';
   }
+
+  /** Brief confirmation after a share — silent success reads as a dead button. */
+  _drawShareToast(ctx, W, H) {
+    const t = this._shareToast;
+    if (!t) return;
+    if (++t.age > 150) { this._shareToast = null; return; }
+    const fade = t.age > 110 ? 1 - (t.age - 110) / 40 : Math.min(1, t.age / 8);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, fade);
+    ctx.font = `800 14px ${UI.THEME.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = ctx.measureText(t.text).width + 34;
+    const y = H - 58;
+    ctx.fillStyle = 'rgba(14,9,13,0.92)';
+    ctx.strokeStyle = UI.THEME.goldDim;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(W / 2 - w / 2, y, w, 32, 16); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = UI.THEME.gold;
+    ctx.fillText(t.text, W / 2, y + 16.5);
+    ctx.restore();
+  }
+
+  /**
+   * Share what the child just did.
+   *
+   * The share unit for a phonics game is not a high score — a five-year-old
+   * is not going to post one. What travels is a grown-up telling another
+   * grown-up that their kid read some words, which is how this kind of game
+   * actually spreads: parent to parent, teacher to teacher. So the message
+   * names the words, and the link lands on the stage rather than a menu.
+   *
+   * Uses the native share sheet where there is one (which is where WhatsApp
+   * and Messages live), and falls back to the clipboard everywhere else.
+   */
+  _shareStageWin(stage) {
+    const words = (this._battleResults?.learnedWords || []).slice(0, 5);
+    const stars = this.progress.getStars(this.stageId);
+    const label = stage.world ? `${stage.world}-${stage.local}` : `${this.stageId}`;
+
+    const read = words.length
+      ? `They read ${words.slice(0, -1).join(', ')}${words.length > 1 ? ' and ' : ''}${words[words.length - 1]}.`
+      : 'They cleared it without a single miss.';
+    const text = `My reader just beat ${stage.bossName || 'the boss'} on stage ${label} `
+               + `${'⭐'.repeat(Math.max(1, stars))}\n${read}\n\nSamurice Dino Slash — free, no app needed:`;
+
+    let url = location.href;
+    try {
+      const u = new URL(location.href);
+      u.search = `?s=${this.stageId}`;
+      u.hash = '';
+      url = u.toString();
+    } catch (_) { /* keep the plain href */ }
+
+    const done = msg => { this._shareToast = { text: msg, age: 0 }; };
+
+    if (navigator.share) {
+      navigator.share({ title: 'Samurice Dino Slash', text, url })
+        .then(() => done('Shared!'))
+        .catch(() => { /* the user dismissed the sheet — not an error */ });
+      return;
+    }
+    const payload = `${text}\n${url}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(payload)
+        .then(() => done('Copied — paste it anywhere'))
+        .catch(() => done('Could not copy'));
+    } else {
+      done('Sharing is not available here');
+    }
+  }
+
   // ── READ WITH RIKU — decodable-sentence capstone ──────────────
   // After each world boss, the child reads real sentences built only
   // from patterns they've been taught (PhonicsQuest journey step 5:
@@ -2837,7 +3154,16 @@ class SlashGame {
       label: 'Campaign', sub: `${PHONICS_DATA.WORLDS.length} worlds · ${PHONICS_DATA.stageList.length} stages`,
       action: 'campaign', primary: true,
     };
+    // Review sits second, right under Campaign: it is the reason to open the
+    // game on a day when there is no new stage to play, and burying it in a
+    // rewards drawer would have made it a chore nobody found.
+    const ladder = window.Review?.shared?.();
+    const due = ladder ? ladder.todaysQueue().length : 0;
     const rest = [
+      { label: 'Daily Review',
+        sub: due ? `${due} word${due === 1 ? '' : 's'} ready` : 'All caught up today',
+        action: 'review', locked: due === 0 && !!ladder,
+        pulse: due ? 0.5 + 0.5 * Math.sin(t * 0.09) : 0 },
       { label: 'Endless Run', sub: 'How far can you go?', action: 'endless' },
       { label: 'Daily Challenge', sub: daily ? 'Done today' : 'Fresh challenge',
         action: 'daily', pulse: daily ? 0 : 0.5 + 0.5 * Math.sin(t * 0.09) },
@@ -2881,6 +3207,7 @@ class SlashGame {
     const rects = this._modeSelectRects || [];
     for (const r of rects) {
       if (mx >= r.x && mx <= r.x+r.w && my >= r.y && my <= r.y+r.h) {
+        if (r.action === 'review') { this._startReview(); this._stateEntryFade = 1.0; }
         if (r.action === 'endless') { this._startEndlessRunner(); this._stateEntryFade = 1.0; }
         if (r.action === 'campaign') { this._worldSel = this._furthestUnlockedWorldIdx(); this.state = 'world-map'; this._stateEntryFade = 1.0; }
         if (r.action === 'daily') { this._startDaily(); this._stateEntryFade = 1.0; }
@@ -3730,7 +4057,17 @@ class SlashGame {
 // ─────────────────────────────────────────────────────────────
 let _slashGameInstance = null;
 // Override the function defined in game.js
-function launchSlashGame() {
+/**
+ * Enter the game.
+ *
+ * `opts.straightToPlay` drops the player into the stage they are up to
+ * instead of the mode picker. That is what PLAY does, and it is the single
+ * biggest lever on whether a shared link turns into a session: measured
+ * before this, opening the game took 18.5 seconds and four taps across four
+ * menus before anything was playable. The mode picker is still one tap away
+ * for everything else.
+ */
+function launchSlashGame(opts = {}) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('slashScreen').classList.add('active');
   // Request landscape lock (mobile) — ignore if unsupported
@@ -3738,11 +4075,42 @@ function launchSlashGame() {
   if (!_slashGameInstance) {
     _slashGameInstance = new SlashGame('slashCanvas', 'battleOverlay');
   } else {
-    // Return to title (mode-select)
     _slashGameInstance.state = 'mode-select';
     _slashGameInstance.overlay.classList.add('hidden');
     _slashGameInstance.overlay.innerHTML = '';
   }
+  const g = _slashGameInstance;
+  if (!opts.straightToPlay && !opts.stage) return;
+
+  // Assets stream in behind the loading screen; wait for the gate rather than
+  // launching into a stage whose sprites have not arrived.
+  const go = () => {
+    if (!g._spritesReady || !g._sheetsReady) { setTimeout(go, 60); return; }
+    const total = PHONICS_DATA.stageList.length;
+    const wanted = Number(opts.stage) || g.progress.nextStageId(total);
+    const valid = wanted >= 1 && wanted <= total;
+    if (opts.stage && valid && !g.progress.isUnlocked(wanted)) {
+      // Someone shared this stage. Let them play it without granting it.
+      g._launchStage(wanted, { preview: true });
+      return;
+    }
+    g._launchStage(valid ? wanted : g.progress.nextStageId(total));
+  };
+  go();
+}
+
+/**
+ * Deep links: ?s=12 opens that stage directly. A share is only worth sending
+ * if the person receiving it lands on the thing being shared.
+ */
+function _slashDeepLink() {
+  try {
+    const p = new URLSearchParams(location.search);
+    const s = p.get('s') || p.get('stage');
+    if (!s) return null;
+    const id = Number(s);
+    return Number.isFinite(id) && id >= 1 ? id : null;
+  } catch (_) { return null; }
 }
 function exitSlash() {
   if (_slashGameInstance) {

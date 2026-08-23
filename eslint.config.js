@@ -29,6 +29,7 @@ module.exports = [
         CanvasRenderingContext2D: 'readonly', OffscreenCanvas: 'readonly',
         screen: 'readonly', matchMedia: 'readonly', module: 'readonly',
         globalThis: 'readonly', location: 'readonly', caches: 'readonly',
+        URLSearchParams: 'readonly',
         self: 'readonly', URL: 'readonly', Blob: 'readonly',
         // Cross-file globals: every script shares one scope by design.
         PHONICS_DATA: 'readonly', ProgressTracker: 'readonly',
@@ -72,7 +73,7 @@ module.exports = [
         // Available inside page.evaluate callbacks, which run in the browser.
         window: 'readonly', document: 'readonly', performance: 'readonly',
         getComputedStyle: 'readonly',
-        CanvasRenderingContext2D: 'readonly', _slashGameInstance: 'readonly',
+        CanvasRenderingContext2D: 'readonly', _slashGameInstance: 'readonly', PHONICS_DATA: 'readonly',
       },
     },
     rules: {

@@ -2,17 +2,39 @@
 // ============================================================
 // ENGAGEMENT ENGINE — js/engagementEngine.js
 //
-// "The most addictive products give people a reason to come
-//  back EVERY SINGLE DAY — and they make them feel great
-//  about it every time they do."  — inspired by MZ
+// This file used to open with a quote about making people come back every
+// single day, and a numbered list that named its own methods honestly:
+// a "variable-ratio reward (most addictive loop)", a "Live Countdown Timer
+// — FOMO", and a "Streak Shield — spend rice to save a streak (loss
+// aversion)". Those are the mechanics of a slot machine, a sale timer and
+// an insurance policy, and they were pointed at five-year-olds.
 //
-// Systems:
-//   1. XP + Level progression  — visible on home, always growing
-//   2. Lucky Rice Jar           — daily variable-ratio reward (most addictive loop)
-//   3. 7-Day Login Calendar     — escalating daily rewards, reset on miss
-//   4. Live Countdown Timer     — FOMO: daily challenge resets in X:XX:XX
-//   5. Streak Shield            — spend rice to save a streak (loss aversion)
-//   6. Welcome-Back Bonus       — reward returning players, never shame them
+// They are gone. What replaced each one, and why:
+//
+//   Lucky Jar → Daily Gift.  A random 8-60 rice payout on a fixed daily
+//     schedule is a variable-ratio reward: the uncertainty is the point,
+//     and uncertainty is what makes the schedule hard to stop. The gift is
+//     now a known, fixed amount, stated before it is tapped. Coming back
+//     is still rewarded; the reward is no longer a pull of the lever.
+//
+//   Countdown → next-review line.  A clock ticking down to midnight tells
+//     a child something is about to be taken away. Nothing here expires at
+//     midnight any more, so there is nothing to count down; the panel says
+//     what is ready to practise instead.
+//
+//   Streak Shield → free grace.  Selling protection against a loss only
+//     works if the child is afraid of the loss — the item had no value
+//     except the anxiety it relieved. A missed day is now forgiven
+//     automatically, for nothing, with no button to find and no currency
+//     to spend. See `_checkLoginStreak` in progressTracker.
+//
+// What stayed, because it rewards returning without punishing absence:
+// XP and levels, the 7-day calendar, and the welcome-back bonus.
+//
+// The actual reason to come back is in js/learn/review.js: the words the
+// child nearly knew are due, and they are the ones worth doing. A return
+// loop built on the material beats one built on a prize, and it is the
+// only one that survives the child getting good at reading.
 // ============================================================
 
 // ── XP level thresholds (cumulative XP to REACH that level) ──
@@ -26,12 +48,9 @@ const XP_LEVELS = (function () {
 // Day-of-streak reward amounts (index = streak day - 1, clamped at 6)
 const DAY_REWARDS = [30, 55, 80, 120, 170, 230, 350];
 
-// Jar spin reward range (random, exclusive)
-const JAR_MIN = 8;
-const JAR_MAX = 60;
-
-// Shield cost in rice grains
-const SHIELD_COST = 75;
+// The daily gift. One number, known in advance, the same every day — the
+// whole point is that there is nothing to find out by tapping it.
+const DAILY_GIFT = 30;
 
 // ─────────────────────────────────────────────────────────────
 class EngagementEngine {
@@ -40,7 +59,6 @@ class EngagementEngine {
     this._key = 'samurice_engage_v2';
     this._load();
     this._checkWelcomeBack();
-    this._startCountdown();
   }
 
   // ── Persistence ──────────────────────────────────────────
@@ -55,11 +73,8 @@ class EngagementEngine {
   }
   _fresh() {
     return {
-      lastJarDate:      null,  // date-string of last jar spin
-      jarSpunToday:     false,
+      lastJarDate:      null,  // date-string the daily gift was last claimed
       welcomeBonusPaid: null,  // date-string when paid
-      shieldActive:     false, // true = streak is frozen today
-      shieldUsedDate:   null,
     };
   }
 
@@ -106,18 +121,19 @@ class EngagementEngine {
     return { level, totalXP, xpInLevel, xpForLevel, pct };
   }
 
-  // ── Lucky Jar ────────────────────────────────────────────
-  canSpinJar() {
+  // ── Daily gift ───────────────────────────────────────────
+  giftAmount() { return DAILY_GIFT; }
+
+  canClaimGift() {
     return this._d.lastJarDate !== this._today();
   }
 
-  spinJar() {
-    if (!this.canSpinJar()) return 0;
-    const amount = JAR_MIN + Math.floor(Math.random() * (JAR_MAX - JAR_MIN + 1));
-    this._t.addRiceGrains(amount);
+  claimGift() {
+    if (!this.canClaimGift()) return 0;
+    this._t.addRiceGrains(DAILY_GIFT);
     this._d.lastJarDate = this._today();
     this._save();
-    return amount;
+    return DAILY_GIFT;
   }
 
   // ── 7-Day Login Calendar ─────────────────────────────────
@@ -142,27 +158,12 @@ class EngagementEngine {
     return this._t.claimLoginReward();
   }
 
-  // ── Streak Shield ────────────────────────────────────────
-  canUseShield() {
-    const streak = this._t.getLoginStreak();
-    const notUsedToday = this._d.shieldUsedDate !== this._today();
-    const hasRice = this._t.getRiceGrains() >= SHIELD_COST;
-    return streak >= 3 && notUsedToday && hasRice;
-  }
-
-  useShield() {
-    if (!this.canUseShield()) return false;
-    const spent = this._t.spendRiceGrains(SHIELD_COST);
-    if (!spent) return false;
-    this._d.shieldUsedDate = this._today();
-    this._d.shieldActive   = true;
-    this._save();
-    return true;
-  }
-
-  shieldActiveToday() {
-    return this._d.shieldUsedDate === this._today();
-  }
+  // ── Streak grace ─────────────────────────────────────────
+  // There is no shield to buy any more; a missed day is forgiven for free
+  // in progressTracker._checkLoginStreak. This reports the rule so the
+  // panel can state it plainly rather than leaving a child to discover it
+  // by losing something.
+  graceNote() { return 'Miss a day and your streak keeps going.'; }
 
   // ── Welcome-Back Bonus ───────────────────────────────────
   _checkWelcomeBack() {
@@ -187,40 +188,29 @@ class EngagementEngine {
     return w;
   }
 
-  // ── Countdown to daily reset ─────────────────────────────
-  _msUntilMidnight() {
-    const now  = new Date();
-    const next = new Date(now);
-    next.setHours(24, 0, 0, 0);
-    return next - now;
-  }
-
-  _formatCountdown(ms) {
-    const s = Math.floor(ms / 1000);
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-  }
-
-  _startCountdown() {
-    const tick = () => {
-      const el = document.getElementById('mc-countdown');
-      if (el) el.textContent = '⏱ ' + this._formatCountdown(this._msUntilMidnight()) + ' left';
-    };
-    tick();
-    if (this._countdownInterval) clearInterval(this._countdownInterval);
-    this._countdownInterval = setInterval(tick, 1000);
+  // ── What is waiting ──────────────────────────────────────
+  // Where the countdown used to be. It says what there is to do, not how
+  // long until something is taken away — and it does not tick, so there is
+  // no clock on screen for a child to watch.
+  _renderNextUp() {
+    const el = document.getElementById('mc-countdown');
+    if (!el) return;
+    const ladder = window.Review?.shared?.();
+    if (!ladder) { el.textContent = ''; return; }
+    const due = ladder.todaysQueue().length;
+    el.textContent = due
+      ? `📖 ${due} word${due === 1 ? '' : 's'} ready to practise`
+      : '✅ All caught up — new words tomorrow';
   }
 
   // ── Home screen render ────────────────────────────────────
   renderHomeUI() {
     this._renderXPBar();
     this._renderCalendar();
-    this._renderJarBtn();
-    this._renderShield();
+    this._renderGiftBtn();
+    this._renderGrace();
     this._renderWelcomeBack();
-    this._startCountdown();
+    this._renderNextUp();
   }
 
   _renderXPBar() {
@@ -237,7 +227,7 @@ class EngagementEngine {
 
   // Whether there are uncollected daily rewards (drives notification dot)
   hasUncollectedRewards() {
-    return this.canSpinJar() || (this._t.canClaimLoginReward?.() ?? false);
+    return this.canClaimGift() || (this._t.canClaimLoginReward?.() ?? false);
   }
 
   _renderCalendar() {
@@ -294,87 +284,54 @@ class EngagementEngine {
     if (riceEl) riceEl.textContent = `🌾 ${this._t.getRiceGrains()} rice grains`;
   }
 
-  _renderJarBtn() {
+  _renderGiftBtn() {
     const btn   = document.getElementById('mc-jar-btn');
     const label = document.getElementById('mc-jar-label');
     if (!btn) return;
-    if (this.canSpinJar()) {
-      btn.textContent = '🫙';
+    btn.textContent = '🎁';
+    if (this.canClaimGift()) {
       btn.classList.add('jar-ready');
       btn.classList.remove('jar-spent');
-      if (label) label.textContent = 'Lucky Jar!';
-      btn.onclick = () => this._onSpinJar(btn, label);
+      // The amount is on the label before the tap. A gift you already know
+      // the size of cannot condition anybody.
+      if (label) label.textContent = `Daily gift: 🌾${DAILY_GIFT}`;
+      btn.onclick = () => this._onClaimGift(btn, label);
     } else {
-      btn.textContent = '🫙';
       btn.classList.remove('jar-ready');
       btn.classList.add('jar-spent');
-      if (label) label.textContent = 'Come back tomorrow!';
+      if (label) label.textContent = 'Gift collected';
       btn.onclick = null;
     }
   }
 
-  _onSpinJar(btn, label) {
-    if (!this.canSpinJar()) return;
-    btn.classList.add('jar-spin');
-    setTimeout(() => {
-      const amount = this.spinJar();
-      btn.classList.remove('jar-spin');
-      btn.classList.remove('jar-ready');
-      btn.classList.add('jar-spent');
-      // Reward burst
-      const burst = document.createElement('div');
-      burst.className = 'jar-burst';
-      burst.textContent = `+${amount} 🌾`;
-      btn.parentElement.appendChild(burst);
-      setTimeout(() => burst.remove(), 1400);
-      if (label) label.textContent = `+${amount} rice! Come back tomorrow!`;
-      // Refresh rice counter
-      const riceEl = document.getElementById('mc-rice-counter');
-      if (riceEl) riceEl.textContent = `🌾 ${this._t.getRiceGrains()} rice grains`;
-      btn.onclick = null;
-    }, 800);
-  }
-
-  _renderShield() {
-    const shieldWrap = document.getElementById('mc-shield-wrap');
-    if (!shieldWrap) return;
-    const streak = this._t.getLoginStreak();
-    if (streak < 3) { shieldWrap.style.display = 'none'; return; }
-    shieldWrap.style.display = 'flex';
-
-    const btn = document.getElementById('mc-shield-btn');
-    if (!btn) return;
-    if (this.shieldActiveToday()) {
-      btn.textContent    = '🛡️ Streak Shielded!';
-      btn.disabled       = true;
-      btn.classList.add('shield-active');
-    } else if (this.canUseShield()) {
-      btn.textContent    = `🛡️ Shield Streak (🌾${SHIELD_COST})`;
-      btn.disabled       = false;
-      btn.classList.remove('shield-active');
-      btn.onclick        = () => this._onShield(btn);
-    } else {
-      btn.textContent    = `🛡️ Need 🌾${SHIELD_COST} to shield`;
-      btn.disabled       = true;
-    }
-  }
-
-  _onShield(btn) {
-    if (!this.useShield()) return;
-    btn.textContent = '🛡️ Streak Shielded!';
-    btn.disabled    = true;
-    btn.classList.add('shield-active');
-    // Particle burst
-    const wrap = document.getElementById('mc-shield-wrap');
-    if (wrap) {
-      const burst = document.createElement('div');
-      burst.className = 'shield-burst';
-      burst.textContent = '🛡️ Protected!';
-      wrap.appendChild(burst);
-      setTimeout(() => burst.remove(), 1200);
-    }
+  _onClaimGift(btn, label) {
+    if (!this.canClaimGift()) return;
+    const amount = this.claimGift();
+    btn.classList.remove('jar-ready');
+    btn.classList.add('jar-spent');
+    const burst = document.createElement('div');
+    burst.className = 'jar-burst';
+    burst.textContent = `+${amount} 🌾`;
+    btn.parentElement.appendChild(burst);
+    setTimeout(() => burst.remove(), 1400);
+    if (label) label.textContent = 'Gift collected';
     const riceEl = document.getElementById('mc-rice-counter');
     if (riceEl) riceEl.textContent = `🌾 ${this._t.getRiceGrains()} rice grains`;
+    btn.onclick = null;
+  }
+
+  /**
+   * States the grace rule instead of selling insurance against it. A child
+   * should learn that missing a day is fine by reading it, not by missing a
+   * day and finding out what it cost.
+   */
+  _renderGrace() {
+    const wrap = document.getElementById('mc-shield-wrap');
+    if (!wrap) return;
+    const streak = this._t.getLoginStreak();
+    if (streak < 2) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'flex';
+    wrap.textContent = `🛡️ ${this.graceNote()}`;
   }
 
   _renderWelcomeBack() {
