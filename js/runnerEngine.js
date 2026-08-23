@@ -4665,17 +4665,32 @@ class EndlessRunnerEngine {
       const drawW = drawH * ar;
       // Pre-scale the large painted map to screen size once per zone —
       // per-frame drawImage then blits 1:1 with no resampling cost.
+      //
+      // The tile is the map followed by a mirrored copy of itself. These are
+      // painted campaign backdrops, not tileable textures: their left and
+      // right edges have nothing to do with each other, so repeating the map
+      // straight put a hard vertical seam on screen every `drawW` pixels.
+      // Against its own mirror every edge meets itself and the join
+      // disappears, whatever the art does.
+      const tileW = Math.max(1, Math.round(drawW));
       if (!this._bgScaled || this._bgScaledKey !== bgKey + '@' + Math.round(drawH)) {
         const c = document.createElement('canvas');
-        c.width = Math.max(1, Math.round(drawW)); c.height = Math.max(1, Math.round(drawH));
-        c.getContext('2d').drawImage(bgSp, 0, 0, c.width, c.height);
+        c.width = tileW * 2; c.height = Math.max(1, Math.round(drawH));
+        const g = c.getContext('2d');
+        g.drawImage(bgSp, 0, 0, tileW, c.height);
+        g.save();
+        g.translate(tileW * 2, 0);
+        g.scale(-1, 1);
+        g.drawImage(bgSp, 0, 0, tileW, c.height);
+        g.restore();
         this._bgScaled    = c;
         this._bgScaledKey = bgKey + '@' + Math.round(drawH);
       }
-      const scrollX = -((this._worldX * 0.22) % drawW);
+      const pairW = this._bgScaled.width;
+      const scrollX = -((this._worldX * 0.22) % pairW);
       ctx.save();
       ctx.globalAlpha = 0.40;
-      for (let x = scrollX; x < W + drawW; x += drawW) {
+      for (let x = scrollX; x < W + pairW; x += pairW) {
         ctx.drawImage(this._bgScaled, x, 0);
       }
       ctx.restore();
@@ -4995,46 +5010,52 @@ class EndlessRunnerEngine {
 
   // ── HUD ───────────────────────────────────────────────────────
   _drawHUD(ctx) {
-    const W = this.W, H = this.H;
+    const W = this.W;
     const fontSize = Math.min(18, W * 0.04);
+    const THEME = window.UI ? window.UI.THEME : null;
+    const font = THEME ? THEME.font : 'Arial, sans-serif';
 
     ctx.save();
     ctx.textBaseline = 'top';
 
-    // Top bar background
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(0, 0, W, 48);
+    // The pause button (top-left) and the fullscreen + close buttons
+    // (top-right) are DOM elements floating over the canvas. The hearts used
+    // to sit directly under the close button and the rice counter under the
+    // pause button — both invisible. Same safe area as the campaign runner.
+    const SAFE_L = 62;
+    const SAFE_R = W - 116;
 
-    // ── Grains ────────────────────────────────────────────────
-    ctx.shadowColor = 'rgba(255,193,7,0.7)';
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = 'rgba(40,20,0,0.38)';
-    ctx.roundRect(8, 6, 242, 34, 10);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.font = `bold ${fontSize}px Arial Black, sans-serif`;
+    ctx.fillStyle = 'rgba(10,6,12,0.5)';
+    ctx.beginPath(); ctx.roundRect(6, 6, W - 12, 46, 13); ctx.fill();
+
+    // ── Rice ──────────────────────────────────────────────────
+    ctx.font = `800 ${fontSize - 2}px ${font}`;
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#FFD700';
-    ctx.fillText('🌾', 8, 12);
-    ctx.fillText(`${this.grains}  x${this._riceScoreMult.toFixed(1)}`, 32, 14);
+    ctx.fillStyle = THEME ? THEME.gold : '#F2C14E';
+    ctx.fillText(`🌾 ${this.grains}`, SAFE_L, 12);
+    if (this._riceScoreMult > 1) {
+      ctx.font = `700 ${fontSize - 6}px ${font}`;
+      ctx.fillStyle = THEME ? THEME.muted : 'rgba(255,255,255,0.7)';
+      ctx.fillText(`x${this._riceScoreMult.toFixed(1)}`, SAFE_L, 31);
+    }
 
-    // ── Distance ──────────────────────────────────────────────
+    // ── Distance and score ────────────────────────────────────
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${fontSize + 2}px Arial Black, sans-serif`;
-    ctx.fillText(`${this._distM}m`, W/2, 13);
-
-    // ── Score ─────────────────────────────────────────────────
-    ctx.font = `${fontSize - 2}px Arial, sans-serif`;
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.fillText(`SCORE: ${this.score.toLocaleString()}`, W/2, 31);
+    ctx.fillStyle = THEME ? THEME.rice : '#fff';
+    ctx.font = `900 ${fontSize + 2}px ${font}`;
+    ctx.fillText(`${this._distM}m`, W / 2, 10);
+    ctx.font = `700 ${fontSize - 5}px ${font}`;
+    ctx.fillStyle = THEME ? THEME.muted : 'rgba(255,255,255,0.7)';
+    ctx.fillText(this.score.toLocaleString(), W / 2, 30);
 
     // ── Hearts ────────────────────────────────────────────────
-    ctx.textAlign = 'right';
-    ctx.font = `${fontSize + 2}px serif`;
+    ctx.textAlign = 'left';
+    ctx.font = '20px serif';
     for (let i = 0; i < 3; i++) {
-      ctx.fillText(i < this.player.hp ? '❤️' : '🖤', W - 8 - i * (fontSize + 6), 11);
+      ctx.globalAlpha = i < this.player.hp ? 1 : 0.18;
+      ctx.fillText('❤️', SAFE_R - 3 * 26 + i * 26, 14);
     }
+    ctx.globalAlpha = 1;
 
     // ── Combo display ─────────────────────────────────────────
     if (this.combo >= 2 && this._comboAlpha > 0) {

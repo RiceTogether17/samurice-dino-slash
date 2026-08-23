@@ -63,18 +63,19 @@ const ACHIEVEMENTS = [
 ];
 
 // ── FAKE LEADERBOARD ─────────────────────────────────────────
-const FAKE_LEADERS = [
-  { name:'NinjaRice99',   dist:3420, score:58200 },
-  { name:'DinoSlayer',    dist:2890, score:47100 },
-  { name:'PhonicsKing',   dist:2550, score:41800 },
-  { name:'RiceBall_Pro',  dist:2210, score:36500 },
-  { name:'SamuraiStar',   dist:1980, score:32400 },
-  { name:'BlendMaster',   dist:1740, score:28900 },
-  { name:'KatanaKid',     dist:1530, score:25100 },
-  { name:'WordWarrior',   dist:1290, score:21600 },
-  { name:'RicePaddy123',  dist:1040, score:17200 },
-  { name:'DinoBuster',    dist:820,  score:13800 },
-];
+// The leaderboard used to be ten invented strangers, every one of them
+// scoring above any child who had just started, on a screen captioned
+// "scores on this device". Two problems, and the smaller one is that the
+// caption was a lie: the larger is that it manufactured social comparison
+// against people who do not exist, for an audience of five-year-olds. It
+// is gone. What follows keeps the runs that actually happened, on this
+// device, and says so honestly when there are none yet.
+// (tests/engagement.test.js asserts the old names appear nowhere in this
+// file, so do not name them here either.)
+
+/** How many runs the record book keeps. Enough for a household, not a feed. */
+const RECORD_BOOK_SIZE = 10;
+
 
 // ─────────────────────────────────────────────────────────────
 // PROGRESS TRACKER CLASS
@@ -332,6 +333,21 @@ class ProgressTracker {
 
   recordEndlessRun(score, dist, combo) {
     this.data.endlessTotalRuns = (this.data.endlessTotalRuns || 0) + 1;
+    // The record book is built from real runs. Only runs that got somewhere
+    // are kept, so an accidental tap does not fill the page with zeroes.
+    if (dist > 0 || score > 0) {
+      if (!Array.isArray(this.data.runLog)) this.data.runLog = [];
+      this.data.runLog.push({
+        name: this.getPlayerName() || 'Player',
+        score: Math.round(score), dist: Math.round(dist),
+        combo: Math.round(combo || 0),
+        at: new Date().toISOString().slice(0, 10),
+      });
+      // Keep a little more than is shown, so a personal best is not lost to
+      // a run of bad games, but never let this grow without bound.
+      this.data.runLog.sort((a, b) => b.score - a.score);
+      this.data.runLog.length = Math.min(this.data.runLog.length, RECORD_BOOK_SIZE * 2);
+    }
     if (score > (this.data.endlessHighScore || 0)) this.data.endlessHighScore = score;
     if (dist  > (this.data.endlessBestDist  || 0)) this.data.endlessBestDist  = dist;
     if (combo > (this.data.bestCombo        || 0)) this.data.bestCombo        = combo;
@@ -509,13 +525,33 @@ class ProgressTracker {
   }
 
   // ── Leaderboard ───────────────────────────────────────────────
-  getLeaderboard() {
-    const myDist  = this.getEndlessBestDist();
-    const myScore = this.getEndlessHighScore();
-    const leaders = [...FAKE_LEADERS];
-    if (myDist > 0) leaders.push({ name:'YOU ⭐', dist:myDist, score:myScore, isMe:true });
-    leaders.sort((a, b) => b.score - a.score);
-    return leaders.slice(0, 12);
+  /**
+   * The runs that actually happened on this device, best first.
+   *
+   * Returns an empty array when nobody has run yet. Callers must render
+   * that state honestly rather than padding it — an empty record book is
+   * an invitation to make the first entry, and it is true.
+   */
+  getRecordBook() {
+    const runs = Array.isArray(this.data.runLog) ? this.data.runLog : [];
+    return runs
+      .slice()
+      .sort((a, b) => b.score - a.score)
+      .slice(0, RECORD_BOOK_SIZE)
+      .map((r, i) => ({ ...r, rank: i + 1, isBest: i === 0 }));
+  }
+
+  /** Kept for callers that predate the rename. */
+  getLeaderboard() { return this.getRecordBook(); }
+
+  /**
+   * Who is playing. Households share a tablet, so the record book is worth
+   * more if the rows carry a name — but nobody is made to enter one.
+   */
+  getPlayerName() { return this.data.playerName || ''; }
+  setPlayerName(name) {
+    this.data.playerName = String(name || '').slice(0, 14).trim();
+    this._save();
   }
 
   // ── Misc ──────────────────────────────────────────────────────
