@@ -189,6 +189,21 @@ function check(name, ok, detail = '') {
   check('boss defeat resolves to a result screen', true,
     await page.evaluate(() => _slashGameInstance.state));
 
+  // ── The shareable end card ─────────────────────────────────
+  const card = await page.evaluate(async () => {
+    const g = _slashGameInstance;
+    const stage = PHONICS_DATA.stageList[2];
+    g.stageId = 3;
+    g._battleResults = { learnedWords: stage.words.slice(0, 4).map(w => w.word) };
+    const blob = await g._composeEndCard(stage);
+    if (!blob) return { ok: false, why: 'no blob' };
+    const bitmap = await createImageBitmap(blob);
+    return { ok: true, bytes: blob.size, w: bitmap.width, h: bitmap.height, type: blob.type };
+  });
+  check('the win composes a shareable card',
+    card.ok && card.w === 1200 && card.h === 630 && card.bytes > 20000 && card.bytes < 600000,
+    card.ok ? `${card.w}x${card.h}, ${Math.round(card.bytes / 1024)}KB ${card.type}` : card.why);
+
   // ── The review loop ────────────────────────────────────────
   // The ladder is the game's reason to come back, so the whole round trip is
   // checked here: due words in, a fight that ends with the list, grades out.

@@ -2992,21 +2992,172 @@ class SlashGame {
     } catch (_) { /* keep the plain href */ }
 
     const done = msg => { this._shareToast = { text: msg, age: 0 }; };
-
-    if (navigator.share) {
-      navigator.share({ title: 'Samurice Dino Slash', text, url })
-        .then(() => done('Shared!'))
-        .catch(() => { /* the user dismissed the sheet — not an error */ });
-      return;
-    }
     const payload = `${text}\n${url}`;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(payload)
-        .then(() => done('Copied — paste it anywhere'))
-        .catch(() => done('Could not copy'));
+
+    const shareText = () => {
+      if (navigator.share) {
+        navigator.share({ title: 'Samurice Dino Slash', text, url })
+          .then(() => done('Shared!'))
+          .catch(() => { /* the user dismissed the sheet — not an error */ });
+        return;
+      }
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(payload)
+          .then(() => done('Copied — paste it anywhere'))
+          .catch(() => done('Could not copy'));
+      } else {
+        done('Sharing is not available here');
+      }
+    };
+
+    // Try the picture first. Text travels in a message; an image travels
+    // everywhere else, and the words the child read are the whole point of
+    // sending it. Every failure path falls through to the text share rather
+    // than leaving the button doing nothing.
+    done('Making your card…');
+    this._composeEndCard(stage).then(blob => {
+      if (!blob) { shareText(); return; }
+      const file = new File([blob], 'samurice-win.jpg', { type: blob.type || 'image/jpeg' });
+      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+        navigator.share({ title: 'Samurice Dino Slash', text, url, files: [file] })
+          .then(() => done('Shared!'))
+          .catch(() => { this._shareToast = null; });
+        return;
+      }
+      // No file sharing here: hand over the image itself so it can be saved,
+      // and put the text on the clipboard alongside it.
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = 'samurice-win.jpg';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 10000);
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(payload).catch(() => {});
+      }
+      done('Card saved — text copied too');
+    }).catch(() => shareText());
+  }
+
+  /**
+   * Compose the shareable end card.
+   *
+   * The share used to be text only, which is fine in a message and invisible
+   * everywhere images travel. This paints an actual picture of the win —
+   * the boss that was beaten, the words that were read — at 1200x630, the
+   * proportion every link preview and social surface expects.
+   *
+   * Returns a Promise of a Blob, or null when the browser cannot produce
+   * one; callers must fall back to the text share rather than failing.
+   */
+  _composeEndCard(stage) {
+    const W = 1200, H = 630;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    if (!g) return Promise.resolve(null);
+
+    const T = UI.THEME;
+    const words = (this._battleResults?.learnedWords || []).slice(0, 5);
+    const stars = Math.max(1, this.progress.getStars(this.stageId));
+    const label = stage.world ? `${stage.world}-${stage.local}` : `${this.stageId}`;
+    const who = this.progress.getPlayerName() || 'My reader';
+
+    // Ground: the arena the fight happened in, or the ink field if it has
+    // not loaded — a card that renders half-drawn is worse than a plain one.
+    const bg = this.sprites[stage.arenaBg] || this.sprites[stage.bg];
+    if (bg && bg.complete && bg.naturalWidth > 0) {
+      const s = Math.max(W / bg.naturalWidth, H / bg.naturalHeight);
+      g.drawImage(bg, (W - bg.naturalWidth * s) / 2, (H - bg.naturalHeight * s) / 2,
+                  bg.naturalWidth * s, bg.naturalHeight * s);
     } else {
-      done('Sharing is not available here');
+      g.fillStyle = T.ink; g.fillRect(0, 0, W, H);
     }
+    const scrim = g.createLinearGradient(0, 0, 0, H);
+    scrim.addColorStop(0, 'rgba(12,7,16,0.76)');
+    scrim.addColorStop(0.55, 'rgba(12,7,16,0.62)');
+    scrim.addColorStop(1, 'rgba(8,5,12,0.88)');
+    g.fillStyle = scrim; g.fillRect(0, 0, W, H);
+
+    // Gold rule top and bottom, so the card reads as a made thing.
+    g.fillStyle = T.gold;
+    g.fillRect(0, 0, W, 6);
+    g.fillRect(0, H - 6, W, 6);
+
+    const drawSprite = (sprite, cx, baseY, maxH, flip) => {
+      if (!sprite || !sprite.complete || !sprite.naturalWidth) return;
+      const ar = sprite.naturalWidth / sprite.naturalHeight;
+      const h = maxH, w = h * ar;
+      g.save();
+      g.translate(cx, baseY - h);
+      if (flip) { g.translate(w, 0); g.scale(-1, 1); }
+      g.globalAlpha = 0.96;
+      g.drawImage(sprite, -w / 2 + (flip ? w / 2 : 0), 0, w, h);
+      g.restore();
+    };
+    // Riku on the left, boss on the right. Boss art all faces left after
+    // tools/normalise-facing, so on the right it already faces Riku.
+    drawSprite(this.sprites['riku-idle'] || this.sprites['riku-run'], 140, H - 58, 260, false);
+    drawSprite(this.sprites[stage.bossFile], W - 235, H - 46, 300, false);
+
+    g.textAlign = 'center';
+    g.textBaseline = 'top';
+
+    g.font = `800 26px ${T.font}`;
+    g.fillStyle = T.gold;
+    g.fillText(`STAGE ${label} CLEARED`, W / 2, 52);
+
+    g.font = `900 ${words.length ? 54 : 62}px ${T.font}`;
+    g.fillStyle = T.rice;
+    g.shadowColor = 'rgba(0,0,0,0.75)'; g.shadowBlur = 18;
+    g.fillText(`${who} beat ${stage.bossName || 'the boss'}`, W / 2, 92);
+    g.shadowBlur = 0;
+
+    g.font = '34px serif';
+    g.fillText('⭐'.repeat(stars), W / 2, 162);
+
+    if (words.length) {
+      g.font = `700 22px ${T.font}`;
+      g.fillStyle = T.muted;
+      g.fillText('READ WITHOUT HELP', W / 2, 232);
+
+      // The words are the point of the card, so they get the largest type
+      // and enough room to be legible in a thumbnail.
+      const size = words.length > 4 ? 52 : 62;
+      g.font = `900 ${size}px ${T.font}`;
+      const widths = words.map(w => g.measureText(w).width + 40);
+      const total = widths.reduce((a, b) => a + b, 0) + 16 * (words.length - 1);
+      let x = (W - total) / 2;
+      words.forEach((word, i) => {
+        const w = widths[i], h = size + 30, y = 272;
+        g.fillStyle = 'rgba(20,13,18,0.72)';
+        g.strokeStyle = T.goldDim;
+        g.lineWidth = 2;
+        g.beginPath(); g.roundRect(x, y, w, h, 16); g.fill(); g.stroke();
+        g.fillStyle = T.rice;
+        g.textBaseline = 'middle';
+        g.fillText(word, x + w / 2, y + h / 2 + 2);
+        g.textBaseline = 'top';
+        x += w + 16;
+      });
+    }
+
+    g.font = `800 26px ${T.font}`;
+    g.fillStyle = T.rice;
+    g.fillText('SAMURICE DINO SLASH', W / 2, H - 92);
+    g.font = `700 20px ${T.font}`;
+    g.fillStyle = T.muted;
+    g.fillText('Free phonics adventure — no app needed', W / 2, H - 58);
+
+    // JPEG, not PNG: the card is full-bleed painted art with no
+    // transparency, and the PNG of it was over a megabyte — big enough that
+    // some share targets would refuse or recompress it anyway.
+    return new Promise(resolve => {
+      try { c.toBlob(b => resolve(b), 'image/jpeg', 0.9); }
+      catch (_) { resolve(null); }
+    });
   }
 
   // ── READ WITH RIKU — decodable-sentence capstone ──────────────

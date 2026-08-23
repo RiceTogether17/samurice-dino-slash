@@ -81,6 +81,16 @@ was removed and why it must not come back.
 
 Plus shop, achievements, daily challenge, and an endless mode.
 
+**Record book** — Dino Dash keeps the runs that happened on this device, with
+an optional player name for a shared tablet. No invented rivals: an empty
+book says so.
+
+**For grown-ups** — the Progress screen leads with the review ladder: how many
+words are learning, coming back at longer gaps, or known; what is due today;
+and the words that keep slipping, *by name*, so there is something to read
+together tonight. The sound map only claims a sound is solid when there is a
+record of the child getting it right.
+
 **Dino Dash** — Flappy-style side mode.
 
 ## Development
