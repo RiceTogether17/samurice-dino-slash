@@ -1628,9 +1628,21 @@ body {
    PARENT / TEACHER PROGRESS DASHBOARD SCREEN
 ============================================================ */
 
+/* ── Parent / teacher dashboard ─────────────────────────────────
+   Was a dark-green-and-orange screen that shared nothing with the rest of
+   the game. These tokens mirror UI.THEME in js/core/ui.js so the canvas
+   menus and this document screen are recognisably the same product; keep
+   them in step if the palette moves. */
 .pd-screen {
-    background:
-        linear-gradient(160deg, #0d2b08 0%, #1a4d1a 40%, #0d3b17 100%);
+    --pd-ink:    #17110D;
+    --pd-rice:   #F7F1E4;
+    --pd-gold:   #F2C14E;
+    --pd-lacq:   #C8342B;
+    --pd-panel:  rgba(20,13,18,0.76);
+    --pd-panel2: rgba(48,26,34,0.5);
+    --pd-stroke: rgba(255,232,198,0.22);
+    --pd-muted:  rgba(247,241,228,0.62);
+    background: radial-gradient(120% 90% at 50% 0%, #2A1B24 0%, #17110D 55%, #0D0A08 100%);
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
@@ -1643,14 +1655,14 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px 8px;
-    background: rgba(0,0,0,0.4);
-    border-bottom: 2px solid rgba(255,215,0,0.3);
+    background: rgba(13,10,8,0.72);
+    border-bottom: 2px solid var(--pd-stroke);
     flex-shrink: 0;
     flex-wrap: wrap;
     gap: 8px;
 }
 .pd-title {
-    color: #FFD700;
+    color: var(--pd-gold);
     font-size: clamp(1.05rem, 3.5vw, 1.4rem);
     font-weight: 900;
     text-shadow: 0 2px 8px rgba(0,0,0,0.5);
@@ -1659,9 +1671,9 @@ body {
     text-align: center;
 }
 .pd-back-btn {
-    background: rgba(255,255,255,0.12);
-    border: 2px solid rgba(255,255,255,0.3);
-    color: #fff;
+    background: var(--pd-panel2);
+    border: 2px solid var(--pd-stroke);
+    color: var(--pd-rice);
     font-family: inherit;
     font-size: 0.9rem;
     font-weight: bold;
@@ -1672,9 +1684,9 @@ body {
 }
 .pd-back-btn:hover { background: rgba(255,255,255,0.22); }
 .pd-share-btn {
-    background: linear-gradient(135deg, #FF6B35, #FF4444);
+    background: linear-gradient(180deg, #D8433A, #8E1F19);
     border: none;
-    color: #fff;
+    color: var(--pd-rice);
     font-family: inherit;
     font-size: 0.85rem;
     font-weight: bold;
@@ -1699,13 +1711,13 @@ body {
 
 /* Section wrapper */
 .pd-section {
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: var(--pd-panel);
+    border: 1px solid var(--pd-stroke);
     border-radius: 18px;
     padding: 14px 14px 16px;
 }
 .pd-section-title {
-    color: #FFD700;
+    color: var(--pd-gold);
     font-size: clamp(0.95rem, 3vw, 1.15rem);
     font-weight: 900;
     margin: 0 0 10px;
@@ -1713,7 +1725,7 @@ body {
 }
 .pd-section-hint {
     font-size: 0.8rem;
-    color: rgba(255,255,255,0.65);
+    color: var(--pd-muted);
     margin: -6px 0 10px;
     line-height: 1.5;
 }
@@ -1727,7 +1739,7 @@ body {
     padding: 12px;
 }
 .pd-stat-card {
-    background: rgba(255,255,255,0.07);
+    background: var(--pd-panel2);
     border: 1px solid rgba(255,255,255,0.15);
     border-radius: 14px;
     padding: 10px 14px;
@@ -1739,8 +1751,8 @@ body {
     flex: 1 1 80px;
 }
 .pd-stat-icon  { font-size: 1.4rem; }
-.pd-stat-val   { font-size: clamp(1.2rem, 4vw, 1.6rem); font-weight: 900; color: #FFD700; }
-.pd-stat-label { font-size: 0.7rem; color: rgba(255,255,255,0.7); text-align: center; }
+.pd-stat-val   { font-size: clamp(1.2rem, 4vw, 1.6rem); font-weight: 900; color: var(--pd-gold); }
+.pd-stat-label { font-size: 0.7rem; color: var(--pd-muted); text-align: center; }
 
 /* ── Stage progress grid ───────────────────────────────────── */
 .pd-stages-grid {
@@ -1749,7 +1761,7 @@ body {
     gap: 10px;
 }
 .pd-stage-card {
-    background: rgba(255,255,255,0.07);
+    background: var(--pd-panel2);
     border: 1px solid rgba(255,255,255,0.15);
     border-radius: 14px;
     padding: 10px 12px;
@@ -1766,12 +1778,12 @@ body {
     justify-content: space-between;
     margin-bottom: 4px;
 }
-.pd-stage-num   { font-weight: 900; color: #FFD700; font-size: 0.9rem; }
+.pd-stage-num   { font-weight: 900; color: var(--pd-gold); font-size: 0.9rem; }
 .pd-stage-stars { font-size: 0.95rem; letter-spacing: 1px; }
 .pd-mastery-badges { display: flex; gap: 4px; }
 .pd-badge { font-size: 0.9rem; cursor: help; }
-.pd-stage-name    { font-weight: bold; color: #fff; font-size: 0.88rem; margin-bottom: 2px; }
-.pd-stage-pattern { font-size: 0.75rem; color: rgba(255,255,255,0.6); margin-bottom: 8px; }
+.pd-stage-name    { font-weight: bold; color: var(--pd-rice); font-size: 0.88rem; margin-bottom: 2px; }
+.pd-stage-pattern { font-size: 0.75rem; color: var(--pd-muted); margin-bottom: 8px; }
 .pd-stage-bar-wrap { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .pd-stage-bar {
     flex: 1;
@@ -1782,12 +1794,12 @@ body {
 }
 .pd-stage-fill {
     height: 100%;
-    background: linear-gradient(90deg, #66BB6A, #FFD700);
+    background: linear-gradient(90deg, #66BB6A, var(--pd-gold));
     border-radius: 999px;
     transition: width 0.6s ease;
 }
-.pd-stage-acc   { font-size: 0.75rem; color: #FFD700; font-weight: bold; white-space: nowrap; }
-.pd-stage-stats { font-size: 0.75rem; color: rgba(255,255,255,0.65); }
+.pd-stage-acc   { font-size: 0.75rem; color: var(--pd-gold); font-weight: bold; white-space: nowrap; }
+.pd-stage-stats { font-size: 0.75rem; color: var(--pd-muted); }
 .pd-locked-label { color: rgba(255,255,255,0.4) !important; }
 
 /* ── Phoneme heatmap ───────────────────────────────────────── */
@@ -1806,9 +1818,9 @@ body {
     transition: transform 0.12s;
 }
 .pd-phoneme-cell:hover { transform: scale(1.15); }
-.pd-ph-green  { background: rgba(102,187,106,0.25); border-color: #66BB6A; color: #A5D6A7; }
-.pd-ph-yellow { background: rgba(255,193,7,0.2);   border-color: #FFD700; color: #FFE082; }
-.pd-ph-red    { background: rgba(239,83,80,0.25);  border-color: #EF5350; color: #EF9A9A; }
+.pd-ph-green  { background: rgba(124,255,155,0.16); border-color: rgba(124,255,155,0.55); color: #A9F5BE; }
+.pd-ph-yellow { background: rgba(242,193,78,0.18);   border-color: var(--pd-gold); color: #FFDD9B; }
+.pd-ph-red    { background: rgba(200,52,43,0.28);  border-color: rgba(255,138,128,0.6); color: #FFB3AC; }
 
 /* Legend chips (inline in hint text) */
 .pd-legend {
@@ -1837,10 +1849,10 @@ body {
 .pd-class-input {
     flex: 1;
     min-width: 140px;
-    background: rgba(255,255,255,0.1);
+    background: var(--pd-stroke);
     border: 2px solid rgba(255,255,255,0.25);
     border-radius: 12px;
-    color: #fff;
+    color: var(--pd-rice);
     font-family: inherit;
     font-size: 0.9rem;
     padding: 9px 14px;
@@ -1848,11 +1860,11 @@ body {
     transition: border-color 0.15s;
 }
 .pd-class-input::placeholder { color: rgba(255,255,255,0.4); }
-.pd-class-input:focus { border-color: rgba(255,215,0,0.7); }
+.pd-class-input:focus { border-color: var(--pd-gold); }
 .pd-create-btn {
-    background: linear-gradient(135deg, #00897B, #00695C);
-    border: none;
-    color: #fff;
+    background: var(--pd-panel2);
+    border: 1px solid var(--pd-stroke);
+    color: var(--pd-gold);
     font-family: inherit;
     font-size: 0.88rem;
     font-weight: bold;
@@ -1869,7 +1881,66 @@ body {
     gap: 10px;
     flex-wrap: wrap;
 }
-.pd-class-label { font-size: 0.78rem; color: rgba(255,255,255,0.55); }
+.pd-class-label { font-size: 0.78rem; color: var(--pd-muted); }
+
+.pd-map-rest { flex-basis: 100%; margin: 6px 0 0; text-align: left; }
+
+/* Sounds the child has not been asked about yet. Neither a pass nor a
+   fail — the old map had no way to say this and coloured them green. */
+.pd-ph-new {
+    background: rgba(247,241,228,0.06);
+    border-color: rgba(247,241,228,0.22);
+    color: rgba(247,241,228,0.45);
+}
+
+/* ── Reading / review ladder ────────────────────────────────── */
+.pd-review-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.pd-rv-tile {
+    flex: 1 1 130px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 12px 10px;
+    border-radius: 14px;
+    background: var(--pd-panel2);
+    border: 1px solid var(--pd-stroke);
+}
+.pd-rv-num   { font-size: clamp(1.4rem, 5vw, 1.9rem); font-weight: 900; line-height: 1; }
+.pd-rv-label { font-size: 0.8rem; font-weight: 700; color: var(--pd-rice); }
+.pd-rv-note  { font-size: 0.68rem; color: var(--pd-muted); text-align: center; }
+.pd-rv-learning .pd-rv-num { color: var(--pd-gold); }
+.pd-rv-mid     .pd-rv-num { color: #7CC7FF; }
+.pd-rv-known   .pd-rv-num { color: #7CFF9B; }
+.pd-review-line {
+    margin: 12px 0 0;
+    font-size: 0.85rem;
+    color: var(--pd-rice);
+    line-height: 1.5;
+}
+.pd-review-line strong { color: var(--pd-gold); }
+.pd-review-sub {
+    margin: 12px 0 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--pd-muted);
+}
+.pd-shaky { display: flex; flex-wrap: wrap; gap: 6px; }
+.pd-shaky-word {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(200,52,43,0.22);
+    border: 1px solid rgba(255,138,128,0.45);
+    color: #FFC9C3;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: help;
+}
+
 .pd-class-name  { color: #fff; font-weight: bold; font-size: 0.9rem; }
 .pd-class-code  {
     font-family: 'Courier New', monospace;

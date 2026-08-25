@@ -14,6 +14,14 @@
 // Keeps Dino Dash (game.js) 100% untouched.
 // Overrides launchSlashGame() from game.js.
 // ============================================================
+// Canvas screens that hold more than one screenful. Each names the property
+// its scroll offset lives on; `_bindMenuScroll` reads this to decide whether
+// a drag or a wheel means anything on the current screen.
+const SCROLLABLE = {
+  achievements: '_achScroll',
+  shop:         '_shopScroll',
+};
+
 // ── Sprite manifest ──────────────────────────────────────────
 // All slash-game sprites live in assets/sprites/ and assets/dinosaurs/.
 // Dino Dash originals remain at assets/*.png (game.js untouched).
@@ -269,7 +277,7 @@ class SlashGame {
     // holder, so screens sharing a holder would evict each other every frame.
     this._sceneHolders = { modeSelect: {}, stageSelect: {}, shop: {},
                            achievements: {}, leaderboard: {}, win: {},
-                           reviewDone: {} };
+                           reviewDone: {}, endlessOver: {}, daily: {} };
     this._menuSel = 0;   // selected stage within the open world (stage-select)
     this._worldSel = 0;  // selected world (world-map)
     this._bindMenuInput();
@@ -584,21 +592,27 @@ class SlashGame {
     document.addEventListener('keydown', this._menuKd);
     // Canvas click → menu interaction
     this._canvasClick = (e) => {
+      // A touch fires touchstart and then, ~300ms later, a synthetic click
+      // at the same point. Both used to be handled, so every tap on a menu
+      // acted twice: once on the screen you tapped, once on whatever
+      // replaced it.
+      if (performance.now() - (this._lastTouchAt || 0) < 700) return;
+      if (this._swallowClick) { this._swallowClick = false; return; }
       const rect = this.canvas.getBoundingClientRect();
-      const mx = (e.clientX - rect.left);
-      const my = (e.clientY - rect.top);
-      this._handleCanvasClick(mx, my);
+      this._handleCanvasClick(e.clientX - rect.left, e.clientY - rect.top);
     };
     this._canvasTap = (e) => {
       if (e.touches.length === 0) return;
+      this._lastTouchAt = performance.now();
+      if (this._swallowClick) { this._swallowClick = false; return; }
       const rect = this.canvas.getBoundingClientRect();
       const t = e.touches[0];
-      const mx = t.clientX - rect.left;
-      const my = t.clientY - rect.top;
-      this._handleCanvasClick(mx, my);
+      this._handleCanvasClick(t.clientX - rect.left, t.clientY - rect.top);
     };
     this.canvas.addEventListener('click', this._canvasClick);
     this.canvas.addEventListener('touchstart', this._canvasTap, { passive: true });
+
+    this._bindMenuScroll();
 
     // ── Page Visibility auto-pause ──────────────────────────
     this._visibilityHandler = () => {
@@ -606,6 +620,98 @@ class SlashGame {
     };
     document.addEventListener('visibilitychange', this._visibilityHandler);
   }
+  /**
+   * Drag- and wheel-scrolling for the long canvas screens.
+   *
+   * Achievements, the shop and the dashboard all read a scroll offset when
+   * drawing, and nothing ever wrote to one — so with eighteen achievements
+   * in a list that shows nine, half of them were simply unreachable. Same
+   * for the lower shop tabs and everything past the fifth stage card.
+   *
+   * The offset lives on the game (one per screen) and the drawing code
+   * publishes how far it may travel as `_scrollMax` each frame, which keeps
+   * the clamp honest when the list length or the window size changes.
+   */
+  _bindMenuScroll() {
+    const prop = () => SCROLLABLE[this.state] || null;
+
+    this._menuWheel = (e) => {
+      const k = prop();
+      if (!k) return;
+      e.preventDefault();
+      this._scrollBy(k, e.deltaY);
+    };
+    this.canvas.addEventListener('wheel', this._menuWheel, { passive: false });
+
+    let dragging = false, lastY = 0, moved = 0;
+    const start = (y) => {
+      if (!prop()) return;
+      dragging = true; lastY = y; moved = 0;
+    };
+    const move = (y) => {
+      const k = prop();
+      if (!dragging || !k) return;
+      const dy = lastY - y;
+      lastY = y;
+      moved += Math.abs(dy);
+      this._scrollBy(k, dy);
+      // Past a few pixels this is a scroll, not a tap, and the click that
+      // ends it must not also press whatever is under the finger.
+      if (moved > 6) this._swallowClick = true;
+    };
+    const end = () => { dragging = false; };
+
+    this._menuDown = (e) => start(e.clientY);
+    this._menuMove = (e) => move(e.clientY);
+    this._menuUp = end;
+    this._menuTouchStart = (e) => { if (e.touches[0]) start(e.touches[0].clientY); };
+    this._menuTouchMove = (e) => {
+      if (!e.touches[0] || !prop()) return;
+      e.preventDefault();
+      move(e.touches[0].clientY);
+    };
+    this.canvas.addEventListener('mousedown', this._menuDown);
+    window.addEventListener('mousemove', this._menuMove);
+    window.addEventListener('mouseup', this._menuUp);
+    this.canvas.addEventListener('touchstart', this._menuTouchStart, { passive: true });
+    this.canvas.addEventListener('touchmove', this._menuTouchMove, { passive: false });
+    this.canvas.addEventListener('touchend', this._menuTouchEnd = end, { passive: true });
+  }
+
+  _scrollBy(key, dy) {
+    const max = this._scrollMax || 0;
+    this[key] = Math.max(0, Math.min(max, (this[key] || 0) + dy));
+  }
+
+  /**
+   * Draw a list inside a window, clipped, with a hint at each end when
+   * there is more to see. Returns the visible band so the caller can lay
+   * rows out against it.
+   */
+  _scrollWindow(ctx, key, top, bottom, contentH, draw) {
+    const viewH = Math.max(0, bottom - top);
+    this._scrollMax = Math.max(0, contentH - viewH);
+    this[key] = Math.max(0, Math.min(this._scrollMax, this[key] || 0));
+    const scroll = this[key];
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, top, this.W, viewH); ctx.clip();
+    draw(scroll, top, viewH);
+    ctx.restore();
+
+    // Fades, so a cut-off row reads as "there is more" rather than as a
+    // rendering glitch.
+    const fade = (y0, y1, from) => {
+      const g = ctx.createLinearGradient(0, y0, 0, y1);
+      g.addColorStop(0, from); g.addColorStop(1, 'rgba(10,6,12,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, Math.min(y0, y1), this.W, Math.abs(y1 - y0));
+    };
+    if (scroll > 2) fade(top, top + 22, 'rgba(10,6,12,0.85)');
+    if (scroll < this._scrollMax - 2) fade(bottom, bottom - 26, 'rgba(10,6,12,0.9)');
+    return { scroll, viewH };
+  }
+
   _handleCanvasClick(mx, my) {
     // Soft UI tap sound on menu-style screens (gameplay has its own SFX)
     const MENU_STATES = new Set(['mode-select','menu','stage-select','world-map',
@@ -700,14 +806,6 @@ class SlashGame {
       this.state = 'mode-select'; return;
     }
     if (this.state === 'review-done') { this._clickReviewDone(mx, my); return; }
-    // Phase 9: Dashboard back button
-    if (this.state === 'dashboard') {
-      const r = this._dashBackRect;
-      if (r && mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-        this.state = 'mode-select';
-      }
-      return;
-    }
     if (this.state === 'menu') {
       this.state = 'world-map';
       return;
@@ -1352,7 +1450,7 @@ class SlashGame {
   _syncShellMusic() {
     if (!this.audio || this.audio.isMuted) return;
     const SHELL = new Set(['mode-select','menu','stage-select','world-map',
-                           'shop','daily','achievements','leaderboard','dashboard',
+                           'shop','daily','achievements','leaderboard',
                            'stage-win','endless-gameover','review-done']);
     if (this._jingleUntil && performance.now() < this._jingleUntil) return;
     if (SHELL.has(this.state)) {
@@ -1417,7 +1515,6 @@ class SlashGame {
       case 'daily': this._updateDaily(); break;
       case 'achievements': this._updateAchievements(); break;
       case 'leaderboard': this._updateLeaderboard(); break;
-      case 'dashboard':   this._drawDashboard(); break;  // Phase 9
     }
     if (workStart && window.Quality) window.Quality.sample(performance.now() - workStart);
     // Achievement popup on top of everything
@@ -2895,21 +2992,172 @@ class SlashGame {
     } catch (_) { /* keep the plain href */ }
 
     const done = msg => { this._shareToast = { text: msg, age: 0 }; };
-
-    if (navigator.share) {
-      navigator.share({ title: 'Samurice Dino Slash', text, url })
-        .then(() => done('Shared!'))
-        .catch(() => { /* the user dismissed the sheet — not an error */ });
-      return;
-    }
     const payload = `${text}\n${url}`;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(payload)
-        .then(() => done('Copied — paste it anywhere'))
-        .catch(() => done('Could not copy'));
+
+    const shareText = () => {
+      if (navigator.share) {
+        navigator.share({ title: 'Samurice Dino Slash', text, url })
+          .then(() => done('Shared!'))
+          .catch(() => { /* the user dismissed the sheet — not an error */ });
+        return;
+      }
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(payload)
+          .then(() => done('Copied — paste it anywhere'))
+          .catch(() => done('Could not copy'));
+      } else {
+        done('Sharing is not available here');
+      }
+    };
+
+    // Try the picture first. Text travels in a message; an image travels
+    // everywhere else, and the words the child read are the whole point of
+    // sending it. Every failure path falls through to the text share rather
+    // than leaving the button doing nothing.
+    done('Making your card…');
+    this._composeEndCard(stage).then(blob => {
+      if (!blob) { shareText(); return; }
+      const file = new File([blob], 'samurice-win.jpg', { type: blob.type || 'image/jpeg' });
+      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+        navigator.share({ title: 'Samurice Dino Slash', text, url, files: [file] })
+          .then(() => done('Shared!'))
+          .catch(() => { this._shareToast = null; });
+        return;
+      }
+      // No file sharing here: hand over the image itself so it can be saved,
+      // and put the text on the clipboard alongside it.
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = 'samurice-win.jpg';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 10000);
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(payload).catch(() => {});
+      }
+      done('Card saved — text copied too');
+    }).catch(() => shareText());
+  }
+
+  /**
+   * Compose the shareable end card.
+   *
+   * The share used to be text only, which is fine in a message and invisible
+   * everywhere images travel. This paints an actual picture of the win —
+   * the boss that was beaten, the words that were read — at 1200x630, the
+   * proportion every link preview and social surface expects.
+   *
+   * Returns a Promise of a Blob, or null when the browser cannot produce
+   * one; callers must fall back to the text share rather than failing.
+   */
+  _composeEndCard(stage) {
+    const W = 1200, H = 630;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    if (!g) return Promise.resolve(null);
+
+    const T = UI.THEME;
+    const words = (this._battleResults?.learnedWords || []).slice(0, 5);
+    const stars = Math.max(1, this.progress.getStars(this.stageId));
+    const label = stage.world ? `${stage.world}-${stage.local}` : `${this.stageId}`;
+    const who = this.progress.getPlayerName() || 'My reader';
+
+    // Ground: the arena the fight happened in, or the ink field if it has
+    // not loaded — a card that renders half-drawn is worse than a plain one.
+    const bg = this.sprites[stage.arenaBg] || this.sprites[stage.bg];
+    if (bg && bg.complete && bg.naturalWidth > 0) {
+      const s = Math.max(W / bg.naturalWidth, H / bg.naturalHeight);
+      g.drawImage(bg, (W - bg.naturalWidth * s) / 2, (H - bg.naturalHeight * s) / 2,
+                  bg.naturalWidth * s, bg.naturalHeight * s);
     } else {
-      done('Sharing is not available here');
+      g.fillStyle = T.ink; g.fillRect(0, 0, W, H);
     }
+    const scrim = g.createLinearGradient(0, 0, 0, H);
+    scrim.addColorStop(0, 'rgba(12,7,16,0.76)');
+    scrim.addColorStop(0.55, 'rgba(12,7,16,0.62)');
+    scrim.addColorStop(1, 'rgba(8,5,12,0.88)');
+    g.fillStyle = scrim; g.fillRect(0, 0, W, H);
+
+    // Gold rule top and bottom, so the card reads as a made thing.
+    g.fillStyle = T.gold;
+    g.fillRect(0, 0, W, 6);
+    g.fillRect(0, H - 6, W, 6);
+
+    const drawSprite = (sprite, cx, baseY, maxH, flip) => {
+      if (!sprite || !sprite.complete || !sprite.naturalWidth) return;
+      const ar = sprite.naturalWidth / sprite.naturalHeight;
+      const h = maxH, w = h * ar;
+      g.save();
+      g.translate(cx, baseY - h);
+      if (flip) { g.translate(w, 0); g.scale(-1, 1); }
+      g.globalAlpha = 0.96;
+      g.drawImage(sprite, -w / 2 + (flip ? w / 2 : 0), 0, w, h);
+      g.restore();
+    };
+    // Riku on the left, boss on the right. Boss art all faces left after
+    // tools/normalise-facing, so on the right it already faces Riku.
+    drawSprite(this.sprites['riku-idle'] || this.sprites['riku-run'], 140, H - 58, 260, false);
+    drawSprite(this.sprites[stage.bossFile], W - 235, H - 46, 300, false);
+
+    g.textAlign = 'center';
+    g.textBaseline = 'top';
+
+    g.font = `800 26px ${T.font}`;
+    g.fillStyle = T.gold;
+    g.fillText(`STAGE ${label} CLEARED`, W / 2, 52);
+
+    g.font = `900 ${words.length ? 54 : 62}px ${T.font}`;
+    g.fillStyle = T.rice;
+    g.shadowColor = 'rgba(0,0,0,0.75)'; g.shadowBlur = 18;
+    g.fillText(`${who} beat ${stage.bossName || 'the boss'}`, W / 2, 92);
+    g.shadowBlur = 0;
+
+    g.font = '34px serif';
+    g.fillText('⭐'.repeat(stars), W / 2, 162);
+
+    if (words.length) {
+      g.font = `700 22px ${T.font}`;
+      g.fillStyle = T.muted;
+      g.fillText('READ WITHOUT HELP', W / 2, 232);
+
+      // The words are the point of the card, so they get the largest type
+      // and enough room to be legible in a thumbnail.
+      const size = words.length > 4 ? 52 : 62;
+      g.font = `900 ${size}px ${T.font}`;
+      const widths = words.map(w => g.measureText(w).width + 40);
+      const total = widths.reduce((a, b) => a + b, 0) + 16 * (words.length - 1);
+      let x = (W - total) / 2;
+      words.forEach((word, i) => {
+        const w = widths[i], h = size + 30, y = 272;
+        g.fillStyle = 'rgba(20,13,18,0.72)';
+        g.strokeStyle = T.goldDim;
+        g.lineWidth = 2;
+        g.beginPath(); g.roundRect(x, y, w, h, 16); g.fill(); g.stroke();
+        g.fillStyle = T.rice;
+        g.textBaseline = 'middle';
+        g.fillText(word, x + w / 2, y + h / 2 + 2);
+        g.textBaseline = 'top';
+        x += w + 16;
+      });
+    }
+
+    g.font = `800 26px ${T.font}`;
+    g.fillStyle = T.rice;
+    g.fillText('SAMURICE DINO SLASH', W / 2, H - 92);
+    g.font = `700 20px ${T.font}`;
+    g.fillStyle = T.muted;
+    g.fillText('Free phonics adventure — no app needed', W / 2, H - 58);
+
+    // JPEG, not PNG: the card is full-bleed painted art with no
+    // transparency, and the PNG of it was over a megabyte — big enough that
+    // some share targets would refuse or recompress it anyway.
+    return new Promise(resolve => {
+      try { c.toBlob(b => resolve(b), 'image/jpeg', 0.9); }
+      catch (_) { resolve(null); }
+    });
   }
 
   // ── READ WITH RIKU — decodable-sentence capstone ──────────────
@@ -3168,7 +3416,7 @@ class SlashGame {
       { label: 'Daily Challenge', sub: daily ? 'Done today' : 'Fresh challenge',
         action: 'daily', pulse: daily ? 0 : 0.5 + 0.5 * Math.sin(t * 0.09) },
       { label: 'Shop', sub: 'Spend your rice', action: 'shop' },
-      { label: 'Best Scores', sub: 'Family record book', action: 'leaderboard' },
+      { label: 'Record Book', sub: 'Your best Dino Dash runs', action: 'leaderboard' },
       { label: 'Achievements', sub: `${this.progress.data.achievements.length} of ${ACHIEVEMENTS.length}`,
         action: 'achievements' },
       { label: 'Progress', sub: 'Parent / teacher view', action: 'dashboard' },
@@ -3214,7 +3462,12 @@ class SlashGame {
         if (r.action === 'shop') { this._startShop(); this._stateEntryFade = 1.0; }
         if (r.action === 'leaderboard') { this.state = 'leaderboard'; this._stateEntryFade = 1.0; }
         if (r.action === 'achievements') { this.state = 'achievements'; this._stateEntryFade = 1.0; }
-        if (r.action === 'dashboard')    { this.state = 'dashboard'; this._dashScroll = 0; this._stateEntryFade = 1.0; }  // Phase 9
+        // There used to be two parent dashboards — this canvas one and the
+        // DOM screen behind "Progress" on the title screen — showing
+        // overlapping subsets of the same data. Only the DOM one is kept;
+        // it is the richer of the two and the one a parent can read on a
+        // phone without the game running underneath it.
+        if (r.action === 'dashboard') { exitSlash(); window._parentDashboard?.show?.(); return; }
         if (r.action === 'tutorial')     { this._startOnboarding(() => { this.state = 'mode-select'; this._stateEntryFade = 1.0; }); }
         if (r.action === 'back') { exitSlash(); }
         return;
@@ -3352,92 +3605,115 @@ class SlashGame {
   }
   _drawEndlessGameover() {
     const ctx = this.ctx, W = this.W, H = this.H;
-    const t = this._endlessGameoverAge || 0;
-    this._endlessGameoverAge = (this._endlessGameoverAge || 0) + 1;
+    const t = this._endlessGameoverAge = (this._endlessGameoverAge || 0) + 1;
     const r = this._lastEndlessResult || {};
-    // Dark overlay
-    ctx.clearRect(0, 0, W, H);
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#0d0d1a'); bg.addColorStop(1, '#1a0d0d');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-    // Sad Riku (procedural)
-    this._drawRikuIdle(ctx, W/2, H * 0.18, Math.min(W*0.18, 80), t);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    // GAME OVER
-    const goSize = Math.min(W*0.1, 44);
-    ctx.font = `bold ${goSize}px Arial Black, sans-serif`;
-    ctx.fillStyle = '#FF4444';
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 6;
-    const goY = H * 0.3;
-    const slideIn = Math.min(1, t / 30);
-    ctx.strokeText('GAME OVER', W/2, goY - (1-slideIn)*40);
-    ctx.fillText('GAME OVER', W/2, goY - (1-slideIn)*40);
     const hs = this.progress.getEndlessHighScore();
-    const newHS = r.score >= hs;
-    // Score
-    const statY = H * 0.42;
+    const newBest = (r.score || 0) >= hs && (r.score || 0) > 0;
+
+    ctx.clearRect(0, 0, W, H);
+    UI.scene(ctx, this.sprites['arena-1'], W, H, this._sceneHolders.endlessOver,
+             'endlessover', 1.5);
+
+    // "GAME OVER" in red was the old headline. A five-year-old who just fell
+    // in a hole does not need to be told they lost in the largest type on
+    // screen; they need to be told how far they got and offered another go.
+    const title = newBest ? 'NEW BEST!' : 'NICE RUN';
+    const afterHeading = UI.heading(ctx, title, W, Math.max(10, H * 0.045));
+
+    ctx.textAlign = 'center';
+
+    // The distance is the hero stat — it is what the run was about.
+    ctx.textBaseline = 'alphabetic';
+    const distSize = Math.min(52, W * 0.115, H * 0.14);
+    const pop = Math.min(1, t / 12);
+    ctx.save();
+    ctx.translate(W / 2, afterHeading + 14 + distSize);
+    ctx.scale(0.8 + 0.2 * pop, 0.8 + 0.2 * pop);
+    ctx.font = `900 ${distSize}px ${UI.THEME.font}`;
+    ctx.fillStyle = newBest ? UI.THEME.gold : UI.THEME.rice;
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 12;
+    ctx.fillText(`${r.dist || 0}m`, 0, 0);
+    ctx.restore();
+
+    let y = afterHeading + 26 + distSize;
+
+    // Three quiet stat cards rather than four full-width bars with the
+    // numbers stranded at the far edge.
     const stats = [
-      { label:'SCORE', value: r.score?.toLocaleString() || '0', emoji:'⭐', hl: newHS },
-      { label:'DISTANCE', value: `${r.dist || 0}m`, emoji:'🏃' },
-      { label:'🌾 GRAINS', value: `+${r.grains || 0}`, emoji:'🌾' },
-      { label:'MAX COMBO', value: `${r.combo || 0}x`, emoji:'🔥' },
+      ['Score', (r.score || 0).toLocaleString(), UI.THEME.rice],
+      ['Rice', `+${r.grains || 0}`, UI.THEME.gold],
+      ['Best combo', `${r.combo || 0}x`, '#FF9E7A'],
     ];
-    const statH = Math.min(42, (H * 0.3) / stats.length);
-    stats.forEach((s, i) => {
-      const sy = statY + i * (statH + 4);
-      ctx.fillStyle = s.hl ? 'rgba(255,215,0,0.2)' : 'rgba(255,255,255,0.08)';
-      ctx.beginPath(); ctx.roundRect(W*0.1, sy, W*0.8, statH, 8); ctx.fill();
-      ctx.textAlign = 'left'; ctx.font = `bold ${Math.min(14,W*0.034)}px Arial, sans-serif`;
-      ctx.fillStyle = s.hl ? '#FFD700' : '#aaa';
-      ctx.fillText(`${s.emoji} ${s.label}`, W*0.14, sy + statH/2);
-      ctx.textAlign = 'right'; ctx.font = `bold ${Math.min(16,W*0.038)}px Arial Black, sans-serif`;
-      ctx.fillStyle = s.hl ? '#FFD700' : '#fff';
-      ctx.fillText(s.value + (s.hl ? ' ★NEW' : ''), W*0.9, sy + statH/2);
+    const colW = Math.min(132, (W - 56) / 3);
+    const x0 = (W - colW * 3 - 16) / 2;
+    const cardH = Math.min(52, H * 0.11);
+    stats.forEach(([label, value, tone], i) => {
+      const rc = { x: x0 + i * (colW + 8), y, w: colW, h: cardH };
+      ctx.fillStyle = UI.THEME.panel;
+      ctx.strokeStyle = UI.THEME.stroke;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(rc.x, rc.y, rc.w, rc.h, 12); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = tone;
+      ctx.font = `900 ${Math.min(19, W * 0.043)}px ${UI.THEME.font}`;
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(value, rc.x + rc.w / 2, rc.y + cardH * 0.52);
+      ctx.fillStyle = UI.THEME.muted;
+      ctx.font = `700 10px ${UI.THEME.font}`;
+      ctx.fillText(label, rc.x + rc.w / 2, rc.y + cardH - 9);
     });
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    // High score line
-    if (!newHS) {
-      ctx.font = `${Math.min(13,W*0.032)}px Arial, sans-serif`;
-      ctx.fillStyle = '#888';
-      ctx.fillText(`Best: ${hs?.toLocaleString() || 0} · Streak: #${this.progress.getBestCombo()}x`, W/2, statY + stats.length * (statH+4) + 16);
-    }
-    // Buttons
-    const btnY = H * 0.78;
-    const btnW2 = Math.min(W * 0.38, 150);
-    const btnH2 = Math.min(46, H * 0.07);
-    const gap = 12;
-    const btns = [
-      { label:'▶ PLAY AGAIN', col:'#FF6B35', x: W/2 - btnW2 - gap/2 },
-      { label:'🏪 SHOP', col:'#FF80FF', x: W/2 + gap/2 },
-    ];
+    y += cardH + 10;
+
+    // Where this run landed in the book — a real placing among this
+    // device's own runs, not a rank against invented strangers.
+    const book = this.progress.getRecordBook();
+    const place = book.findIndex(b => b.score === (r.score || 0));
+    ctx.textBaseline = 'top';
+    ctx.font = `700 ${Math.min(12.5, W * 0.03)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    const ord = ['1st', '2nd', '3rd'][place] || `${place + 1}th`;
+    ctx.fillText(
+      newBest ? 'Your best run yet on this device'
+      : place >= 0 ? `${ord} best on this device · best is ${hs.toLocaleString()}`
+      : `Best so far: ${hs.toLocaleString()}`,
+      W / 2, y);
+    y += 22;
+
+    // ── Buttons ───────────────────────────────────────────────
     this._endlessGameoverRects = [];
-    for (const b of btns) {
-      const grad = ctx.createLinearGradient(b.x, btnY, b.x + btnW2, btnY + btnH2);
-      grad.addColorStop(0, b.col); grad.addColorStop(1, b.col + 'aa');
-      ctx.fillStyle = grad;
-      ctx.strokeStyle = b.col; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.roundRect(b.x, btnY, btnW2, btnH2, 10); ctx.fill(); ctx.stroke();
-      ctx.font = `bold ${Math.min(15,W*0.037)}px Arial Black, sans-serif`;
-      ctx.fillStyle = '#fff';
-      ctx.fillText(b.label, b.x + btnW2/2, btnY + btnH2/2);
-      this._endlessGameoverRects.push({ x:b.x, y:btnY, w:btnW2, h:btnH2, label:b.label });
-    }
-    // Back to menu
-    ctx.font = `${Math.min(13,W*0.032)}px Arial, sans-serif`;
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillText('← MENU', W/2, H - 18);
-    this._endlessGameoverRects.push({ x:W/2-40, y:H-30, w:80, h:24, label:'MENU' });
+    const bw = Math.min(240, W - 72);
+    const again = { x: (W - bw) / 2, y: Math.min(y + 4, H - 92), w: bw, h: Math.min(46, H * 0.1) };
+    UI.card(ctx, again, { label: 'Run again', sub: 'Straight back in',
+                          primary: true, labelSize: 16, subSize: 10.5 });
+    this._endlessGameoverRects.push({ ...again, label: 'AGAIN' });
+
+    const ghosts = [['Shop', 'SHOP'], ['Record book', 'BOOK'], ['Menu', 'MENU']];
+    const gy = again.y + again.h + 10;
+    let gx = 0;
+    const widths = ghosts.map(([label]) => {
+      ctx.font = `800 12px ${UI.THEME.font}`;
+      return ctx.measureText(label).width + 30;
+    });
+    const totalW = widths.reduce((a, b) => a + b, 0) + 8 * (ghosts.length - 1);
+    gx = (W - totalW) / 2;
+    ghosts.forEach(([label, action], i) => {
+      const rect = UI.ghost(ctx, label, gx + widths[i] / 2, gy, { size: 12 });
+      this._endlessGameoverRects.push({ ...rect, label: action });
+      gx += widths[i] + 8;
+    });
   }
   _clickEndlessGameover(mx, my) {
     const rects = this._endlessGameoverRects || [];
     for (const r of rects) {
       if (mx >= r.x && mx <= r.x+r.w && my >= r.y && my <= r.y+r.h) {
-        if (r.label.includes('PLAY AGAIN')) {
+        if (r.label === 'AGAIN') {
           this._stopEndlessRunner();
           this._startEndlessRunner();
-        } else if (r.label.includes('SHOP')) {
+        } else if (r.label === 'SHOP') {
           this._preShopState = 'endless-gameover';
           this._startShop();
+        } else if (r.label === 'BOOK') {
+          this._stopEndlessRunner();
+          this.state = 'leaderboard';
         } else {
           this._stopEndlessRunner();
           this.state = 'mode-select';
@@ -3488,11 +3764,15 @@ class SlashGame {
     const itemH = Math.min(110, (H - 120) / 3);
     const startY = 96;
     this._shopItemRects = [];
+    const shopBottom = H - 58;
+    const shopRows = Math.ceil(items.length / cols);
+    this._scrollWindow(ctx, '_shopScroll', startY, shopBottom,
+                       shopRows * (itemH + 8), (shopScroll) => {
     items.forEach((item, i) => {
       const col = i % cols, row = Math.floor(i / cols);
       const ix = 8 + col * (itemW + 8);
-      const iy = startY + row * (itemH + 8) - this._shopScroll;
-      if (iy + itemH < 90 || iy > H - 20) return;
+      const iy = startY + row * (itemH + 8) - shopScroll;
+      if (iy + itemH < startY || iy > shopBottom) return;
       const owned = this.progress.ownsItem(item.id);
       const equipped = this.progress.getEquipped();
       const isEquip = Object.values(equipped).includes(item.id);
@@ -3540,6 +3820,7 @@ class SlashGame {
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(btnLabel, bx + bw/2, by + bh/2);
       this._shopItemRects.push({ x:ix, y:iy, w:itemW, h:itemH, item, bx, by, bw, bh });
+    });
     });
     UI.ghost(ctx, 'Back', W / 2, H - 34);
   }
@@ -3618,88 +3899,101 @@ class SlashGame {
   }
   _drawDaily() {
     const ctx = this.ctx, W = this.W, H = this.H, t = this._age;
-    ctx.clearRect(0, 0, W, H);
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#0d2040'); bg.addColorStop(1, '#1a3a1a');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    // Header
-    ctx.font = `bold ${Math.min(24,W*0.058)}px Arial Black, sans-serif`;
-    ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
-    ctx.strokeText('📅 DAILY CHALLENGE', W/2, 12);
-    ctx.fillText('📅 DAILY CHALLENGE', W/2, 12);
     const set = this._dailySet;
+    ctx.clearRect(0, 0, W, H);
+    UI.scene(ctx, this.sprites['arena-2'], W, H, this._sceneHolders.daily, 'daily', 1.5);
     if (!set) { this.state = 'mode-select'; return; }
-    // Theme
-    ctx.font = `bold ${Math.min(18,W*0.044)}px Arial, sans-serif`;
-    ctx.fillStyle = '#4ECDC4';
-    ctx.fillText(`${set.emoji || '📖'} Today: ${set.theme}`, W/2, 46);
+
+    const afterHeading = UI.heading(ctx, 'DAILY CHALLENGE', W, 12);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `800 ${Math.min(14, W * 0.034)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.fillText(`${set.emoji || '📖'} Today: ${set.theme}`, W / 2, afterHeading + 4);
+
+    let y = afterHeading + 26;
     if (this._dailyGolden) {
-      const gp = 0.7 + 0.3 * Math.sin(t * 0.1);
-      ctx.font = `bold ${Math.min(14,W*0.034)}px Arial, sans-serif`;
-      ctx.fillStyle = `rgba(255,215,0,${gp})`;
-      ctx.fillText('✨ GOLDEN DAY — double rice! ✨', W/2, 66);
+      const gp = 0.65 + 0.35 * Math.sin(t * 0.09);
+      ctx.font = `800 ${Math.min(12.5, W * 0.03)}px ${UI.THEME.font}`;
+      ctx.fillStyle = `rgba(242,193,78,${gp})`;
+      ctx.fillText('✨ Golden day — double rice ✨', W / 2, y);
+      y += 20;
     }
-    // Progress bar
-    const prog = this.progress.getDailyCompleted() ? this._dailyWords.length
-                 : Math.min(this._dailyBlended, this._dailyWords.length);
-    const pct = this._dailyWords.length > 0 ? prog / this._dailyWords.length : 0;
-    const barW = W * 0.75, barH = 18, barX = (W - barW)/2, barY = this._dailyGolden ? 88 : 75;
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, barH/2); ctx.fill();
-    const fillGrad = ctx.createLinearGradient(barX, 0, barX + barW * pct, 0);
-    fillGrad.addColorStop(0, '#00FF88'); fillGrad.addColorStop(1, '#FFD700');
-    ctx.fillStyle = fillGrad;
-    ctx.beginPath(); ctx.roundRect(barX, barY, barW * pct, barH, barH/2); ctx.fill();
-    ctx.font = `bold 13px Arial, sans-serif`; ctx.fillStyle = '#fff';
-    ctx.fillText(`${prog}/${this._dailyWords.length}`, W/2, barY + barH/2);
-    // Words list
-    const listY = 108;
-    const wordH = Math.min(40, (H * 0.48) / this._dailyWords.length);
+
+    // Progress
+    const prog = this.progress.getDailyCompleted() ? this._dailyWords.length : this._dailyBlended;
+    const pct = this._dailyWords.length ? prog / this._dailyWords.length : 0;
+    const barW = Math.min(W * 0.7, 320), barH = 12, barX = (W - barW) / 2;
+    ctx.fillStyle = 'rgba(10,6,12,0.62)';
+    ctx.strokeStyle = UI.THEME.stroke; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(barX, y, barW, barH, barH / 2); ctx.fill(); ctx.stroke();
+    if (pct > 0) {
+      const fill = ctx.createLinearGradient(barX, 0, barX + barW * pct, 0);
+      fill.addColorStop(0, '#7CFF9B'); fill.addColorStop(1, UI.THEME.gold);
+      ctx.fillStyle = fill;
+      ctx.beginPath(); ctx.roundRect(barX, y, Math.max(barH, barW * pct), barH, barH / 2); ctx.fill();
+    }
+    ctx.font = `800 10px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${prog} / ${this._dailyWords.length}`, W / 2, y + barH / 2 + 0.5);
+    y += barH + 12;
+
+    // Word list. Two columns when the set is long, so a six-word day does
+    // not push the action button off the bottom on a short screen.
+    const cols = this._dailyWords.length > 4 ? 2 : 1;
+    const rows = Math.ceil(this._dailyWords.length / cols);
+    const listW = Math.min(W - 40, 440);
+    const colW = (listW - (cols - 1) * 8) / cols;
+    const x0 = (W - listW) / 2;
+    const wordH = Math.max(28, Math.min(38, (H * 0.34) / rows));
     this._dailyWords.forEach((w, i) => {
-      const wy = listY + i * wordH;
+      const col = i % cols, row = Math.floor(i / cols);
+      const wx = x0 + col * (colW + 8);
+      const wy = y + row * (wordH + 5);
       const done = i < this._dailyBlended || this.progress.getDailyCompleted();
       const current = i === this._dailyIdx && !done;
-      ctx.fillStyle = done ? 'rgba(0,255,136,0.15)' : current ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.05)';
-      ctx.strokeStyle = done ? '#00FF88' : current ? '#FFD700' : '#333';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.roundRect(W*0.08, wy, W*0.84, wordH - 3, 8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = done ? 'rgba(124,255,155,0.13)'
+                    : current ? UI.THEME.panelHot : UI.THEME.panel;
+      ctx.strokeStyle = done ? 'rgba(124,255,155,0.5)'
+                      : current ? UI.THEME.gold : UI.THEME.stroke;
+      ctx.lineWidth = current ? 2 : 1;
+      ctx.beginPath(); ctx.roundRect(wx, wy, colW, wordH, 10); ctx.fill(); ctx.stroke();
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.min(16,W*0.038)}px Arial Black, sans-serif`;
-      ctx.fillStyle = done ? '#00FF88' : current ? '#FFD700' : '#888';
-      ctx.fillText(`${done ? '✅' : current ? '▶' : '○'} ${w.word?.toUpperCase() || '?'}`, W*0.12, wy + wordH/2);
+      ctx.font = `900 ${Math.min(15, W * 0.035)}px ${UI.THEME.font}`;
+      ctx.fillStyle = done ? '#A9F5BE' : current ? UI.THEME.gold : UI.THEME.locked;
+      ctx.fillText(`${done ? '✓' : current ? '▶' : '·'}  ${(w.word || '?').toUpperCase()}`,
+                   wx + 12, wy + wordH / 2);
       ctx.textAlign = 'right';
-      ctx.font = `${Math.min(14,W*0.034)}px serif`;
-      ctx.fillText(w.hint || '?', W*0.9, wy + wordH/2);
+      ctx.font = `${Math.min(15, W * 0.035)}px serif`;
+      ctx.globalAlpha = done ? 1 : 0.75;
+      ctx.fillText(w.hint || '', wx + colW - 12, wy + wordH / 2);
+      ctx.globalAlpha = 1;
     });
-    // Action button
-    const completed = this.progress.getDailyCompleted() || this._dailyBlended >= this._dailyWords.length;
-    const btnY = H * 0.79, btnW = Math.min(W*0.6, 240), btnH = 48;
-    const btnX = (W - btnW) / 2;
-    if (completed) {
-      ctx.fillStyle = '#FFD700'; ctx.strokeStyle = '#FF8C00'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.min(18,W*0.044)}px Arial Black, sans-serif`;
-      ctx.fillStyle = '#000'; ctx.fillText('🏆 COMPLETED! Claim Reward', btnX + btnW/2, btnY + btnH/2);
-    } else {
-      ctx.fillStyle = '#FF6B35'; ctx.strokeStyle = '#FF4400'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 12); ctx.fill(); ctx.stroke();
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.min(18,W*0.044)}px Arial Black, sans-serif`;
-      ctx.fillStyle = '#fff';
-      ctx.fillText(this._dailyIdx < this._dailyWords.length ? '⚔️ BLEND NEXT WORD' : '✅ All Done!', btnX + btnW/2, btnY + btnH/2);
-    }
-    this._dailyActionRect = { x:btnX, y:btnY, w:btnW, h:btnH, completed };
-    // Streak display
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.font = `bold 14px Arial, sans-serif`;
-    ctx.fillStyle = '#FF8C00';
-    ctx.fillText(`🔥 ${this.progress.getDailyStreak()} day streak · 🌾 Reward: ${150 + this.progress.getDailyStreak()*25}`, W/2, btnY - 8);
-    // Back
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    y += rows * (wordH + 5) + 8;
+
+    // Reward line, then the action — in that order, so the button is not
+    // sitting on top of its own caption the way it used to.
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = `700 ${Math.min(12, W * 0.029)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.fillText(
+      `${this.progress.getDailyStreak()} day streak · reward ${150 + this.progress.getDailyStreak() * 25} rice`,
+      W / 2, y);
+    y += 20;
+
+    const completed = this.progress.getDailyCompleted()
+                   || this._dailyBlended >= this._dailyWords.length;
+    const btnW = Math.min(W * 0.62, 250), btnH = Math.min(46, H * 0.1);
+    const btnRect = { x: (W - btnW) / 2, y: Math.min(y, H - 64 - btnH - 8), w: btnW, h: btnH };
+    UI.card(ctx, btnRect, {
+      label: completed ? 'Claim your reward'
+           : this._dailyIdx < this._dailyWords.length ? 'Blend the next word' : 'All done',
+      primary: true, labelSize: 15, chevron: !completed,
+    });
+    this._dailyActionRect = { ...btnRect, completed };
+
     this._drawBigBack(ctx, W, H);
-    this._dailyBackRect = { x:W/2-80, y:H-52, w:160, h:46 };
+    this._dailyBackRect = { x: W / 2 - 80, y: H - 52, w: 160, h: 46 };
   }
   _clickDaily(mx, my) {
     if (this._dailyBackRect) {
@@ -3760,12 +4054,15 @@ class SlashGame {
     ctx.fillText(`${unlocked.length} of ${ACHIEVEMENTS.length} unlocked`, W/2, 46);
     const cols = 2, rows = Math.ceil(ACHIEVEMENTS.length / cols);
     const cellW = (W - 24) / cols, cellH = Math.min(64, (H - 90) / 4.5);
-    const startY = 62;
-    const scroll = this._achScroll || 0;
+    // The list stops above the Back button instead of running underneath it,
+    // and it can now actually be scrolled — see _bindMenuScroll.
+    const listTop = 62, listBottom = H - 64;
+    const contentH = rows * (cellH + 6);
+    this._scrollWindow(ctx, '_achScroll', listTop, listBottom, contentH, (scroll) => {
     ACHIEVEMENTS.forEach((ach, i) => {
       const col = i % cols, row = Math.floor(i / cols);
-      const ax = 8 + col * (cellW + 8), ay = startY + row * (cellH + 6) - scroll;
-      if (ay + cellH < 60 || ay > H) return;
+      const ax = 8 + col * (cellW + 8), ay = listTop + row * (cellH + 6) - scroll;
+      if (ay + cellH < listTop || ay > listBottom) return;
       const isUnlocked = unlocked.includes(ach.id);
       const isNew = this.progress.data.newAchievements?.includes(ach.id);
       ctx.fillStyle = isNew ? 'rgba(74,48,20,0.92)'
@@ -3802,6 +4099,7 @@ class SlashGame {
       ctx.fillText(ach.desc, ax + 52, ay + cellH*0.65);
       ctx.globalAlpha = 1;
     });
+    });
     this._drawBigBack(ctx, W, H);
     this._achBackRect = { x:W/2-80, y:H-52, w:160, h:46 };
   }
@@ -3836,34 +4134,64 @@ class SlashGame {
     ctx.clearRect(0, 0, W, H);
     UI.scene(ctx, this.sprites['arena-5'], W, H,
                  this._sceneHolders.leaderboard, 'leaderboard', 1.6);
-    UI.heading(ctx, 'BEST SCORES', W, 12);
+    const afterHeading = UI.heading(ctx, 'RECORD BOOK', W, 12);
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.font = `700 12px ${UI.THEME.font}`;
     ctx.fillStyle = UI.THEME.muted;
-    ctx.fillText('Endless Run · scores on this device', W/2, 46);
-    const leaders = this.progress.getLeaderboard();
-    const rowH = Math.min(40, (H - 110) / 11);
-    const medals = ['🥇','🥈','🥉'];
-    leaders.forEach((l, i) => {
-      const ry = 64 + i * (rowH + 4);
-      const isMe = l.isMe;
-      ctx.fillStyle = isMe ? 'rgba(74,48,20,0.92)'
+    ctx.fillText('Dino Dash runs on this device', W / 2, afterHeading + 4);
+
+    const rows = this.progress.getRecordBook();
+
+    // An empty book says so. It used to be padded with ten invented
+    // strangers who all scored higher than the child — see getRecordBook.
+    if (!rows.length) {
+      const bw = Math.min(320, W - 64);
+      const r = { x: (W - bw) / 2, y: afterHeading + 44, w: bw, h: 92 };
+      ctx.fillStyle = UI.THEME.panel;
+      ctx.strokeStyle = UI.THEME.stroke;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 14); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = UI.THEME.rice;
+      ctx.font = `900 ${Math.min(17, W * 0.04)}px ${UI.THEME.font}`;
+      ctx.fillText('No runs yet', W / 2, r.y + 22);
+      ctx.fillStyle = UI.THEME.muted;
+      ctx.font = `700 ${Math.min(12.5, W * 0.03)}px ${UI.THEME.font}`;
+      ctx.fillText('Play Dino Dash and the first page', W / 2, r.y + 48);
+      ctx.fillText('of the book is yours.', W / 2, r.y + 66);
+      this._drawBigBack(ctx, W, H);
+      return;
+    }
+
+    const top = afterHeading + 30;
+    const rowH = Math.min(38, (H - top - 62) / rows.length - 4);
+    const medals = ['🥇', '🥈', '🥉'];
+    rows.forEach((l, i) => {
+      const ry = top + i * (rowH + 4);
+      ctx.fillStyle = l.isBest ? 'rgba(74,48,20,0.92)'
                     : i < 3 ? UI.THEME.panelHot : UI.THEME.panel;
-      ctx.strokeStyle = isMe ? UI.THEME.gold : UI.THEME.stroke;
-      ctx.lineWidth = isMe ? 2 : 1;
-      ctx.beginPath(); ctx.roundRect(10, ry, W-20, rowH, 10); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = l.isBest ? UI.THEME.gold : UI.THEME.stroke;
+      ctx.lineWidth = l.isBest ? 2 : 1;
+      ctx.beginPath(); ctx.roundRect(10, ry, W - 20, rowH, 10); ctx.fill(); ctx.stroke();
+
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.font = `${Math.min(16,W*0.038)}px serif`;
-      ctx.fillText(i < 3 ? medals[i] : `${i+1}.`, 16, ry + rowH/2);
-      ctx.font = `800 ${Math.min(14,W*0.034)}px ${UI.THEME.font}`;
-      ctx.fillStyle = isMe ? UI.THEME.gold : UI.THEME.rice;
-      ctx.fillText(l.name, 46, ry + rowH/2);
+      ctx.font = `${Math.min(16, W * 0.038)}px serif`;
+      ctx.fillText(i < 3 ? medals[i] : `${i + 1}.`, 16, ry + rowH / 2);
+      ctx.font = `800 ${Math.min(14, W * 0.034)}px ${UI.THEME.font}`;
+      ctx.fillStyle = l.isBest ? UI.THEME.gold : UI.THEME.rice;
+      ctx.fillText(l.name, 46, ry + rowH / 2 - (l.at ? 6 : 0));
+      if (l.at) {
+        ctx.font = `700 10px ${UI.THEME.font}`;
+        ctx.fillStyle = UI.THEME.muted;
+        ctx.fillText(l.at, 46, ry + rowH / 2 + 8);
+      }
+
       ctx.textAlign = 'right';
-      ctx.font = `900 ${Math.min(14,W*0.034)}px ${UI.THEME.font}`;
-      ctx.fillStyle = isMe ? UI.THEME.gold : UI.THEME.rice;
-      ctx.fillText(l.score.toLocaleString(), W - 14, ry + rowH/2 - 8);
-      ctx.font = `700 11px ${UI.THEME.font}`; ctx.fillStyle = UI.THEME.muted;
-      ctx.fillText(`${l.dist}m`, W - 14, ry + rowH/2 + 7);
+      ctx.font = `900 ${Math.min(14, W * 0.034)}px ${UI.THEME.font}`;
+      ctx.fillStyle = l.isBest ? UI.THEME.gold : UI.THEME.rice;
+      ctx.fillText(l.score.toLocaleString(), W - 14, ry + rowH / 2 - 7);
+      ctx.font = `700 11px ${UI.THEME.font}`;
+      ctx.fillStyle = UI.THEME.muted;
+      ctx.fillText(`${l.dist}m`, W - 14, ry + rowH / 2 + 7);
     });
     this._drawBigBack(ctx, W, H);
   }
@@ -3890,121 +4218,6 @@ class SlashGame {
       }
     }
   }
-  // ── PHASE 9: PARENT / TEACHER DASHBOARD ──────────────────────
-  // Shows per-stage stats, weak phonemes, and lifetime totals so
-  // parents and teachers can see where a child needs more practice.
-  _drawDashboard() {
-    const ctx = this.ctx, W = this.W, H = this.H, p = this.progress;
-    ctx.clearRect(0, 0, W, H);
-
-    // Background
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#0a1628'); bg.addColorStop(1, '#1b2b4a');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-
-    // Header
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `bold ${Math.min(22, W * 0.052)}px "Nunito", system-ui`;
-    ctx.fillStyle = '#69F0AE'; ctx.shadowColor = '#00C853'; ctx.shadowBlur = 10;
-    ctx.fillText('📊 Progress Report', W / 2, 14);
-    ctx.shadowBlur = 0;
-    ctx.font = `12px system-ui`; ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillText('Parent / teacher view — shows learning data stored on this device', W / 2, 44);
-
-    // ── Global stats row ────────────────────────────────────────
-    const gStats = [
-      { label: 'Words blended', val: p.data.totalWordsBlended ?? 0 },
-      { label: 'Best combo',    val: p.data.bestCombo         ?? 0 },
-      { label: 'Daily streak',  val: p.data.dailyStreak       ?? 0, suffix: ' days' },
-      { label: 'Rice grains',   val: p.getRicePoints()        ?? 0, suffix: ' 🍚' },
-    ];
-    const gsW = (W - 24) / gStats.length;
-    gStats.forEach((gs, i) => {
-      const gx = 12 + i * gsW, gy = 64;
-      ctx.fillStyle = 'rgba(255,255,255,0.07)';
-      ctx.beginPath(); ctx.roundRect(gx, gy, gsW - 6, 46, 8); ctx.fill();
-      ctx.fillStyle = '#69F0AE'; ctx.font = `bold ${Math.min(18, gsW * 0.3)}px "Nunito", system-ui`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillText(`${gs.val}${gs.suffix || ''}`, gx + (gsW - 6) / 2, gy + 6);
-      ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = `10px system-ui`;
-      ctx.fillText(gs.label, gx + (gsW - 6) / 2, gy + 30);
-    });
-
-    // ── Per-stage breakdown ──────────────────────────────────────
-    const stages = PHONICS_DATA.stageList || [];
-    const rowH = 84, topY = 122;
-    stages.forEach((stage, idx) => {
-      const s     = p.getStage(stage.id);
-      const acc   = s.totalBlends > 0 ? Math.round(s.correctBlends / s.totalBlends * 100) : null;
-      const stars = p.getStars(stage.id);
-      const mastered = (s.wordsMastered || []).length;
-      const ry = topY + idx * (rowH + 8);
-
-      // Row bg
-      ctx.fillStyle = s.unlocked ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.03)';
-      ctx.beginPath(); ctx.roundRect(10, ry, W - 20, rowH, 10); ctx.fill();
-
-      // Stage name + stars
-      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.font = `bold ${Math.min(14, W * 0.033)}px "Nunito", system-ui`;
-      ctx.fillStyle = s.unlocked ? '#fff' : 'rgba(255,255,255,0.35)';
-      ctx.fillText(`${stage.icon || '🦕'} Stage ${stage.id}: ${stage.name}`, 20, ry + 9);
-      ctx.font = '14px serif';
-      for (let si = 0; si < 3; si++) {
-        ctx.globalAlpha = si < stars ? 1 : 0.2;
-        ctx.fillText('⭐', 20 + si * 18, ry + 30);
-      }
-      ctx.globalAlpha = 1;
-
-      if (!s.unlocked) {
-        ctx.font = '11px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillText('Locked — complete earlier stages', W / 2, ry + rowH / 2);
-        ctx.textAlign = 'left';
-        return;
-      }
-
-      // Stats pills
-      const pills = [
-        { t: acc !== null ? `🎯 ${acc}%` : '🎯 —',   col: acc >= 80 ? '#76FF03' : acc >= 60 ? '#FFD700' : '#FF5252' },
-        { t: `📖 ${mastered} mastered`,               col: '#4FC3F7' },
-        { t: s.mastery?.noHit    ? '✅ No-Hit' : '⬜ No-Hit',   col: s.mastery?.noHit    ? '#00E676' : 'rgba(255,255,255,0.35)' },
-        { t: s.mastery?.speedClear ? '✅ Speed' : '⬜ Speed',   col: s.mastery?.speedClear ? '#FFD700' : 'rgba(255,255,255,0.35)' },
-      ];
-      let px2 = 20;
-      pills.forEach(pill => {
-        ctx.font = `bold 11px "Nunito", system-ui`;
-        const tw = ctx.measureText(pill.t).width + 14;
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath(); ctx.roundRect(px2, ry + 52, tw, 22, 6); ctx.fill();
-        ctx.fillStyle = pill.col;
-        ctx.fillText(pill.t, px2 + 7, ry + 59);
-        px2 += tw + 6;
-      });
-
-      // Weak phonemes
-      const weak = p.getWeakPhonemes(stage.id);
-      const weakKeys = Object.entries(weak)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 4)
-        .map(([ph]) => ph.toUpperCase());
-      if (weakKeys.length) {
-        ctx.font = '10px system-ui'; ctx.fillStyle = '#FF8A80'; ctx.textAlign = 'right';
-        ctx.fillText(`Needs work: ${weakKeys.join(', ')}`, W - 18, ry + 62);
-      }
-      ctx.textAlign = 'left';
-    });
-
-    // ── Back button ──────────────────────────────────────────────
-    const totalH = topY + stages.length * (rowH + 8) + 16;
-    const backY = Math.max(H - 36, totalH);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = 'bold 14px "Nunito", system-ui';
-    ctx.fillStyle = 'rgba(105,240,174,0.85)';
-    ctx.fillText('← Back', W / 2, backY + 14);
-    this._dashBackRect = { x: W/2 - 60, y: backY, w: 120, h: 30 };
-
-    ctx.textBaseline = 'alphabetic';
-  }
 
   _queueAchievementPopup(ach) {
     if (!this._achPopupQueue) this._achPopupQueue = [];
@@ -4021,34 +4234,35 @@ class SlashGame {
     if (!this._achPopup) return;
     const p = this._achPopup;
     const ctx = this.ctx, W = this.W;
+    const H = this.H;
     const alpha = Math.min(1, p.life > 0.8 ? (1-p.life)*5 : p.life < 0.3 ? p.life/0.3 : 1);
-    const slideY = p.life > 0.8 ? (1-p.life)*5*60 - 60 : 0;
-    const popW = Math.min(W * 0.85, 320), popH = 60;
-    const popX = (W - popW) / 2, popY = 10 + slideY;
+    // Slides up from the foot of the screen, not down from the top. It used
+    // to land at y=10 in the middle — exactly where every screen puts its
+    // heading — so an unlock hid the title of whatever the player was
+    // looking at. Nothing important lives along the bottom edge.
+    const popW = Math.min(W * 0.85, 320), popH = 58;
+    const rise = p.life > 0.8 ? (1 - (1-p.life)*5) * 70 : 0;
+    // Clear of the big Back button that several screens park at H-52.
+    const popX = (W - popW) / 2, popY = H - popH - 72 + rise;
     ctx.save();
     ctx.globalAlpha = alpha;
-    // Card
-    const grad = ctx.createLinearGradient(popX, popY, popX + popW, popY);
-    grad.addColorStop(0, '#2a1a4a'); grad.addColorStop(1, '#1a2a4a');
-    ctx.fillStyle = grad;
-    ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 12;
-    ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(popX, popY, popW, popH, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = UI.THEME.panelHot;
+    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 14;
+    ctx.strokeStyle = UI.THEME.gold; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(popX, popY, popW, popH, 12); ctx.fill(); ctx.stroke();
     ctx.shadowBlur = 0;
-    // Emoji
-    ctx.font = '26px serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(p.emoji || '🏆', popX + 10, popY + popH/2);
-    // Labels
-    ctx.font = `bold ${Math.min(13,W*0.032)}px Arial Black, sans-serif`;
-    ctx.fillStyle = '#FFD700'; ctx.textAlign = 'left';
-    ctx.fillText(p.name || 'Achievement!', popX + 46, popY + popH*0.33);
-    ctx.font = `${Math.min(11,W*0.027)}px Arial, sans-serif`;
-    ctx.fillStyle = '#bbb';
-    ctx.fillText(p.desc || '', popX + 46, popY + popH*0.65);
-    // ★ ACHIEVEMENT badge
-    ctx.textAlign = 'right'; ctx.font = `bold 11px Arial, sans-serif`;
-    ctx.fillStyle = '#888';
-    ctx.fillText('★ ACHIEVEMENT', popX + popW - 8, popY + 12);
+    ctx.font = '25px serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.emoji || '🏆', popX + 12, popY + popH/2);
+    ctx.font = `900 ${Math.min(13.5, W*0.032)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.gold;
+    ctx.fillText(p.name || 'Achievement!', popX + 48, popY + popH*0.34);
+    ctx.font = `700 ${Math.min(11,W*0.027)}px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.muted;
+    ctx.fillText(p.desc || '', popX + 48, popY + popH*0.68);
+    ctx.textAlign = 'right';
+    ctx.font = `800 10px ${UI.THEME.font}`;
+    ctx.fillStyle = UI.THEME.goldDim;
+    ctx.fillText('★ UNLOCKED', popX + popW - 10, popY + 12);
     ctx.restore();
   }
 }

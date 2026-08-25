@@ -72,3 +72,47 @@ test('a missed day is forgiven for free', () => {
   t._checkLoginStreak();
   assert.strictEqual(t.data.loginStreak, 1, 'a real lapse still resets — a streak has to mean something');
 });
+
+test('the record book contains no invented players', () => {
+  // It used to ship ten of them — NinjaRice99, DinoSlayer, PhonicsKing —
+  // all scoring above a child who had just started, on a screen captioned
+  // "scores on this device". Manufactured social comparison, and a false
+  // caption on top of it.
+  assert.ok(!trackerSrc.includes('FAKE_LEADERS'),
+    'fabricated competitors must not come back');
+  for (const ghost of ['NinjaRice99', 'DinoSlayer', 'PhonicsKing', 'BlendMaster']) {
+    assert.ok(!trackerSrc.includes(ghost), `${ghost} is not a real player`);
+  }
+
+  const T = loadScript('js/progressTracker.js', { capture: ['ProgressTracker'] });
+  const t = new T.ProgressTracker();
+  t.data.runLog = [];
+  assert.deepStrictEqual(t.getRecordBook(), [],
+    'an empty book must stay empty rather than being padded');
+});
+
+test('the record book is built from runs that really happened', () => {
+  const T = loadScript('js/progressTracker.js', { capture: ['ProgressTracker'] });
+  const t = new T.ProgressTracker();
+  t.data.runLog = [];
+  t.setPlayerName('Mia');
+  t.recordEndlessRun(1200, 340, 6);
+  t.recordEndlessRun(400, 90, 2);
+  t.recordEndlessRun(0, 0, 0);      // a mis-tap, not a run
+
+  const book = t.getRecordBook();
+  assert.strictEqual(book.length, 2, 'a zero-distance run is not a record');
+  assert.strictEqual(book[0].score, 1200, 'best first');
+  assert.strictEqual(book[0].name, 'Mia');
+  assert.strictEqual(book[0].isBest, true);
+});
+
+test('the record book cannot grow without bound', () => {
+  const T = loadScript('js/progressTracker.js', { capture: ['ProgressTracker'] });
+  const t = new T.ProgressTracker();
+  t.data.runLog = [];
+  for (let i = 0; i < 200; i++) t.recordEndlessRun(i + 1, i + 1, 0);
+  assert.ok(t.data.runLog.length <= 20, `run log grew to ${t.data.runLog.length}`);
+  assert.ok(t.getRecordBook().length <= 10);
+  assert.strictEqual(t.getRecordBook()[0].score, 200, 'the best run survives the trim');
+});
