@@ -175,6 +175,53 @@ function check(name, ok, detail = '') {
     !!coached && coached.tone === 'coach',
     coached ? `"${coached.text}"` : 'no miss produced');
 
+  // ── Taking a hit ───────────────────────────────────────────
+  // Riku was hard-coded to riku-idle: no pose change when he was hurt, and
+  // the only cue was a white tint on a white rice ball. riku-hurt had been
+  // sitting unused in the manifest the whole time.
+  const hurt = await page.evaluate(() => {
+    const be = _slashGameInstance.battle;
+    // Start from a swing: being hit has to interrupt it, not queue behind it.
+    be._rikuHurtHold = 0;
+    be._hit('boss', 5);
+    const before = be._resolveRikuSpriteKey();
+    const hpBefore = be.rikuHp;
+    be._hit('riku', 12);
+    const during = be._resolveRikuSpriteKey();
+    // The pose must outlast the tint, or it is gone before anyone sees it.
+    const poseFrames = be._rikuHurtHold;
+    let tintFrames = 0;
+    for (let f = be._rikuFlash; f > 0.02; f -= 0.07) tintFrames++;
+    return { before, during, poseFrames, tintFrames, hpBefore, hpAfter: be.rikuHp,
+             hasArt: !!be.sprites['riku-hurt'] };
+  });
+  check('Riku changes pose when he is hit',
+    hurt.hasArt && hurt.during === 'riku-hurt' && hurt.before !== 'riku-hurt',
+    `${hurt.before} -> ${hurt.during}`);
+  check('landing a hit gives Riku a pose too',
+    hurt.before === 'riku-run', `swinging showed ${hurt.before}`);
+  check('the hurt pose outlasts the flash',
+    hurt.poseFrames > hurt.tintFrames,
+    `pose ${hurt.poseFrames} frames vs tint ${hurt.tintFrames}`);
+
+  // Both fighters must stay on screen however hard they are knocked.
+  const onScreen = await page.evaluate(() => {
+    const be = _slashGameInstance.battle;
+    const L = be._layout();
+    const widthOf = (key) => {
+      const sp = be.sprites[key];
+      const box = be._contentBox(sp);
+      return (L.riku.size / box.h) * (sp.naturalWidth / sp.naturalHeight);
+    };
+    // The widest pose Riku has, shoved as hard as the engine can shove him.
+    const w = Math.max(widthOf('riku-idle'), widthOf('riku-hurt'));
+    be._hit('riku', be.rikuMaxHp);
+    return { knock: be._rikuKnock, x: L.riku.x, w, W: be.W };
+  });
+  check('a knocked-back fighter stays on screen',
+    onScreen.x + onScreen.knock - onScreen.w / 2 > -onScreen.w,
+    `x=${Math.round(onScreen.x)} knock=${Math.round(onScreen.knock)} w=${Math.round(onScreen.w)}`);
+
   // Battle -> win. Zeroing bossHp is not enough: the engine only checks it
   // when damage is applied, so drive the defeat through the same entry point
   // a winning blend uses.

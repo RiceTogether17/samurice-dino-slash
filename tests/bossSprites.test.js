@@ -73,25 +73,66 @@ test('phase poses follow the naming the resolver depends on', () => {
   }
 });
 
-test('every boss sprite faces the player', async () => {
-  // Riku always stands on the left. The art was generated facing both ways,
-  // and mirroring at draw time is wrong for one group whichever way it is
-  // set — which is exactly how the boss ended up facing away from the fight.
-  // tools/normalise-facing.js flips the data instead; this keeps it flipped.
-  const sharp = require('sharp');
-  const dir = path.join(ROOT, 'assets/dinosaurs');
-  const wrong = [];
-  for (const name of fs.readdirSync(dir).filter(f => /\.(webp|png)$/i.test(f))) {
-    const file = path.join(dir, name);
-    const meta = await sharp(file).metadata();
-    const raw = await sharp(file).ensureAlpha().raw().toBuffer();
-    const W = meta.width, H = meta.height;
-    let left = 0, right = 0;
-    for (let y = Math.floor(H * 0.10); y < Math.floor(H * 0.40); y++) {
-      for (let x = 0; x < W; x++) if (raw[(y * W + x) * 4 + 3] > 40) (x < W / 2 ? left++ : right++);
-    }
-    if (right > left * 1.05) wrong.push(name);
-  }
-  assert.deepStrictEqual(wrong, [],
-    `these face away from Riku — run tools/normalise-facing.js --write:\n${wrong.join('\n')}`);
+// ── Which way the art faces ──────────────────────────────────────────────
+//
+// Riku stands on the left, so a boss has to face left. This shipped wrong:
+// the stage-2 boss faced away from the player for a whole fight.
+//
+// There used to be a test here that measured pixel mass either side of
+// centre and asserted more of it sat on the left. It passed the whole time
+// the stage-2 boss was facing backwards, because a mouse's ear outweighs
+// its head — and once the art was corrected the same heuristic started
+// failing on the now-correct sprites. It was giving confidence in both
+// directions and accuracy in neither, so it is gone.
+//
+// The classification is a reviewed table in tools/normalise-facing.js now:
+// every sprite was looked at on a contact sheet with a centre line through
+// it. These tests keep the table in step with what is on disk, which is a
+// thing a machine can actually check.
+const facing = require('../tools/normalise-facing.js');
+
+test('every sprite on disk is classified', () => {
+  // New art must be looked at. Without this an unreviewed sprite silently
+  // inherits nothing and can face any direction it likes.
+  const unclassified = facing.spriteFiles()
+    .map(facing.baseName)
+    .filter(n => !(n in facing.FACING));
+  assert.deepStrictEqual(unclassified, [],
+    `classify these in tools/normalise-facing.js: ${unclassified.join(', ')}`);
+});
+
+test('the table has no entries for art that no longer exists', () => {
+  const onDisk = new Set(facing.spriteFiles().map(facing.baseName));
+  const stale = Object.keys(facing.FACING).filter(n => !onDisk.has(n));
+  assert.deepStrictEqual(stale, [], `stale table entries: ${stale.join(', ')}`);
+});
+
+test('every classification is a value the tool understands', () => {
+  const bad = Object.entries(facing.FACING)
+    .filter(([, f]) => !facing.FACINGS.has(f))
+    .map(([n, f]) => `${n}: ${f}`);
+  assert.deepStrictEqual(bad, [], bad.join(', '));
+});
+
+test('nothing is left waiting to be flipped', () => {
+  // A 'right' entry means the file on disk faces away and --write has not
+  // been run. That is the exact state the player sees as a boss with its
+  // back turned, so it must never be committed.
+  assert.deepStrictEqual([...facing.NEEDS_FLIP], [],
+    'run: node tools/normalise-facing.js --write, then update the table');
+});
+
+test('art carrying letters is never mirrored', () => {
+  // Flipping glyph-goblin to face the player reversed the B and the C on
+  // its blocks. This is a game that teaches letter-sound correspondence,
+  // and letter reversal is the confusion early readers have — so facing
+  // loses to legibility here, and the category exists to record that.
+  const src = fs.readFileSync(
+    path.join(ROOT, 'tools/normalise-facing.js'), 'utf8');
+  assert.ok(facing.FACINGS.has('right-text'),
+    'the never-mirror category must exist');
+  assert.ok(!facing.NEEDS_FLIP.has('glyph-goblin'),
+    'glyph-goblin holds ABC blocks and must not be flipped');
+  assert.ok(/letter reversal|reverses the B/i.test(src),
+    'the reason must stay written down, or someone will "fix" the facing');
 });

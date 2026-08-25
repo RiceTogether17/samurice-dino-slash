@@ -34,6 +34,12 @@
   // Play-testing the flat version killed a world-2 boss in five correct
   // answers, which is not a boss fight.
   const ROUNDS_TO_WIN = 10;
+  /** Flash colours. White reads on the bosses; Riku is white, so he needs red. */
+  const WHITE_TINT = '#ffffff';
+  const HURT_TINT = '#FF4E3A';
+  /** Frames the hurt and swing poses are held — long enough to actually see. */
+  const HURT_POSE_FRAMES = 34;
+  const SWING_POSE_FRAMES = 16;
   const CHIP_DAMAGE = 8;        // what a second miss costs the player
   const BOSS_PHASE_2 = 0.55;
   const BOSS_PHASE_3 = 0.25;
@@ -88,6 +94,9 @@
       this._freeze = 0;          // hit-stop frames
       this._bossFlash = 0;
       this._rikuFlash = 0;
+      this._boxCache = new Map();  // sprite -> opaque bounds, see _contentBox
+      this._rikuHurtHold = 0;    // frames left showing riku-hurt
+      this._rikuSwingHold = 0;   // frames left showing the attack pose
       this._bossKnock = 0;
       this._rikuKnock = 0;
       this._tintCache = new Map();
@@ -156,7 +165,10 @@
         W, H, floorY,
         // `y` is the fighters' feet, so both stand on the same ground line
         // whatever size they are.
-        riku: { x: Math.round(W * 0.085), y: floorY, size: Math.round(H * 0.30) },
+        // Far enough in that a knockback has somewhere to go: Riku is drawn
+        // to his content bounds now, so his hurt pose is a good deal wider
+        // than his idle one.
+        riku: { x: Math.round(W * 0.13), y: floorY, size: Math.round(H * 0.30) },
         boss: { x: Math.round(W * 0.865), y: floorY, size: Math.round(H * 0.42) },
         field: {
           x: fieldX,
@@ -407,11 +419,16 @@
       if (who === 'boss') {
         this.bossHp = Math.max(0, this.bossHp - amount);
         this._bossFlash = 1;
+        // Riku swings when the boss takes damage — landing a hit gets a
+        // picture, not just a number leaving the other guy.
+        if (this._rikuHurtHold <= 0) this._rikuSwingHold = SWING_POSE_FRAMES;
         this._bossKnock = 10 + weight * 22;
         this._bossShake = 12 + weight * 20;
       } else {
         this.rikuHp = Math.max(0, this.rikuHp - amount);
         this._rikuFlash = 1;
+        this._rikuHurtHold = HURT_POSE_FRAMES;
+        this._rikuSwingHold = 0;   // being hit interrupts a swing
         this._rikuKnock = -(8 + weight * 16);
         this._rikuShake = 12 + weight * 16;
       }
@@ -603,6 +620,8 @@
       if (this._flash > 0) this._flash = Math.max(0, this._flash - 0.03);
       this._bossFlash = Math.max(0, this._bossFlash - 0.07);
       this._rikuFlash = Math.max(0, this._rikuFlash - 0.07);
+      if (this._rikuHurtHold > 0) this._rikuHurtHold--;
+      if (this._rikuSwingHold > 0) this._rikuSwingHold--;
       this._bossKnock *= 0.86;
       this._rikuKnock *= 0.86;
       // Health bars chase the real value so the loss is legible as movement.
@@ -710,10 +729,11 @@
       ctx.fillStyle = this.stage.groundColor || '#2E7D32';
       ctx.fillRect(0, L.floorY, L.W, 6);
 
-      this._drawFighter(ctx, L.riku, this.sprites['riku-idle'],
-                        this._rikuShake, this._rikuFlash, this._rikuKnock);
+      this._drawFighter(ctx, L.riku, this.sprites[this._resolveRikuSpriteKey()],
+                        this._rikuShake, this._rikuFlash, this._rikuKnock,
+                        this._rikuHurtHold > 0 ? HURT_TINT : WHITE_TINT);
       this._drawFighter(ctx, L.boss, this.sprites[this._resolveBossSpriteKey()],
-                        this._bossShake, this._bossFlash, this._bossKnock);
+                        this._bossShake, this._bossFlash, this._bossKnock, WHITE_TINT);
 
       if (this._flash > 0) {
         ctx.fillStyle = `rgba(255,255,255,${this._flash})`;
@@ -728,31 +748,134 @@
      * facing away from the fight. tools/normalise-facing.js fixes the data so
      * every boss already faces the player, and this stays a plain blit.
      */
-    _drawFighter(ctx, spot, sprite, shake, flash = 0, knock = 0) {
+    _drawFighter(ctx, spot, sprite, shake, flash = 0, knock = 0, tintColour = WHITE_TINT) {
       const sx = shake > 0 && !root.REDUCED_MOTION ? (Math.random() - 0.5) * shake : 0;
       const bob = Math.sin(this._age * 0.045) * spot.size * 0.02;
+      const drawable = sprite && sprite.complete && sprite.naturalWidth > 0;
+
+      // Fit the *drawn character*, not the image file.
+      //
+      // Sprite frames carry wildly different amounts of empty space —
+      // riku-idle's character fills 46% of its frame's height, riku-hurt's
+      // fills 86%. Scaling by frame height therefore drew Riku at about half
+      // the size he was meant to be, and made him almost double the moment
+      // the hurt pose swapped in. Measuring the opaque box once per sprite
+      // makes every pose and every boss render at the size the layout asks
+      // for, and turns a pose swap into a pose swap rather than a size jump.
+      let w = 0, h = 0, dx = 0, dy = 0;
+      if (drawable) {
+        const box = this._contentBox(sprite);
+        const fullH = spot.size / box.h;
+        const fullW = fullH * (sprite.naturalWidth / sprite.naturalHeight);
+        // A squash on impact reads as force before the eye finds the number.
+        const squash = 1 + flash * 0.12;
+        w = fullW * squash;
+        h = fullH / squash;
+        dx = -w / 2 - (box.cx - 0.5) * w;         // put the character's centre on spot.x
+        dy = -h + bob + (1 - box.bottom) * h;     // and its feet on spot.y
+      }
+
+      // Keep a knocked-back fighter on screen. Riku stands near the left edge
+      // and a hard hit used to shove a third of him past it — clamping needs
+      // the drawn width, which is why it happens after the geometry above and
+      // not before it.
+      const MARGIN = 6;
+      let originX = spot.x + sx + knock;
+      if (drawable) {
+        originX = Math.max(MARGIN - dx, Math.min(this.W - MARGIN - dx - w, originX));
+      }
+
       ctx.save();
-      ctx.translate(spot.x + sx + knock, spot.y);
+      ctx.translate(originX, spot.y);
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
       ctx.beginPath();
       ctx.ellipse(0, 2, spot.size * 0.30, 9, 0, 0, Math.PI * 2);
       ctx.fill();
-      if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-        const h = spot.size;
-        const w = h * (sprite.naturalWidth / sprite.naturalHeight);
-        // A squash on impact reads as force before the eye finds the number.
-        const squash = 1 + flash * 0.12;
-        ctx.drawImage(sprite, -w * squash / 2, -h + bob + h * (1 - 1 / squash), w * squash, h / squash);
+      if (drawable) {
+        ctx.drawImage(sprite, dx, dy, w, h);
         if (flash > 0.02) {
-          const tint = this._tinted(sprite);
+          const tint = this._tinted(sprite, tintColour);
           if (tint) {
-            ctx.globalAlpha = flash * 0.72;
-            ctx.drawImage(tint, -w * squash / 2, -h + bob + h * (1 - 1 / squash), w * squash, h / squash);
+            ctx.globalAlpha = flash * (tintColour === HURT_TINT ? 0.85 : 0.72);
+            ctx.drawImage(tint, dx, dy, w, h);
             ctx.globalAlpha = 1;
           }
         }
       }
       ctx.restore();
+    }
+
+    /**
+     * The opaque bounding box of a sprite, as fractions of its frame:
+     * `{ h, bottom, cx }` — height, where the bottom edge sits, and the
+     * horizontal centre.
+     *
+     * Scanned once per sprite off a small downscaled copy: 128px is enough
+     * for bounds accurate to well under a percent, and turns a scan of a
+     * 1024x1536 frame from 1.5M pixel reads into about 16K.
+     */
+    _contentBox(sprite) {
+      const key = sprite.src || sprite;
+      const hit = this._boxCache.get(key);
+      if (hit) return hit;
+
+      const FULL = { h: 1, bottom: 1, cx: 0.5 };
+      let box = FULL;
+      try {
+        const N = 128;
+        const c = document.createElement('canvas');
+        const ar = sprite.naturalWidth / sprite.naturalHeight;
+        c.width = Math.max(1, Math.round(ar >= 1 ? N : N * ar));
+        c.height = Math.max(1, Math.round(ar >= 1 ? N / ar : N));
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.drawImage(sprite, 0, 0, c.width, c.height);
+        const data = g.getImageData(0, 0, c.width, c.height).data;
+        let minX = c.width, maxX = -1, minY = c.height, maxY = -1;
+        for (let y = 0; y < c.height; y++) {
+          for (let x = 0; x < c.width; x++) {
+            if (data[(y * c.width + x) * 4 + 3] > 16) {
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (maxY >= 0) {
+          box = {
+            h: (maxY - minY + 1) / c.height,
+            bottom: (maxY + 1) / c.height,
+            cx: (minX + maxX + 1) / 2 / c.width,
+          };
+        }
+      } catch (_) {
+        // A tainted or unreadable canvas: fall back to the whole frame,
+        // which is what the engine did before this existed.
+        box = FULL;
+      }
+      this._boxCache.set(key, box);
+      return box;
+    }
+
+    /**
+     * Which Riku to draw.
+     *
+     * The boss has had pose swaps since the rebuild — it flinches into its
+     * `-hurt` art when it takes a hit — but Riku was hard-coded to
+     * `riku-idle` and never changed. All he got on a hit was a white tint,
+     * and he is a *white rice ball*, so the one cue that a child was losing
+     * health was invisible on the character it was happening to.
+     * `riku-hurt` has been in the sprite manifest the whole time, unused.
+     *
+     * The hurt pose is held longer than the tint (`_rikuHurtHold`) because a
+     * pose that lasts four frames may as well not exist — the same lesson
+     * the damage numbers taught.
+     */
+    _resolveRikuSpriteKey() {
+      if (this._rikuHurtHold > 0 && this.sprites['riku-hurt']) return 'riku-hurt';
+      // A short attack pose when he lands one, so hitting has a picture too.
+      if (this._rikuSwingHold > 0 && this.sprites['riku-run']) return 'riku-run';
+      return 'riku-idle';
     }
 
     _resolveBossSpriteKey() {
@@ -922,8 +1045,14 @@
      * flash. Re-tinting every frame would mean a full-sprite composite per
      * hit frame; this pays for it once.
      */
-    _tinted(sprite) {
-      const key = sprite.src || sprite;
+    /**
+     * A flat-coloured copy of a sprite, cached per sprite *and per colour*.
+     *
+     * White works on the bosses, which are mostly saturated. It does not
+     * work on Riku, who is a white rice ball — hence HURT_TINT.
+     */
+    _tinted(sprite, colour = WHITE_TINT) {
+      const key = `${sprite.src || sprite}|${colour}`;
       let c = this._tintCache.get(key);
       if (c) return c;
       const w = sprite.naturalWidth, h = sprite.naturalHeight;
@@ -936,7 +1065,7 @@
       const g = c.getContext('2d');
       g.drawImage(sprite, 0, 0, c.width, c.height);
       g.globalCompositeOperation = 'source-atop';
-      g.fillStyle = '#fff';
+      g.fillStyle = colour;
       g.fillRect(0, 0, c.width, c.height);
       this._tintCache.set(key, c);
       return c;

@@ -320,6 +320,38 @@ tries `navigator.share` with the file, falls back to saving the image plus
 the text on the clipboard, and falls back again to the plain text share —
 every path ends with the button having done something.
 
+### Sprite framing and facing
+
+Two rules that bit hard enough to be worth writing down.
+
+**Draw the character, not the frame.** Sprite frames carry wildly different
+amounts of empty space — `riku-idle`'s character fills 46% of its frame's
+height, `riku-hurt`'s fills 86%. Scaling by frame height drew Riku at about
+half the size the layout asked for, and made him nearly double the instant a
+pose swapped in. `_contentBox` measures the opaque bounding box once per
+sprite (off a 128px downscale, so it is a ~16K-pixel scan, not 1.5M) and
+`_drawFighter` fits *that* to `spot.size`, aligning feet to the floor line
+and content centre to `spot.x`. Any new fighter art gets correct framing for
+free; nobody has to trim padding by hand.
+
+**Facing is a reviewed table, not a guess.** Riku stands on the left, so
+bosses face left. `tools/normalise-facing.js` used to infer facing from pixel
+mass either side of centre. It is wrong often enough to be dangerous: a big
+ear, a raised tail or a swept wing outweighs a head. It reported "56 of 56
+already facing the player" while four sprites faced right — including the
+stage-2 boss, which shipped facing away from the fight for the whole stage.
+The classification is now an explicit table, every entry eyeballed on a
+contact sheet with a centre line drawn through it; the pixel heuristic is
+kept only as a cross-check that prints disagreements. `tests/bossSprites.js`
+fails on any sprite file missing from the table, so new art must be reviewed.
+
+One category is not about facing at all: **`right-text` marks art that must
+never be mirrored**. `glyph-goblin` holds ABC blocks, and flipping it to face
+the player reversed the B and the C. Letter reversal is exactly the confusion
+early readers have, so on a phonics game's letter-sounds boss it is a
+teaching error, not a cosmetic one. Facing the wrong way is a presentation
+bug; a backwards B is worse. The letters win.
+
 ### Honesty rules
 
 Three things on the old screens were not true, and each one is now pinned by
