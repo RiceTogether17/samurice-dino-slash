@@ -126,8 +126,11 @@ So the phonics is now the fighting. `js/combat/` splits into three pieces:
 Damage is a fraction of the boss's own health (`bossMaxHp / ROUNDS_TO_WIN`),
 not a flat number. With a flat value the same answer flattened a world-1 boss
 and barely marked a world-6 one; a play-test killed a world-2 boss in five
-correct answers. Every boss now falls in 8-14 rounds depending on how cleanly
-it is fought, and `tests/balance.test.js` fails if that spread drifts, if a
+correct answers. Campaign stages now use 8 / 9 / 10 / 10 / 12 base rounds within each world,
+with shorter introductory duels and a longer guardian capstone.
+`tests/journey.test.js` calls the real damage calculation across all 30 stages
+and checks a bounded 5–17 answer session (without the optional special).
+`tests/balance.test.js` also fails if the default balance drifts, if a
 combo starts trivialising fights, or if misses stop costing anything.
 
 Rice Storm — the charge meter's payoff — is deliberately damage only. It never
@@ -411,3 +414,25 @@ referenced file exists (the audio manager once requested ~250 recordings that
 were never produced) and `phonicsData.test.js` checks the curriculum is
 internally consistent, since a typo there teaches a child the wrong thing
 rather than throwing.
+
+## Journey presentation and pacing
+
+Each chapter follows Discover → Practice → Explore → Challenge → Guardian.
+The `journey` data on a stage owns the runner word budget (5/6/6/7/8),
+elevation, spacing, enemy cadence, terrain tier and subtle lighting tint.
+The existing curriculum and complete combat word pool are preserved.
+New worlds begin with familiar terrain before adding their next hazard tier
+at stage three; fragile bamboo and ice begin after each world's first stage.
+Checkpoints follow the midpoint of the actual route, including shorter runs.
+
+The illustrated chapter map and five-row stage list share the ink/jade/gold
+canvas UI helpers. Long labels wrap or ellipsise instead of shrinking. Menus
+work in portrait; action retains the existing landscape recommendation.
+Runner distance and optional sound collection have separate indicators.
+World-specific ambient particles respect low graphics and reduced motion.
+Completed stages advance even when the player has no accuracy stars; saves
+from older versions with stars but no completion timestamp remain supported.
+
+Visual review: `node tools/screenshot.js --state world-map --width 390 --height 844`;
+use `--world 6 --state stage-select` to inspect a specific chapter.
+The service worker cache is v21 so existing installations receive the changes.

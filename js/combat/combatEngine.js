@@ -712,8 +712,11 @@
           const s = Math.max(L.W / sp.naturalWidth, L.H / sp.naturalHeight);
           g.drawImage(sp, (L.W - sp.naturalWidth * s) / 2, (L.H - sp.naturalHeight * s) / 2,
                       sp.naturalWidth * s, sp.naturalHeight * s);
-          g.fillStyle = 'rgba(6,10,26,0.42)';
-          g.fillRect(0, 0, L.W, L.H);
+          const veil = g.createLinearGradient(0, 0, 0, L.H);
+          veil.addColorStop(0, 'rgba(8,20,32,0.74)');
+          veil.addColorStop(0.45, 'rgba(8,20,32,0.16)');
+          veil.addColorStop(1, 'rgba(8,20,32,0.65)');
+          g.fillStyle = veil; g.fillRect(0, 0, L.W, L.H);
           this._bgCache = c; this._bgKey = key;
         }
         ctx.drawImage(this._bgCache, 0, 0);
@@ -722,6 +725,8 @@
         g.addColorStop(0, '#1a2140'); g.addColorStop(1, '#0b0f1f');
         ctx.fillStyle = g; ctx.fillRect(0, 0, L.W, L.H);
       }
+
+      if (root.UI) root.UI.atmosphere(ctx, this.stage, L.W, L.H, this._age);
 
       // Ground line the fighters stand on.
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -1101,7 +1106,8 @@
         ctx.font = '800 11px "Nunito", system-ui';
         ctx.fillStyle = '#fff';
         ctx.textAlign = right ? 'right' : 'left';
-        ctx.fillText(label, right ? x + barW : x, 33);
+        if (root.UI) root.UI.text(ctx, label, right ? x + barW : x, 31, barW, 11, '#fff', right ? 'right' : 'left');
+        else ctx.fillText(label, right ? x + barW : x, 33);
       };
       const rp = Math.max(0, this.rikuHp / this.rikuMaxHp);
       const bp = Math.max(0, this.bossHp / this.bossMaxHp);

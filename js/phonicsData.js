@@ -428,6 +428,18 @@ PHONICS_DATA.stageList = [];
         skyColor: w.skyColor,
         groundColor: w.groundColor,
         accentColor: w.accentColor,
+        // Five readable beats in every chapter. New terrain arrives in
+        // isolation before the guardian's combined challenge.
+        journey: {
+          label: ['Discover', 'Practice', 'Explore', 'Challenge', 'Guardian'][sIdx],
+          words: [5, 6, 6, 7, 8][sIdx],
+          terrain: Math.min(5, Math.max(0, w.id - 2) + (sIdx >= 2 ? 1 : 0)),
+          enemyEvery: sIdx < 2 ? 3 : 2,
+          elevation: [65, 80, 95, 110, 120][sIdx],
+          restGap: [300, 280, 260, 240, 220][sIdx],
+          light: ['#FFE9B5', '#E7F4C8', '#D9E8FF', '#F4CFB9', '#B6BCF1'][sIdx],
+        },
+        roundsToWin: [8, 9, 10, 10, 12][sIdx],
         // difficulty ramp within the world
         runnerSpeed: +(w.runnerSpeed + sIdx * 0.15).toFixed(2),
         blendTime: Math.max(14, Math.round(w.blendTime - sIdx * 1.5)),
