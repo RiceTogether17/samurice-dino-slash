@@ -56,3 +56,8 @@ test('a shared link cannot hand out progress', () => {
   assert.match(src, /this\._previewStage = !!opts\.preview;/,
     '_launchStage must set the preview flag from its options');
 });
+
+ test('clearing a stage with no stars still moves the next adventure forward', () => {
+  const t = tracker({ 1: { unlocked: true, stars: 0, completedAt: 123 }, 2: { unlocked: true, stars: 0 } });
+  assert.strictEqual(t.nextStageId(30), 2);
+});

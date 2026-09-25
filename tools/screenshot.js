@@ -37,10 +37,10 @@ function serve(root) {
   const server = await serve(ROOT);
   const port = server.address().port;
   const browser = await chromium.launch({
-    executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    executablePath: process.env.CHROMIUM_PATH || undefined,
     args: ['--mute-audio'],
   });
-  const page = await browser.newPage({ viewport: { width: 900, height: 520 } });
+  const page = await browser.newPage({ viewport: { width: Number(get('--width', 900)), height: Number(get('--height', 520)) } });
   if (args.includes('--no-cache')) {
     await page.addInitScript(() => { window.__DISABLE_SPRITE_CACHE = true; });
   }
@@ -130,7 +130,7 @@ function serve(root) {
     }
     await page.waitForTimeout(get('--victory', null) ? 0 : 2500);
   } else {
-    await page.evaluate(st => { _slashGameInstance.state = st; }, state);
+    await page.evaluate(({ st, world }) => { _slashGameInstance._worldSel = world - 1; _slashGameInstance.state = st; }, { st: state, world: Number(get('--world', 1)) });
     await page.waitForTimeout(1200);
   }
   const out = path.join(outDir, `${label}.png`);

@@ -42,7 +42,7 @@ function check(name, ok, detail = '') {
   const server = await serve(ROOT);
   const port = server.address().port;
   const browser = await chromium.launch({
-    executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    executablePath: process.env.CHROMIUM_PATH || undefined,
     args: ['--mute-audio'],
   });
   const page = await browser.newPage({ viewport: { width: 900, height: 520 } });

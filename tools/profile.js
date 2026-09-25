@@ -88,7 +88,7 @@ async function main() {
   const base = `http://127.0.0.1:${port}`;
 
   const browser = await chromium.launch({
-    executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    executablePath: process.env.CHROMIUM_PATH || undefined,
     args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio'],
   });
   const page = await browser.newPage({ viewport: { width: 900, height: 520 } });

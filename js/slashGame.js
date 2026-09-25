@@ -847,9 +847,7 @@ class SlashGame {
       // World nodes on map
       const nodes = this._mapNodeRects || [];
       nodes.forEach((n, i) => {
-        const dx = mx - n.cx;
-        const dy = my - n.cy;
-        if (dx * dx + dy * dy <= n.r * n.r) {
+        if (mx >= n.x && mx <= n.x + n.w && my >= n.y && my <= n.y + n.h) {
           this._worldSel = i;
           const world = PHONICS_DATA.WORLDS[i];
           if (world && this.progress.isUnlocked(world.startId)) {
@@ -1494,6 +1492,8 @@ class SlashGame {
     this._tickAchievementPopup();
     this._syncShellMusic();
     const workStart = isGameplay ? performance.now() : 0;
+    const screenEl = this.canvas.closest('#slashScreen');
+    if (screenEl && screenEl.dataset.gameplay !== String(isGameplay)) screenEl.dataset.gameplay = String(isGameplay);
     switch (this.state) {
       case 'onboarding': this._updateOnboarding(); break; // PHASE 6
       case 'mode-select': this._updateModeSelect(); break;
@@ -1785,174 +1785,53 @@ class SlashGame {
     this._drawStageSelect();
   }
   _drawStageSelect() {
-    const ctx = this.ctx;
-    const W = this.W; const H = this.H;
-    ctx.clearRect(0, 0, W, H);
+    const ctx = this.ctx, W = this.W, H = this.H;
     const world = PHONICS_DATA.WORLDS[this._worldSel] || PHONICS_DATA.WORLDS[0];
-    // Each world's stage list sits on that world's own painted scene, so the
-    // screen tells you where you are before you have read a word of it.
-    // The background key lives on the stage data, not a guessable pattern
-    // ('stage-1-rice-paddy', not 'stage-1').
-    const firstStage = PHONICS_DATA.stageList[world.startId - 1];
-    UI.scene(ctx, this.sprites[firstStage && firstStage.bg],
-             W, H, this._sceneHolders.stageSelect, `stageselect-${world.id}`);
-    const ids   = world.stageIds;
-    if (this._menuSel >= ids.length) this._menuSel = ids.length - 1;
-    // Header — world name, the skill it teaches, and the rice count
-    UI.heading(ctx, `World ${world.id} · ${world.name}`, W, 12,
-               { size: Math.min(21, W * 0.05) });
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.font = `800 ${Math.min(12, W * 0.030)}px ${UI.THEME.font}`;
-    ctx.fillStyle = UI.THEME.gold;
-    ctx.fillText(world.skill, W / 2, 48);
-    ctx.restore();
-    // No rice chip here: the Worlds button already occupies this corner, and
-    // the count is on the previous screen.
-    // Stage cards (2 columns)
-    const cols = W > 480 ? 2 : 1;
-    const rows = Math.ceil(ids.length / cols);
-    const margin = 14;
-    const topPad = 78;
-    const cw = (W - margin * (cols + 1)) / cols;
-    const ch = (H - topPad - 16 - margin * (rows + 1)) / rows;
+    const first = PHONICS_DATA.getStage(world.startId);
+    UI.scene(ctx, this.sprites[first.bg], W, H, this._sceneHolders.stageSelect, `stages-${world.id}`, 0.8);
+    const wide = W >= 720;
+    this._stageBackRect = UI.ghost(ctx, '‹ Worlds', 56, 10);
+    const relaxed = localStorage.getItem('samurice_relaxed') !== '0';
+    this._relaxedToggleRect = UI.ghost(ctx, relaxed ? 'Relaxed: ON' : 'Relaxed: OFF', W - 180, 10);
+    UI.heading(ctx, world.name, W, W < 600 ? 61 : 43, { size: Math.min(27, W * 0.056) });
+    UI.text(ctx, world.skill, W / 2, W < 600 ? 111 : 94, W - 32, 12, UI.THEME.gold, 'center');
+    const listX = wide ? Math.round(W * 0.42) : 16;
+    const listW = W - listX - 16;
+    const top = W < 600 ? 136 : H < 400 ? 108 : 118, gap = H < 400 ? 5 : 9;
+    const rowH = Math.max(40, (H - top - 24 - gap * 4) / 5);
     this._stageCardRects = [];
-    for (let i = 0; i < ids.length; i++) {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = margin + col * (cw + margin);
-      const y = topPad + margin + row * (ch + margin);
-      this._stageCardRects.push({ x, y, w: cw, h: ch });
-      const stageId = ids[i];
-      const stage = PHONICS_DATA.stageList[stageId - 1];
-      const summary = this.progress.getStageSummary(stageId);
-      const unlocked = summary.unlocked;
-      const sel = this._menuSel === i;
-      // Card background
-      ctx.fillStyle = unlocked
-        ? (sel ? UI.THEME.panelHot : UI.THEME.panel)
-        : 'rgba(14,9,13,0.72)';
-      ctx.beginPath(); ctx.roundRect(x, y, cw, ch, 14); ctx.fill();
-      ctx.strokeStyle = sel ? UI.THEME.gold
-                      : (unlocked ? UI.THEME.stroke : 'rgba(255,255,255,0.10)');
-      ctx.lineWidth = sel ? 2.5 : 1;
-      ctx.stroke();
-      if (!unlocked) {
-        const prereqId = Math.max(1, stageId - 1);
-        const prereq = PHONICS_DATA.getStagePrereq?.(stageId);
-        ctx.font = `${Math.min(26, cw * 0.28)}px serif`;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(255,255,255,0.45)';
-        ctx.fillText('🔒', x + cw / 2, y + ch / 2 - 18);
-        ctx.font = `800 11px ${UI.THEME.font}`;
-        ctx.fillStyle = UI.THEME.locked;
-        ctx.fillText(`Stage ${world.id}-${i + 1} — Locked`, x + cw / 2, y + ch / 2 + 10);
-        ctx.font = `700 10px ${UI.THEME.font}`;
-        ctx.fillStyle = 'rgba(247,241,228,0.42)';
-        const gate = prereq ? `Clear ${prereq.world}-${prereq.local}: ${prereq.pattern}` : `Clear Stage ${prereqId}`;
-        ctx.fillText(gate, x + cw / 2, y + ch / 2 + 28);
-        continue;
-      }
-      // Accent strip
-      ctx.fillStyle = stage.accentColor + '55';
-      ctx.beginPath(); ctx.roundRect(x, y, cw, 6, [14, 14, 0, 0]); ctx.fill();
-      // Stage label (e.g. "Stage 1-3" or "BOSS")
-      ctx.font = `bold ${Math.min(14, cw * 0.11)}px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle = stage.isBoss ? '#FF5252' : '#FFD700';
-      ctx.textAlign = 'center';
-      ctx.fillText(stage.isBoss ? `👑 BOSS ${world.id}-${i + 1}` : `Stage ${world.id}-${i + 1}`, x + cw / 2, y + 20);
-      ctx.font = `bold ${Math.min(13, cw * 0.095)}px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle = '#fff';
-      ctx.fillText(stage.name, x + cw / 2, y + 38);
-      // Skill / focus label
-      ctx.font = `${Math.min(10, cw * 0.075)}px system-ui`;
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(stage.pattern, x + cw / 2, y + 54);
-
-      // Sequential quest ribbon: shows the phonics power this level teaches
-      // and makes it clear that the next level unlocks only after this one.
-      const trail = PHONICS_DATA.getLearningTrail?.(stageId);
-      if (trail) {
-        const ribbonY = y + 66;
-        ctx.fillStyle = 'rgba(0,0,0,0.20)';
-        ctx.beginPath(); ctx.roundRect(x + 10, ribbonY, cw - 20, 36, 12); ctx.fill();
-        const iconKey = trail.quest?.iconKey || 'power-boss-star';
-        const iconSp = this.sprites[iconKey];
-        if (iconSp && iconSp.complete && iconSp.naturalWidth > 0) {
-          ctx.drawImage(iconSp, x + 14, ribbonY + 4, 28, 28);
-        }
-        ctx.font = `bold ${Math.min(9, cw * 0.066)}px "Nunito", system-ui`;
-        ctx.fillStyle = '#B2FF59';
-        ctx.textAlign = 'left';
-        ctx.fillText(`🎯 ${trail.quest?.title || trail.focus}`, x + 48, ribbonY + 13);
-        ctx.fillStyle = '#FFD54F';
-        ctx.fillText(`Power-up: ${trail.quest?.powerUp || 'Reading Star'}`, x + 48, ribbonY + 28);
-        ctx.textAlign = 'center';
-      }
-      // Stars
-      const starY = y + ch - 26;
-      const starX = x + cw / 2 - 22;
-      ctx.font = '16px serif';
-      for (let s = 0; s < 3; s++) {
-        ctx.globalAlpha = s < summary.stars ? 1 : 0.2;
-        ctx.fillText('⭐', starX + s * 22, starY);
-      }
-      ctx.globalAlpha = 1;
-      // Example words
-      const eg = stage.words.slice(0, 3).map(w => `${w.hint} ${w.word}`).join(' ');
-      ctx.font = `${Math.min(9, cw * 0.068)}px system-ui`;
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.fillText(eg, x + cw / 2, y + ch - 8);
+    if (wide) {
+      const art = this.sprites[first.bossFile];
+      UI.portrait(ctx, art, 26, 124, listX - 48, Math.max(90, H - 265));
+      UI.text(ctx, `CHAPTER ${String(world.id).padStart(2, '0')}`, listX / 2, H - 111, listX - 40, 12, UI.THEME.gold, 'center');
+      UI.text(ctx, 'Collect sounds. Find your rhythm.', listX / 2, H - 85, listX - 40, 14, UI.THEME.rice, 'center');
+      UI.text(ctx, 'Then face the world guardian.', listX / 2, H - 64, listX - 40, 12, UI.THEME.muted, 'center');
+      const stars = world.stageIds.reduce((n, id) => n + this.progress.getStars(id), 0);
+      UI.text(ctx, `${stars} / 15 stars earned`, listX / 2, H - 35, listX - 40, 12, UI.THEME.gold, 'center');
     }
-    // ── Relaxed Mode toggle (top-right corner of header) ───────
-    // Lets parents/teachers turn off the timer penalty for early learners.
-    const relaxed = localStorage.getItem('samurice_relaxed') === '1';
-    const btnW = Math.min(130, W * 0.30);
-    const btnH = 26;
-    const btnX = W - btnW - 116;   // clear of the fullscreen + close buttons
-    const btnY = 10;
-    this._relaxedToggleRect = { x: btnX, y: btnY, w: btnW, h: btnH };
-    // Button background
-    ctx.fillStyle = relaxed ? 'rgba(0,188,212,0.35)' : 'rgba(0,188,212,0.12)';
-    ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 13); ctx.fill();
-    ctx.strokeStyle = relaxed ? '#00BCD4' : 'rgba(0,188,212,0.45)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 13); ctx.stroke();
-    // Switch track
-    const trackX = btnX + btnW - 36;
-    const trackY = btnY + 5;
-    ctx.fillStyle = relaxed ? '#00BCD4' : 'rgba(255,255,255,0.15)';
-    ctx.beginPath(); ctx.roundRect(trackX, trackY, 28, 16, 8); ctx.fill();
-    // Knob
-    ctx.fillStyle = '#fff';
-    ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 3;
-    ctx.beginPath();
-    ctx.arc(relaxed ? trackX + 20 : trackX + 8, trackY + 8, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    // Label
-    ctx.font = `bold ${Math.min(10, btnW * 0.09)}px "Nunito", system-ui`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = relaxed ? '#fff' : '#80DEEA';
-    ctx.fillText('😊 Relaxed', btnX + 8, btnY + btnH / 2);
-
-    // Back-to-world-map button (top-left)
-    const backW = Math.min(96, W * 0.26);
-    const backH = 26;
-    const backX = 10;
-    const backY = 10;
-    this._stageBackRect = { x: backX, y: backY, w: backW, h: backH };
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
-    ctx.beginPath(); ctx.roundRect(backX, backY, backW, backH, 13); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.roundRect(backX, backY, backW, backH, 13); ctx.stroke();
-    ctx.font = `bold ${Math.min(11, backW * 0.13)}px "Nunito", system-ui`;
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🗺️ Worlds', backX + backW / 2, backY + backH / 2);
-    ctx.textBaseline = 'alphabetic';
+    world.stageIds.forEach((id, i) => {
+      const stage = PHONICS_DATA.getStage(id), summary = this.progress.getStageSummary(id);
+      const r = { x: listX, y: top + i * (rowH + gap), w: listW, h: rowH };
+      this._stageCardRects.push(r);
+      const selected = this._menuSel === i && summary.unlocked;
+      UI.panel(ctx, r, selected ? UI.THEME.panelHot : UI.THEME.panel, selected ? UI.THEME.gold : UI.THEME.stroke);
+      const cy = r.y + rowH / 2;
+      ctx.save();
+      ctx.fillStyle = summary.unlocked ? stage.accentColor : '#56606C';
+      ctx.beginPath(); ctx.roundRect(r.x + 12, cy - 17, 34, 34, 10); ctx.fill();
+      UI.text(ctx, stage.isBoss ? '★' : String(i + 1).padStart(2, '0'), r.x + 29, cy, 30, 15, '#101921', 'center');
+      const tx = r.x + 58, tw = r.w - 148;
+      UI.text(ctx, stage.name, tx, cy - (rowH >= 52 ? 10 : 6), tw, 15, UI.THEME.rice);
+      const previous = PHONICS_DATA.getStage(id - 1);
+      const subtitle = summary.unlocked
+        ? `${stage.journey.label} · ${stage.pattern}`
+        : `Clear ${previous?.world || world.id}-${previous?.local || 1} to unlock · ${stage.pattern}`;
+      UI.text(ctx, subtitle, tx, cy + (rowH >= 52 ? 12 : 10), tw, 11, UI.THEME.muted);
+      UI.text(ctx, summary.unlocked ? (summary.stars ? '★'.repeat(summary.stars) + '☆'.repeat(3 - summary.stars) : 'PLAY ›') : 'LOCKED',
+        r.x + r.w - 14, cy, 74, 11, summary.unlocked ? UI.THEME.gold : UI.THEME.muted, 'right');
+      if (rowH > 95) UI.text(ctx, summary.unlocked ? stage.words.slice(0, 3).map(w => w.word).join('  ·  ') : stage.journey.label, tx, cy + 37, r.w - 80, 12, UI.THEME.gold);
+      ctx.restore();
+    });
   }
   // ── WORLD MAP ────────────────────────────────────────────────
   _updateWorldMap() {
@@ -1960,403 +1839,52 @@ class SlashGame {
     this._drawWorldMap();
   }
   _drawWorldMap() {
-    const ctx = this.ctx;
-    const W = this.W;
-    const H = this.H;
-    const t = this._mapAnim;
-    ctx.clearRect(0, 0, W, H);
-
-    // ── Rich scenic overworld sky ─────────────────────────────
-    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.55);
-    sky.addColorStop(0, '#0a1e8a');
-    sky.addColorStop(0.35, '#1565C0');
-    sky.addColorStop(0.70, '#42A5F5');
-    sky.addColorStop(1, '#80DEEA');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, W, H * 0.55);
-
-    // Lush overworld ground
-    const groundGrad = ctx.createLinearGradient(0, H * 0.50, 0, H);
-    groundGrad.addColorStop(0, '#558B2F');
-    groundGrad.addColorStop(0.3, '#388E3C');
-    groundGrad.addColorStop(1, '#1B5E20');
-    ctx.fillStyle = groundGrad;
-    ctx.fillRect(0, H * 0.50, W, H * 0.50);
-
-    // ── Far mountain silhouettes ──────────────────────────────
-    ctx.fillStyle = 'rgba(25,50,100,0.32)';
-    ctx.beginPath();
-    ctx.moveTo(0, H * 0.52);
-    [0.05,0.12,0.22,0.35,0.48,0.58,0.68,0.78,0.88,0.96,1.0].forEach((fx, i) => {
-      ctx.lineTo(fx * W, H * 0.52 - H * (0.12 + (i % 3) * 0.055));
-    });
-    ctx.lineTo(W, H * 0.52);
-    ctx.closePath(); ctx.fill();
-
-    // ── Rolling hills ─────────────────────────────────────────
-    ctx.fillStyle = 'rgba(76,130,40,0.62)';
-    ctx.beginPath(); ctx.moveTo(0, H * 0.58);
-    for (let x = 0; x <= W; x += 3) {
-      const hy = H * 0.58 - Math.sin(x / W * Math.PI * 4 + t * 0.004) * H * 0.05
-                           - Math.sin(x / W * Math.PI * 7 - t * 0.003) * H * 0.026;
-      ctx.lineTo(x, hy);
-    }
-    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
-
-    // ── Animated clouds ───────────────────────────────────────
-    [{ cx:0.12, cy:0.10, r:0.055, spd:1.0 },
-     { cx:0.46, cy:0.07, r:0.075, spd:0.7 },
-     { cx:0.76, cy:0.12, r:0.060, spd:0.9 }].forEach((c, i) => {
-      const ox  = ((t * 0.14 * c.spd + i * 200) % (W + c.r * W * 2 + 60)) - c.r * W - 30;
-      const cx2 = ((c.cx * W + ox) % (W + c.r * W * 2 + 60)) - c.r * W;
-      const cy2 = c.cy * H;
-      const rw  = c.r * W; const rh = c.r * H * 0.45;
-      ctx.fillStyle = 'rgba(255,255,255,0.84)';
-      ctx.beginPath(); ctx.ellipse(cx2,       cy2,      rw,        rh,        0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(cx2 - rw * 0.44, cy2 + rh * 0.22, rw * 0.63, rh * 0.78, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(cx2 + rw * 0.46, cy2 + rh * 0.18, rw * 0.60, rh * 0.74, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(180,210,255,0.28)';
-      ctx.beginPath(); ctx.ellipse(cx2, cy2 + rh * 0.32, rw * 0.84, rh * 0.38, 0, 0, Math.PI * 2); ctx.fill();
-    });
-
-    // ── World terrain features ────────────────────────────────
-    // Rice paddy (bottom-left, stage 1 area)
-    const rpY = H * 0.73;
-    ctx.fillStyle = 'rgba(100,185,75,0.50)';
-    for (let i = 0; i < 5; i++) {
-      ctx.beginPath(); ctx.ellipse(W * (0.04 + i * 0.055), rpY - i * 4, W * 0.038, H * 0.022, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.strokeStyle = 'rgba(30,120,30,0.42)'; ctx.lineWidth = 1;
-    for (let i = 0; i < 5; i++) {
-      ctx.beginPath(); ctx.moveTo(W * (0.04 + i * 0.055), rpY - i * 4 - 18); ctx.lineTo(W * (0.04 + i * 0.055), rpY - i * 4 - 6); ctx.stroke();
-    }
-    // Bamboo grove (stage 2 area, left-center)
-    ctx.strokeStyle = 'rgba(56,142,60,0.52)'; ctx.lineWidth = 5;
-    for (let i = 0; i < 5; i++) {
-      const bx = W * 0.24 + i * 15 + Math.sin(t * 0.016 + i) * 3;
-      ctx.beginPath(); ctx.moveTo(bx, H * 0.82); ctx.lineTo(bx - 4, H * 0.52); ctx.stroke();
-      ctx.strokeStyle = 'rgba(56,142,60,0.32)'; ctx.lineWidth = 1;
-      [0.60, 0.70, 0.76].forEach(fy => {
-        ctx.beginPath(); ctx.moveTo(bx - 3, H * fy); ctx.lineTo(bx + 3, H * fy); ctx.stroke();
-      });
-      ctx.strokeStyle = 'rgba(56,142,60,0.52)'; ctx.lineWidth = 5;
-    }
-    // Cherry blossom tree (stage 3 area, right-center)
-    const cbX = W * 0.76; const cbY = H * 0.42;
-    ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.moveTo(cbX, H * 0.60); ctx.lineTo(cbX, cbY + 22); ctx.stroke();
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(cbX, cbY + 22); ctx.lineTo(cbX - 30, cbY + 4); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cbX, cbY + 22); ctx.lineTo(cbX + 26, cbY + 8); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,150,180,0.68)';
-    ctx.beginPath(); ctx.arc(cbX, cbY + 6, 38, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,182,193,0.48)';
-    ctx.beginPath(); ctx.arc(cbX - 25, cbY + 16, 24, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cbX + 23, cbY + 13, 22, 0, Math.PI * 2); ctx.fill();
-    for (let p = 0; p < 7; p++) {
-      const px = cbX - 38 + ((p * 68 + t * 0.42) % 84);
-      const py = cbY + 32 + ((p * 41 + t * 0.62) % (H * 0.24));
-      ctx.globalAlpha = 0.55;
-      ctx.fillStyle = '#FFB7C5';
-      ctx.beginPath(); ctx.ellipse(px, py, 3, 2, (t * 0.05 + p) % Math.PI, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    // Ancient ruin pillars (stage 4 area, center)
-    const ruinX = W * 0.52; const ruinY = H * 0.65;
-    ctx.fillStyle = 'rgba(120,100,80,0.52)';
-    ctx.fillRect(ruinX - 22, ruinY - 32, 44, 32);
-    ctx.fillRect(ruinX - 18, ruinY - 44, 12, 14);
-    ctx.fillRect(ruinX + 4,  ruinY - 44, 12, 14);
-    ctx.fillStyle = 'rgba(100,78,58,0.35)';
-    ctx.fillRect(ruinX - 10, ruinY - 26, 18, 18);
-    // Mountain peak (stage 5 area, upper right)
-    ctx.fillStyle = 'rgba(70,90,130,0.55)';
-    ctx.beginPath();
-    ctx.moveTo(W * 0.84, H * 0.28);
-    ctx.lineTo(W * 0.96, H * 0.52);
-    ctx.lineTo(W * 0.72, H * 0.52);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(240,248,255,0.82)';
-    ctx.beginPath();
-    ctx.moveTo(W * 0.84, H * 0.28);
-    ctx.lineTo(W * 0.90, H * 0.38);
-    ctx.lineTo(W * 0.78, H * 0.38);
-    ctx.closePath(); ctx.fill();
-    // Volcano (stage 6 area, far right)
-    ctx.fillStyle = 'rgba(100,30,10,0.60)';
-    ctx.beginPath();
-    ctx.moveTo(Math.min(W * 0.97, W - 8), H * 0.38);
-    ctx.lineTo(W + 8, H * 0.56);
-    ctx.lineTo(W * 0.88, H * 0.56);
-    ctx.closePath(); ctx.fill();
-    const lavaR = 80 + Math.sin(t * 0.08) * 40;
-    ctx.fillStyle = `rgba(255,${lavaR},0,0.60)`;
-    ctx.beginPath(); ctx.ellipse(Math.min(W * 0.97, W - 8), H * 0.38, 14, 8, 0, 0, Math.PI * 2); ctx.fill();
-
-    // ── Stage node positions ──────────────────────────────────
-    const margin = 52;
-    const mapTop = 66;
-    const mapBot = H - 36;
-    const mapH   = mapBot - mapTop;
-    const nodes  = [
-      { fx: 0.12, fy: 0.74 }, // Stage 1 — rice paddy (bottom-left)
-      { fx: 0.35, fy: 0.60 }, // Stage 2 — bamboo (center-left)
-      { fx: 0.58, fy: 0.48 }, // Stage 3 — temple (center)
-      { fx: 0.44, fy: 0.30 }, // Stage 4 — ruins (upper-center)
-      { fx: 0.68, fy: 0.18 }, // Stage 5 — mountain (upper-right)
-      { fx: 0.88, fy: 0.36 }, // Stage 6 — volcano (right)
-    ].map(n => ({
-      cx: margin + n.fx * (W - margin * 2),
-      cy: mapTop + n.fy * mapH,
-    }));
-    const nodeR = Math.max(26, Math.min(34, W * 0.060));
-    this._mapNodeRects = nodes.map(n => ({ cx: n.cx, cy: n.cy, r: nodeR + 8 }));
-
-    // ── Golden brick path ─────────────────────────────────────
-    ctx.save();
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // Shadow pass
-    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
-    ctx.lineWidth = 22;
-    ctx.beginPath();
-    nodes.forEach((n, i) => { if (i === 0) ctx.moveTo(n.cx + 3, n.cy + 4); else ctx.lineTo(n.cx + 3, n.cy + 4); });
-    ctx.stroke();
-    // Per-segment coloured path
-    for (let i = 0; i < nodes.length - 1; i++) {
-      const a = nodes[i]; const b = nodes[i + 1];
-      const nextWorld = PHONICS_DATA.WORLDS[i + 1];
-      const unlocked = nextWorld ? this.progress.isUnlocked(nextWorld.startId) : false;
-      ctx.strokeStyle = unlocked ? '#E65100' : '#546E7A';
-      ctx.lineWidth = 18;
-      ctx.beginPath(); ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
-      ctx.strokeStyle = unlocked ? '#FFD700' : '#78909C';
-      ctx.lineWidth = 10;
-      ctx.setLineDash(unlocked ? [] : [10, 8]);
-      ctx.beginPath(); ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
-      ctx.setLineDash([]);
-      if (unlocked) {
-        for (let d = 0; d < 2; d++) {
-          const prog = ((t * 0.010 + d * 0.5) % 1);
-          const dotX = a.cx + (b.cx - a.cx) * prog;
-          const dotY = a.cy + (b.cy - a.cy) * prog;
-          ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 6;
-          ctx.fillStyle = 'rgba(255,255,220,0.92)';
-          ctx.beginPath(); ctx.arc(dotX, dotY, 3.5, 0, Math.PI * 2); ctx.fill();
-          ctx.shadowBlur = 0;
-        }
-      }
-    }
-    ctx.restore();
-
-    // ── World nodes (6 worlds along the path) ─────────────────
-    const worldAccents = ['#8BC34A','#4CAF50','#E91E63','#FF9800','#42A5F5','#FF5722'];
+    const ctx = this.ctx, W = this.W, H = this.H;
+    const selected = PHONICS_DATA.WORLDS[this._worldSel] || PHONICS_DATA.WORLDS[0];
+    const stage = PHONICS_DATA.getStage(selected.startId);
+    UI.scene(ctx, this.sprites[stage.bg], W, H, this._sceneHolders.worldMap || (this._sceneHolders.worldMap = {}), `world-${selected.id}`, 1.05);
+    UI.heading(ctx, 'THE READING JOURNEY', W, W < 600 ? 60 : 20, { size: Math.min(26, W * 0.052) });
+    const cleared = PHONICS_DATA.stageList.filter(s => !!this.progress.getStage(s.id).completedAt).length;
+    UI.text(ctx, `Six worlds. Thirty adventures. One brave reader.`, W / 2, W < 600 ? 104 : 67, W - 40, 12, UI.THEME.muted, 'center');
+    const cols = W >= 660 ? 3 : 2, rows = Math.ceil(6 / cols);
+    const gap = 12, left = 20, top = W < 600 ? 128 : 94;
+    const cw = (W - left * 2 - gap * (cols - 1)) / cols;
+    const ch = Math.max(65, (H - top - 100 - gap * (rows - 1)) / rows);
+    this._mapNodeRects = [];
     PHONICS_DATA.WORLDS.forEach((world, i) => {
-      const n       = nodes[i];
-      if (!n) return;
-      const unlocked = this.progress.isUnlocked(world.startId);
-      const sel      = this._worldSel === i;
-      const cleared  = world.stageIds.filter(id => this.progress.getStage(id)?.completedAt).length;
-      const total    = world.stageCount;
-      const allClear = cleared >= total;
-      const accent   = worldAccents[i] || world.accentColor || '#FFD700';
-      const bounce   = sel ? Math.sin(t * 0.12) * 5 : 0;
-      const cy       = n.cy + bounce;
-      // Locked-node wobble when tapped
-      let lockedJx = 0;
-      if (this._lockedShake && this._lockedShake.i === i && this._lockedShake.frames > 0) {
-        this._lockedShake.frames--;
-        lockedJx = Math.sin(this._lockedShake.frames * 0.9) * 5;
+      const r = { x: left + (i % cols) * (cw + gap), y: top + Math.floor(i / cols) * (ch + gap), w: cw, h: ch };
+      this._mapNodeRects.push(r);
+      const unlocked = this.progress.isUnlocked(world.startId), sel = i === this._worldSel;
+      const first = PHONICS_DATA.getStage(world.startId), img = this.sprites[first.bg];
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 16); ctx.clip();
+      if (img && img.complete && img.naturalWidth) {
+        const scale = Math.max(r.w / img.naturalWidth, r.h / img.naturalHeight);
+        ctx.drawImage(img, r.x + (r.w - img.naturalWidth * scale) / 2, r.y + (r.h - img.naturalHeight * scale) / 2, img.naturalWidth * scale, img.naturalHeight * scale);
       }
-      if (lockedJx) { ctx.save(); ctx.translate(lockedJx, 0); }
-
-      // Drop shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.32)';
-      ctx.beginPath(); ctx.ellipse(n.cx + 2, cy + nodeR + 3, nodeR * 0.72, 7, 0, 0, Math.PI * 2); ctx.fill();
-
-      // Glow
-      if (sel || unlocked) { ctx.shadowColor = accent; ctx.shadowBlur = sel ? 28 : 12; }
-
-      // Radial gradient fill
-      const ng = ctx.createRadialGradient(n.cx - nodeR * 0.3, cy - nodeR * 0.3, nodeR * 0.1, n.cx, cy, nodeR);
-      if (unlocked) {
-        ng.addColorStop(0, sel ? '#FFFDE7' : '#FFF9C4');
-        ng.addColorStop(0.5, accent + 'BB');
-        ng.addColorStop(1, accent + '88');
-      } else {
-        ng.addColorStop(0, '#546E7A');
-        ng.addColorStop(1, '#263238');
+      const shade = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
+      shade.addColorStop(0, unlocked ? 'rgba(9,20,27,0.08)' : 'rgba(9,20,27,0.35)');
+      shade.addColorStop(1, 'rgba(9,20,27,0.97)');
+      ctx.fillStyle = shade; ctx.fillRect(r.x, r.y, r.w, r.h);
+      const done = world.stageIds.filter(id => !!this.progress.getStage(id).completedAt).length;
+      UI.panel(ctx, { x: r.x + 8, y: r.y + 8, w: Math.min(122, cw - 16), h: 26 });
+      UI.text(ctx, `${String(world.id).padStart(2, '0')}  /  ${done === 5 ? 'COMPLETE' : unlocked ? 'EXPLORE' : 'LOCKED'}`, r.x + 14, r.y + 21, cw - 28, 10, UI.THEME.gold);
+      UI.wrapText(ctx, world.name, r.x + 14, r.y + ch - (cw < 230 ? 63 : 42), cw - 28, cw < 230 ? 14 : 16, UI.THEME.rice);
+      for (let j = 0; j < 5; j++) {
+        ctx.fillStyle = j < done ? UI.THEME.gold : 'rgba(255,255,255,0.25)';
+        ctx.beginPath(); ctx.roundRect(r.x + 14 + j * ((cw - 28) / 5), r.y + ch - 22, (cw - 38) / 5, 4, 2); ctx.fill();
       }
-      ctx.fillStyle = ng;
-      ctx.strokeStyle = sel ? '#FFD700' : (unlocked ? accent : '#546E7A');
-      ctx.lineWidth = sel ? 4 : 2.5;
-      ctx.beginPath(); ctx.arc(n.cx, cy, nodeR, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // Shine highlight
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.beginPath(); ctx.ellipse(n.cx - nodeR * 0.25, cy - nodeR * 0.25, nodeR * 0.5, nodeR * 0.34, -0.5, 0, Math.PI * 2); ctx.fill();
-
-      if (!unlocked) {
-        ctx.font = `${Math.round(nodeR * 0.75)}px serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(255,255,255,0.28)';
-        ctx.fillText('🔒', n.cx, cy);
-      } else {
-        ctx.font = `900 ${Math.round(nodeR * 0.50)}px "Nunito", "Comic Sans MS", system-ui`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
-        ctx.fillStyle = sel ? '#FFD700' : '#fff';
-        ctx.fillText(`${world.icon}`, n.cx, cy - nodeR * 0.18);
-        ctx.font = `900 ${Math.round(nodeR * 0.30)}px "Nunito", "Comic Sans MS", system-ui`;
-        ctx.fillText(`WORLD ${world.id}`, n.cx, cy + nodeR * 0.36);
-        ctx.shadowBlur = 0;
-        // Cleared progress pill (x/total) + star total for the world
-        const starSum = world.stageIds.reduce((s, id) => s + (this.progress.getStars(id) || 0), 0);
-        ctx.font = `bold ${Math.max(9, Math.round(nodeR * 0.30))}px "Nunito", system-ui`;
-        ctx.fillStyle = allClear ? '#FFD700' : 'rgba(255,255,255,0.85)';
-        const pill = (allClear ? `👑 ${cleared}/${total}` : `${cleared}/${total}`) +
-                     (starSum > 0 ? `  ⭐${starSum}` : '');
-        ctx.fillText(pill, n.cx, cy + nodeR + 12);
-      }
-      ctx.font = `bold ${Math.max(8, Math.round(W * 0.021))}px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.28)';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
-      // Nudge the label back inside the canvas. Centring it on the node alone
-      // ran the outermost worlds — "Volcanic Samurai Peak" especially — off
-      // the edge of the screen.
-      const halfLabel = ctx.measureText(world.name).width / 2;
-      const labelX = Math.min(Math.max(n.cx, halfLabel + 6), W - halfLabel - 6);
-      ctx.fillText(world.name, labelX, cy + nodeR + (unlocked ? 26 : 16));
-      ctx.shadowBlur = 0;
-      if (lockedJx) ctx.restore();
+      ctx.restore();
+      ctx.save(); ctx.strokeStyle = sel ? UI.THEME.gold : UI.THEME.stroke; ctx.lineWidth = sel ? 2.5 : 1;
+      ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 16); ctx.stroke(); ctx.restore();
     });
-
-    // ── Animated Riku walking on the current world ────────────
-    if (this.stageId >= 1 && this.stageId <= PHONICS_DATA.stageCount) {
-      const curWorldIdx = (PHONICS_DATA.worldOf(this.stageId) || 1) - 1;
-      const curNode = nodes[curWorldIdx];
-      if (curNode) {
-        const bob       = Math.sin(t * 0.10) * 4;
-        const walkFrame = Math.floor(t / 8) % 4;
-        const rikuKey   = `riku-walk-${walkFrame + 1}`;
-        const rikuSp    = this.sprites[rikuKey] || this.sprites['riku-idle'] || this.sprites['riku-run'];
-        const rH = nodeR * 1.2;
-        if (rikuSp && rikuSp.complete && rikuSp.naturalWidth > 0) {
-          const ar = rikuSp.naturalWidth / rikuSp.naturalHeight;
-          const rW = rH * ar;
-          ctx.save();
-          ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 16;
-          ctx.drawImage(rikuSp, curNode.cx - rW / 2, curNode.cy - nodeR * 2.0 + bob, rW, rH);
-          ctx.restore();
-        } else {
-          ctx.font = `${Math.round(nodeR * 0.9)}px serif`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText('🍙', curNode.cx, curNode.cy - nodeR * 1.5 + bob);
-        }
-        // Pointer arrow
-        ctx.fillStyle = '#FFD700';
-        ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 8;
-        const ax = curNode.cx, ay = curNode.cy - nodeR * 0.92 + bob;
-        ctx.beginPath();
-        ctx.moveTo(ax - 7, ay); ctx.lineTo(ax + 7, ay); ctx.lineTo(ax, ay + 9);
-        ctx.closePath(); ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-    }
-
-    // ── Title header ──────────────────────────────────────────
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    const titleSz = Math.min(20, W * 0.046);
-    // Drifting clouds pass behind this text and were washing it out — the
-    // subtitle in particular became white-on-white. A soft scrim keeps the
-    // header readable whatever happens to float past.
-    // Hold the scrim at close to full strength until past the subtitle's
-    // baseline before fading: a gradient that thins out over the header itself
-    // leaves the second line unprotected, which is exactly the line a cloud
-    // was drifting behind.
-    const hdrH = 7 + titleSz + 3 + 16;
-    const scrim = ctx.createLinearGradient(0, 0, 0, hdrH + 24);
-    scrim.addColorStop(0,    'rgba(8,20,40,0.62)');
-    scrim.addColorStop(0.62, 'rgba(8,20,40,0.52)');
-    scrim.addColorStop(1,    'rgba(8,20,40,0)');
-    ctx.fillStyle = scrim;
-    ctx.fillRect(0, 0, W, hdrH + 24);
-    ctx.font = `900 ${titleSz}px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.shadowColor = '#FF8F00'; ctx.shadowBlur = 12;
-    ctx.fillStyle = '#FFD700';
-    ctx.fillText('🗺️  World Map  🗺️', W / 2, 7);
-    ctx.shadowBlur = 0;
-    ctx.font = `bold 12px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFF176';
-    ctx.fillText(`🍚 ${this.progress.getRicePoints()} Rice  ·  Tap a world to enter`, W / 2, 7 + titleSz + 3);
-
-    // ── Selected stage info + PLAY button ─────────────────────
-    const selWorld = PHONICS_DATA.WORLDS[this._worldSel];
-    this._mapPlayBtnRect = null;
-    if (selWorld) {
-      const wUnlocked = this.progress.isUnlocked(selWorld.startId);
-      const playBtnW = Math.min(150, W * 0.34);
-      const playBtnH = Math.round(H * 0.066);
-      const panW = Math.min(W - 20, 420);
-      const panH = 80 + playBtnH + 12;
-      const panX = (W - panW) / 2;
-      const panY = H - panH - 10;
-      const panGrad = ctx.createLinearGradient(panX, panY, panX, panY + panH);
-      panGrad.addColorStop(0, 'rgba(10,20,40,0.88)');
-      panGrad.addColorStop(1, 'rgba(5,15,30,0.94)');
-      ctx.fillStyle = panGrad;
-      ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 16); ctx.fill();
-      const selAccent = selWorld.accentColor || '#FFD700';
-      ctx.strokeStyle = selAccent; ctx.lineWidth = 2;
-      ctx.shadowColor = selAccent; ctx.shadowBlur = 10;
-      ctx.beginPath(); ctx.roundRect(panX, panY, panW, panH, 16); ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.font = `bold ${Math.min(14, W * 0.034)}px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle = selAccent;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillText(`${selWorld.icon}  World ${selWorld.id}: ${selWorld.name}`, W / 2, panY + 8);
-      ctx.font = `${Math.min(11, W * 0.025)}px system-ui`;
-      ctx.fillStyle = 'rgba(200,220,255,0.75)';
-      const nextStageId = selWorld.stageIds.find(id => !this.progress.getStage(id)?.completedAt) || selWorld.stageIds[selWorld.stageIds.length - 1];
-      const trail = PHONICS_DATA.getLearningTrail?.(nextStageId);
-      const questText = trail ? `${trail.stage.world}-${trail.stage.local} ${trail.quest?.title || trail.focus}` : `${selWorld.stageCount} stages`;
-      const rewardText = trail?.quest?.powerUp ? `Reward: ${trail.quest.powerUp}` : 'Reward: Reading Star';
-      ctx.fillText(`📚 ${selWorld.skill}`, W / 2, panY + 30);
-      const panelIconKey = trail?.quest?.iconKey || 'power-boss-star';
-      const panelIcon = this.sprites[panelIconKey];
-      if (panelIcon && panelIcon.complete && panelIcon.naturalWidth > 0) {
-        ctx.drawImage(panelIcon, panX + 14, panY + 30, 34, 34);
-      }
-      ctx.fillStyle = wUnlocked ? '#B2FF59' : 'rgba(255,255,255,0.38)';
-      ctx.fillText(`🧭 Next quest: ${questText}`, W / 2 + 16, panY + 43);
-      ctx.fillStyle = wUnlocked ? '#FFD54F' : 'rgba(255,255,255,0.30)';
-      ctx.fillText(`⭐ ${rewardText}`, W / 2 + 16, panY + 56);
-      const btnX  = W / 2 - playBtnW / 2;
-      const btnY  = panY + 70;
-      const tapP  = 0.75 + 0.25 * Math.sin(t * 0.10);
-      const btnGd = ctx.createLinearGradient(btnX, btnY, btnX, btnY + playBtnH);
-      if (wUnlocked) {
-        btnGd.addColorStop(0, `rgba(0,220,110,${0.88 + 0.12 * tapP})`);
-        btnGd.addColorStop(1, `rgba(0,150,60,${0.92 + 0.08 * tapP})`);
-        ctx.shadowColor = '#00FF88'; ctx.shadowBlur = 14 * tapP;
-      } else {
-        btnGd.addColorStop(0, 'rgba(90,110,120,0.85)');
-        btnGd.addColorStop(1, 'rgba(50,60,70,0.9)');
-      }
-      ctx.fillStyle = btnGd;
-      ctx.beginPath(); ctx.roundRect(btnX, btnY, playBtnW, playBtnH, playBtnH / 2); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.40)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.roundRect(btnX, btnY, playBtnW, playBtnH, playBtnH / 2); ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.font = `bold ${Math.min(15, W * 0.036)}px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(wUnlocked ? '▶  ENTER WORLD' : '🔒 LOCKED', W / 2, btnY + playBtnH / 2);
-      if (wUnlocked) this._mapPlayBtnRect = { x: btnX, y: btnY, w: playBtnW, h: playBtnH };
-    }
-    ctx.textBaseline = 'alphabetic';
+    const unlocked = this.progress.isUnlocked(selected.startId);
+    const footerY = H - 81;
+    UI.text(ctx, `${cleared} / 30 stages cleared`, 22, footerY + 8, W * 0.43, 13, UI.THEME.rice);
+    UI.text(ctx, unlocked ? selected.skill : `Clear World ${selected.id - 1} to continue`, 22, footerY + 32, W * 0.48, 11, UI.THEME.muted);
+    const r = { x: W * 0.55, y: footerY, w: W * 0.45 - 20, h: 48 };
+    UI.card(ctx, r, { label: unlocked ? 'Enter world' : 'Coming next', primary: unlocked, locked: !unlocked, labelSize: 15 });
+    this._mapPlayBtnRect = unlocked ? r : null;
   }
   // ── RUNNER UPDATE ────────────────────────────────────────────
   _updateRunner() {
@@ -2812,7 +2340,7 @@ class SlashGame {
     const py = pyTarget - (1 - panelEase) * (pyTarget + ph * 0.5);
     ctx.save();
     ctx.globalAlpha = panelEase;
-    ctx.fillStyle = 'rgba(18,12,20,0.93)';
+    ctx.fillStyle = UI.THEME.panel;
     ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 22); ctx.fill();
     ctx.strokeStyle = UI.THEME.goldDim; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.restore();
@@ -2820,10 +2348,10 @@ class SlashGame {
     ctx.save();
     ctx.globalAlpha = panelEase;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.font = `900 ${Math.min(32, W * 0.068)}px ${UI.THEME.font}`;
+    ctx.font = `900 ${Math.min(stage.isBoss ? 26 : 32, W * 0.068)}px ${UI.THEME.font}`;
     ctx.fillStyle = UI.THEME.rice;
     ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 10;
-    ctx.fillText('VICTORY', W / 2, py + 18);
+    ctx.fillText(stage.isBoss ? (stage.id === PHONICS_DATA.stageCount ? 'JOURNEY COMPLETE' : 'WORLD COMPLETE') : 'STAGE CLEARED', W / 2, py + 18);
     ctx.shadowBlur = 0;
     const rw = Math.min(190, pw * 0.55);
     const rule = ctx.createLinearGradient(W / 2 - rw / 2, 0, W / 2 + rw / 2, 0);
@@ -2834,7 +2362,7 @@ class SlashGame {
     ctx.fillRect(W / 2 - rw / 2, py + 56, rw, 2);
     ctx.font = `800 15px ${UI.THEME.font}`;
     ctx.fillStyle = UI.THEME.muted;
-    ctx.fillText(`Stage ${this.stageId} · ${stage.name}`, W / 2, py + 66);
+    UI.text(ctx, `Stage ${stage.world}-${stage.local} · ${stage.name}`, W / 2, py + 73, pw - 24, 13, UI.THEME.muted, 'center');
     ctx.restore();
 
     // Stars fly in one-by-one (staggered, scale bounce)
@@ -2869,18 +2397,19 @@ class SlashGame {
     }
     ctx.globalAlpha = 1;
 
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     // ── Kid-friendly summary — celebration, not statistics ──────
     // (accuracy / mastery jargon lives in the parent dashboard)
     ctx.font = `bold ${Math.min(17, W * 0.04)}px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#FFE082';
-    ctx.fillText(`You defeated ${stage.bossName}! 🎊`, W / 2, py + 152);
+    UI.text(ctx, `You defeated ${stage.bossName}!`, W / 2, py + 152, pw - 24, 14, UI.THEME.gold, 'center');
 
     const masteredWords = this.progress.getMasteredWords(this.stageId);
     ctx.font = `bold 15px "Nunito", "Comic Sans MS", system-ui`;
     ctx.fillStyle = '#fff';
     if (masteredWords.length > 0) {
       const preview = masteredWords.slice(0, 4).map(w => w.toUpperCase()).join(' · ');
-      ctx.fillText(`📖 New words you can read: ${preview}`, W / 2, py + 180);
+      UI.text(ctx, `You read: ${preview}`, W / 2, py + 180, pw - 24, 13, UI.THEME.rice, 'center');
     } else {
       ctx.fillText(`📖 Great blending — keep it up!`, W / 2, py + 180);
     }
@@ -2904,7 +2433,7 @@ class SlashGame {
         x: W/2 - 130, y: py + 240, w: 260, h: 46,
         action: () => this._openStoryScroll(stage),
       }] : []),
-      { label: this._previewStage ? '▶ Start my adventure' : '▶ Next Stage',
+      { label: this._previewStage ? '▶ Start my adventure' : this.stageId === PHONICS_DATA.stageCount ? 'Explore the worlds' : stage.isBoss ? `▶ Enter World ${stage.world + 1}` : `▶ Stage ${stage.world}-${stage.local + 1}`,
         primary: !hasStory,
         x: W/2 - 110, y: py + (hasStory ? 294 : 240), w: 220, h: hasStory ? 44 : 54,
         action: () => {

@@ -3196,3 +3196,44 @@ button, [role="button"], a, input, .mc-btn, .dpad-btn {
 }
 .mc-modes-link:hover { color: var(--gold); }
 .mc-modes-link:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+/* Journey edition: ink, jade and warm paper across the entry screens. */
+body { background: #101b25; }
+#modeChooser { --ink: #101b25; }
+.mc-scene-img { background-image: url('../assets/backgrounds/stage-1.jpg'); }
+.mc-scene-scrim {
+    background: linear-gradient(90deg, rgba(9,24,31,.94), rgba(9,24,31,.65) 48%, rgba(9,24,31,.1)), linear-gradient(0deg, rgba(9,24,31,.94), transparent 70%);
+}
+.mc-title-sub { color: #f2c14e; }
+.mc-title-main { letter-spacing: -.035em; }
+.mc-kicker { letter-spacing: .18em; }
+.mc-sec-btn { background: rgba(19,40,48,.9); border-color: #476068; }
+.mc-mascot { width: clamp(100px, 18vw, 180px); }
+.mc-journey-note { position: relative; z-index: 2; color: #c9d8d5; font-size: 13px; letter-spacing: .06em; }
+.mc-settings-panel, .mc-rewards-panel { background: #142731; color: #f7f1e4; border: 1px solid #64746b; }
+@media (min-width: 850px) and (min-height: 450px) {
+    #modeChooser.active { align-items: flex-start; padding-left: 8%; gap: 22px; }
+    .mc-hero { width: 48%; justify-content: flex-start; }
+    .mc-lockup { text-align: left; }
+    .mc-title-main { font-size: clamp(48px, 6.7vw, 88px); }
+    .mc-title-rule { margin-left: 0; }
+    .mc-title-sub { text-indent: 0; }
+    .mc-mascot { position: fixed; right: 8%; bottom: 12%; width: min(34vw, 400px); max-height: 72vh; object-fit: contain; }
+    .mc-cta-wrap, .mc-secondary { width: min(400px, 44%); }
+    .mc-play-btn { width: 100%; }
+    .mc-scene::after { content: ''; position: absolute; right: 8%; top: 13%; width: min(32vw, 420px); aspect-ratio: 1; border: 1px solid rgba(242,193,78,.4); border-radius: 50%; box-shadow: 0 0 0 22px rgba(242,193,78,.04), 0 0 0 44px rgba(242,193,78,.025); }
+}
+@media (max-height: 430px) {
+    #modeChooser.active { gap: 8px; padding-top: 48px; }
+    .mc-journey-note { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .screen.active { animation: none; }
+    button { transition: none !important; }
+}
+/* Menus work in either orientation; only the action suggests landscape. */
+@media (orientation: portrait) {
+    #slashScreen.active:not([data-gameplay="true"]) .rotate-prompt { display: none; }
+}
+.dpad-btn { background: rgba(16,35,44,.86); border: 2px solid rgba(242,193,78,.55); box-shadow: 0 4px 0 rgba(5,14,19,.8); }
+.dpad-jump { background: linear-gradient(145deg, #bb4838, #762c28); border-color: #e6bc72; }
+.dpad-btn.held, .dpad-btn:active { background: #385b61; }

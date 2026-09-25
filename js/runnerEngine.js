@@ -1965,10 +1965,11 @@ const COLLECTED = c => c.collected;
 // ─────────────────────────────────────────────────────────────
 function generateRunnerLevel(stageData, canvasH, sprites) {
   const groundY    = canvasH - R_GROUND_H;
-  const words      = stageData.words.slice(0, R_WORDS_PER_STAGE);
+  const journey = stageData.journey;
+  const words = stageData.words.slice(0, journey?.words || R_WORDS_PER_STAGE);
   // Difficulty 0-5 by WORLD (stage ids now run 1-30; using them raw
   // flooded early worlds with late-game enemies, speeds and bombs)
-  const difficulty = Math.min(5, (stageData.world || stageData.id) - 1);
+  const difficulty = journey?.terrain ?? Math.min(5, (stageData.world || stageData.id) - 1);
   // Per-world mini-dino art when available; generic minion otherwise
   const minionSp   = sprites && (sprites[`mini-w${stageData.world}`] ||
                                  sprites['dino-minion'] || sprites['minion-dino']);
@@ -1992,7 +1993,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
   words.forEach((word, wIdx) => {
     const elevated    = wIdx % 2 === 1;
     const movingPlat  = difficulty >= 2 && wIdx % 3 === 2; // use moving platform
-    const platformH   = elevated ? groundY - 100 - (difficulty * 14) : groundY;
+    const platformH   = elevated ? groundY - (journey?.elevation || 100) - (difficulty * 8) : groundY;
     const coinY       = platformH - Math.round(canvasH * 0.22);
     const platW       = word.phonemes.length * 82 + 60;
     const style       = (wIdx + difficulty) % 3 === 2 ? 'dojo' : 'rice';
@@ -2008,8 +2009,8 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
         // so young players are never forced onto a crumbling path);
         // W5 mountain terraces are icy and slippery.
         const world = stageData.world || 1;
-        if (world === 2 && wIdx % 4 === 1) plat.fragile = true;
-        if (world === 5) plat.icy = true;
+        if (world === 2 && (stageData.local || 1) >= 2 && wIdx % 4 === 1) plat.fragile = true;
+        if (world === 5 && (stageData.local || 1) >= 2) plat.icy = true;
         items.platforms.push(plat);
       }
     }
@@ -2040,7 +2041,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
     // Enemies — type mix scales with stage difficulty
     if (wIdx > 0) {
       const mx = wx + word.phonemes.length * 40;
-      if (wIdx % 2 === 0) {
+      if (wIdx % (journey?.enemyEvery || 2) === 0) {
         // Stage 3+: mix in shell dinos on some sections
         if (difficulty >= 2 && wIdx % 4 === 2) {
           items.shellDinos.push(new ShellDino(mx, groundY, shellSp, Math.round(minionSize * 0.65), shellShellSp));
@@ -2081,7 +2082,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
     }
 
     // Checkpoint at mid-level (after the 3rd word)
-    if (wIdx === 3) {
+    if (wIdx === Math.floor(words.length / 2)) {
       items.checkpoint = new CheckpointFlag(wx - 80, groundY, checkpointSp);
     }
 
@@ -2091,7 +2092,7 @@ function generateRunnerLevel(stageData, canvasH, sprites) {
       items.platforms.push(new RunnerPlatform(bridgeX, platformH, 70, 'dojo'));
     }
 
-    wx += platW + 200 + difficulty * 20;
+    wx += platW + (journey?.restGap || 200) + difficulty * 20;
   });
 
   // End flag
@@ -2776,6 +2777,7 @@ class RunnerEngine {
     ctx.translate(shakeX, shakeY);
 
     this._drawBackground(ctx);
+    if (window.UI) UI.atmosphere(ctx, this.stage, this.W, this.H, this._age);
     this._drawGround(ctx);
 
     // Spring pads (drawn behind platforms)
@@ -2988,6 +2990,11 @@ class RunnerEngine {
           const g = c.getContext('2d');
           if (flip) { g.translate(tw, 0); g.scale(-1, 1); }
           g.drawImage(bgSp, 0, 0, tw, th);
+          if (this.stage.journey) {
+            g.globalAlpha = 0.09;
+            g.fillStyle = this.stage.journey.light;
+            g.fillRect(0, 0, tw, th);
+          }
           return c;
         };
         this._bgTiles    = [mk(false), mk(true)];
@@ -3100,8 +3107,9 @@ class RunnerEngine {
     // Dirt — vertical gradient reads as depth instead of a flat slab
     if (!this._dirtGrad || this._dirtGradY !== gy) {
       const dirt = ctx.createLinearGradient(0, gy, 0, gy + R_GROUND_H);
-      dirt.addColorStop(0, '#8B6040');
-      dirt.addColorStop(1, '#5e3f28');
+      const soil = [['#96754E','#443A29'], ['#547565','#243B36'], ['#926375','#49384B'], ['#96806A','#423C3A'], ['#778F9B','#374A5B'], ['#794C48','#30242F']][(this.stage.world || 1) - 1];
+      dirt.addColorStop(0, soil[0]);
+      dirt.addColorStop(1, soil[1]);
       this._dirtGrad  = dirt;
       this._dirtGradY = gy;
     }
@@ -3134,7 +3142,7 @@ class RunnerEngine {
     // Scrolling grass tufts
     const tileW  = 38;
     const offset = this.camOffset % tileW;
-    ctx.fillStyle = '#3d7a2c';
+    ctx.fillStyle = this.stage.groundColor || '#3d7a2c';
     for (let x = -tileW + offset; x < W + tileW; x += tileW) {
       ctx.beginPath();
       ctx.moveTo(x, gy + 16);
@@ -3148,115 +3156,21 @@ class RunnerEngine {
   _drawHUD(ctx) {
     const p = this.player;
     ctx.save();
-    ctx.textBaseline = 'top';
-
-    // The pause button (top-left) and the fullscreen + close buttons
-    // (top-right) are DOM elements floating over the canvas. Anything drawn
-    // under them is invisible — which is where the player's hearts were
-    // sitting, and the coin count.
-    const SAFE_L = 62;
-    const SAFE_R = this.W - 116;
-
-    // ── Top HUD bar ─────────────────────────────────────────────
-    ctx.fillStyle = 'rgba(0,0,0,0.52)';
-    ctx.beginPath(); ctx.roundRect(6, 6, this.W - 12, 52, 14); ctx.fill();
-
-    // ── HP hearts — up to 5 hearts
-    const maxHp = Math.max(3, p.hp);
-    ctx.font = '24px serif';
-    for (let i = 0; i < Math.max(3, maxHp); i++) {
-      ctx.globalAlpha = i < p.hp ? 1 : 0.18;
-      ctx.fillText('❤️', SAFE_L + i * 28, 13);
-    }
-    ctx.globalAlpha = 1;
-
-    // Active power-up icon next to HP
-    if (p.powerUp) {
-      const questIcon = this.stage.quest?.runnerType === p.powerUp ? this.sprites[this.stage.quest.iconKey] : null;
-      const iconX = SAFE_L + Math.max(3, maxHp) * 28 + 4;
-      if (questIcon && questIcon.complete && questIcon.naturalWidth > 0) {
-        if (p._starTimer > 0) {
-          const hue = (this._age * 10) % 360;
-          ctx.shadowColor = `hsl(${hue},100%,65%)`; ctx.shadowBlur = 10;
-        }
-        ctx.drawImage(questIcon, iconX, 8, 24, 24);
-        ctx.shadowBlur = 0;
-      } else {
-        const puIcon = p.powerUp === 'chili'       ? '🌶️' :
-                       p.powerUp === 'shield-item' ? '🛡️' :
-                       p.powerUp === 'star' || p.powerUp === 'boss-star' ? '⭐' :
-                       p.powerUp === 'rice-rocket' ? '🚀' :
-                       p.powerUp === 'rhyme-cape'  ? '🦸' :
-                       p.powerUp === 'glyph-boots' ? '🥾' : '';
-        if (puIcon) {
-          if (p._starTimer > 0) {
-            // Rainbow flash for star
-            const hue = (this._age * 10) % 360;
-            ctx.shadowColor = `hsl(${hue},100%,65%)`; ctx.shadowBlur = 10;
-          }
-          ctx.font = '20px serif';
-          ctx.fillText(puIcon, iconX, 16);
-          ctx.shadowBlur = 0;
-        }
-      }
-    }
-    if (p.shieldActive) {
-      ctx.font = '20px serif';
-      ctx.globalAlpha = 0.7 + 0.3 * Math.sin(this._age * 0.2);
-      ctx.fillText('🛡️', SAFE_L + Math.max(3, maxHp) * 28 + 4, 16);
-      ctx.globalAlpha = 1;
-    }
-
-    // Equipped sword badge next to the hearts
-    if (this._swordSprite && this._swordSprite.complete && this._swordSprite.naturalWidth > 0) {
-      ctx.drawImage(this._swordSprite, SAFE_L + Math.max(3, maxHp) * 28 + 30, 8, 28, 28);
-    }
-
-    // ── Timer (top-center) — hidden entirely in Relaxed Mode
-    if (this._relaxedMode) {
-      ctx.font        = `bold 18px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle   = '#80DEEA';
-      ctx.textAlign   = 'center';
-      ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 5;
-      ctx.fillText('😊 Relaxed', this.W / 2, 16);
-      ctx.shadowBlur = 0;
-      ctx.font      = `bold 13px "Nunito", "Comic Sans MS", system-ui`;
-      ctx.fillStyle = '#FFD700';
-      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 2;
-      ctx.fillText(`⭐ ${this.score.toLocaleString()}`, this.W / 2, 38);
-      ctx.shadowBlur = 0;
-    } else {
-    const urgent = this.timeLeft < 15;
-    ctx.font        = `bold ${urgent ? '26px' : '22px'} "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle   = urgent ? '#FF5252' : '#FFFFFF';
-    ctx.textAlign   = 'center';
-    ctx.shadowColor = urgent ? '#FF000088' : 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur  = 5;
-    if (urgent && this._age % 20 < 10) ctx.fillStyle = '#FF8A80'; // blink
-    ctx.fillText(`⏱ ${this.timeLeft}s`, this.W / 2, 14);
-    ctx.shadowBlur  = 0;
-
-    // ── Score (top-center, below timer)
-    ctx.font      = `bold 13px "Nunito", "Comic Sans MS", system-ui`;
-    ctx.fillStyle = '#FFD700';
-    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 2;
-    ctx.fillText(`⭐ ${this.score.toLocaleString()}`, this.W / 2, 38);
-    ctx.shadowBlur  = 0;
-    }
-
-    // ── Coins collected (top-right)
-    const total     = this.coins.length;
-    const collected = ArrayOps.countWhere(this.coins, COLLECTED);
-    ctx.font      = 'bold 16px "Nunito", "Comic Sans MS", system-ui';
-    ctx.fillStyle = '#FFD700';
-    ctx.textAlign = 'right';
-    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 3;
-    ctx.fillText(`🪙 ${collected}/${total}`, SAFE_R, 14);
-    // Lives remaining
-    ctx.font      = '14px "Nunito", "Comic Sans MS", system-ui';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(`✕${this.lives} 🍙`, SAFE_R, 34);
-    ctx.shadowBlur  = 0;
+    const W = this.W, compact = W < 600;
+    UI.panel(ctx, { x: 8, y: 7, w: W - 16, h: 53 });
+    const left = 64, right = W - 116, available = right - left;
+    UI.text(ctx, '♥'.repeat(Math.max(0, p.hp)), left, 24, available * 0.34, compact ? 16 : 21, '#FF9389');
+    UI.text(ctx, `${this.collectedCoinIds.size}/${this.coins.length} sounds`, right, 24, available * 0.40, 12, UI.THEME.gold, 'right');
+    UI.text(ctx, this._relaxedMode ? 'Take your time' : `${this.timeLeft}s`, left, 45, available * 0.5, 10, UI.THEME.muted);
+    UI.text(ctx, `${this.score.toLocaleString()} pts · ${this.lives} lives`, right, 45, available * 0.5, 10, UI.THEME.muted, 'right');
+    // Distance to the flag is independent of optional sound collection.
+    UI.panel(ctx, { x: 8, y: 60, w: W - 16, h: 34 });
+    const pct = Math.max(0, Math.min(1, p.worldX / this.flag.worldX));
+    ctx.fillStyle = 'rgba(10,24,31,0.65)'; ctx.fillRect(12, 65, W - 24, 4);
+    ctx.fillStyle = this.stage.accentColor || UI.THEME.gold; ctx.fillRect(12, 65, (W - 24) * pct, 4);
+    UI.text(ctx, `${this.stage.world || 1}-${this.stage.local || 1} · ${this.stage.journey?.label || 'Adventure'}`, 14, 84, W * 0.48, 11, UI.THEME.rice);
+    UI.text(ctx, pct >= 0.95 ? 'Guardian ahead' : `${Math.round(pct * 100)}% to guardian`, W - 14, 84, W * 0.48, 11, UI.THEME.rice, 'right');
+    if (p.shieldActive || p.powerUp) UI.chip(ctx, p.shieldActive ? 'Shield ready' : 'Power active', 12, 102, { size: 11 });
     ctx.restore();
 
     // ── Pause overlay (drawn after HUD so it covers everything)

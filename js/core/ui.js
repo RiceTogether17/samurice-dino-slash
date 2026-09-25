@@ -16,17 +16,17 @@
   'use strict';
 
   const THEME = {
-    ink:       '#17110D',
+    ink:       '#101B25',
     rice:      '#F7F1E4',
     gold:      '#F2C14E',
     goldDim:   'rgba(242,193,78,0.45)',
     lacquer:   '#C8342B',
     lacquerDk: '#8E1F19',
-    panel:     'rgba(20,13,18,0.76)',
-    panelHot:  'rgba(48,26,34,0.86)',
+    panel:     'rgba(13,26,36,0.90)',
+    panelHot:  'rgba(35,60,65,0.96)',
     stroke:    'rgba(255,232,198,0.22)',
-    muted:     'rgba(247,241,228,0.62)',
-    locked:    'rgba(247,241,228,0.34)',
+    muted:     '#B7C9CC',
+    locked:    '#99ADB4',
     font:      '"Nunito", "Comic Sans MS", system-ui, sans-serif',
   };
 
@@ -38,7 +38,7 @@
    * `holder` is any object to hang the cache on (usually the screen itself).
    */
   function scene(ctx, img, W, H, holder, key = 'default', strength = 1) {
-    const cacheKey = `${key}@${W}x${H}@${strength}`;
+    const cacheKey = `${key}@${W}x${H}@${strength}@${!!(img && img.complete && img.naturalWidth)}`;
     if (!holder._uiScene || holder._uiSceneKey !== cacheKey) {
       const c = document.createElement('canvas');
       c.width = Math.max(1, W); c.height = Math.max(1, H);
@@ -208,7 +208,63 @@
     return r;
   }
 
-  const api = { THEME, scene, heading, chip, card, ghost };
+  /** Ellipsise canvas copy instead of shrinking letters into illegibility. */
+  function text(ctx, value, x, y, width, size = 14, color = THEME.rice, align = 'left') {
+    ctx.save(); ctx.font = `800 ${size}px ${THEME.font}`;
+    ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
+    let label = String(value);
+    if (ctx.measureText(label).width > width) {
+      while (label.length && ctx.measureText(label + '…').width > width) label = label.slice(0, -1);
+      label += '…';
+    }
+    ctx.fillText(label, x, y); ctx.restore();
+  }
+
+  function wrapText(ctx, value, x, y, width, size = 14, color = THEME.rice) {
+    ctx.save(); ctx.font = `800 ${size}px ${THEME.font}`;
+    const words = String(value).split(' '); let line = '', row = 0;
+    while (words.length) {
+      const next = words[0];
+      if (line && ctx.measureText(line + ' ' + next).width > width) {
+        text(ctx, line, x, y + row * (size + 4), width, size, color); row++;
+        if (row === 1) { text(ctx, words.join(' '), x, y + row * (size + 4), width, size, color); break; }
+        line = '';
+      } else { line += (line ? ' ' : '') + words.shift(); }
+    }
+    if (!words.length && line) text(ctx, line, x, y + row * (size + 4), width, size, color);
+    ctx.restore();
+  }
+
+  function panel(ctx, r, fill = THEME.panel, stroke = THEME.stroke) {
+    ctx.save(); ctx.fillStyle = fill; ctx.strokeStyle = stroke; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 14); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  function portrait(ctx, img, x, y, w, h) {
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const s = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+    ctx.drawImage(img, x + (w - img.naturalWidth * s) / 2, y + (h - img.naturalHeight * s) / 2, img.naturalWidth * s, img.naturalHeight * s);
+  }
+
+  const motionQuery = root.matchMedia?.('(prefers-reduced-motion: reduce)');
+
+  /** Sparse, world-specific atmosphere; quality and reduced-motion aware. */
+  function atmosphere(ctx, stage, W, H, age) {
+    if (root.LOW_FX || motionQuery?.matches) return;
+    const colors = ['#FFE5A0', '#BFE7A7', '#FFC6DC', '#F4D297', '#D2EFFF', '#FFBC72'];
+    const world = stage.world || 1;
+    ctx.save(); ctx.fillStyle = colors[world - 1] || colors[0];
+    for (let i = 0; i < 12; i++) {
+      const x = ((i * 137 + age * (world === 5 ? 0.35 : 0.16)) % (W + 20)) - 10;
+      const y = ((i * 71 + age * (world === 6 ? -0.24 : 0.19)) % (H * 0.74) + H * 0.74) % (H * 0.74);
+      ctx.globalAlpha = 0.22 + Math.sin(age * 0.016 + i) * 0.12;
+      ctx.beginPath(); ctx.ellipse(x, y, world === 3 ? 4 : 2, world === 3 ? 2 : 1.5, i + age * 0.006, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  const api = { THEME, scene, heading, chip, card, ghost, text, wrapText, panel, portrait, atmosphere };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.UI = api;
 })(typeof window !== 'undefined' ? window : globalThis);

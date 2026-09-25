@@ -615,7 +615,7 @@ class ProgressTracker {
     for (let id = 1; id <= totalStages; id++) {
       if (!this.isUnlocked(id)) break;
       lastUnlocked = id;
-      if (this.getStars(id) === 0) return id;
+      if (!this.getStage(id).completedAt && this.getStars(id) === 0) return id;
     }
     return lastUnlocked;
   }
